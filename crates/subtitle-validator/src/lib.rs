@@ -3,7 +3,7 @@ pub mod rules;
 
 use ass_parser::AssFile;
 
-use crate::report::{OverlapConfig, ValidationReport};
+pub use crate::report::{OverlapConfig, OverlapSeverity, OverlapWarning, ValidationReport};
 
 pub struct Validator {
     overlap_config: OverlapConfig,

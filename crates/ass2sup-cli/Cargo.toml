@@ -12,6 +12,13 @@ path = "src/main.rs"
 [dependencies]
 ass-parser.workspace = true
 subtitle-validator.workspace = true
+subtitle-renderer.workspace = true
+color-quantizer.workspace = true
+bdn-xml.workspace = true
+pgs-encoder.workspace = true
 clap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+rayon.workspace = true
+indicatif.workspace = true
+thiserror.workspace = true
