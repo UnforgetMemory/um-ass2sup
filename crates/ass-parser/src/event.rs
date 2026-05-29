@@ -134,6 +134,32 @@ fn parse_text_with_tags(text: &str) -> (Vec<OverrideTag>, Vec<KaraokeSegment>, S
     (tags, karaoke, raw_block)
 }
 
+fn parse_hex_u8(s: &str) -> Result<u8, std::num::ParseIntError> {
+    let s = s.trim().trim_start_matches("H").trim_start_matches("h").trim_end_matches('&');
+    u8::from_str_radix(s, 16)
+}
+
+fn parse_ass_color(s: &str) -> Result<super::color::AssColor, ()> {
+    let s = s.trim().trim_start_matches("H").trim_start_matches("h").trim_end_matches('&');
+    if s.len() < 6 { return Err(()); }
+    let hex = if s.len() >= 8 { &s[s.len()-8..] } else { s };
+    let parse = |range: &str| u8::from_str_radix(range, 16).map_err(|_| ());
+    if hex.len() == 8 {
+        let alpha = parse(&hex[0..2])?;
+        let blue = parse(&hex[2..4])?;
+        let green = parse(&hex[4..6])?;
+        let red = parse(&hex[6..8])?;
+        Ok(super::color::AssColor { alpha, blue, green, red })
+    } else if hex.len() == 6 {
+        let blue = parse(&hex[0..2])?;
+        let green = parse(&hex[2..4])?;
+        let red = parse(&hex[4..6])?;
+        Ok(super::color::AssColor { alpha: 0, blue, green, red })
+    } else {
+        Err(())
+    }
+}
+
 fn parse_single_tag(s: &str) -> Option<OverrideTag> {
     let s = s.trim();
     if s.is_empty() {
@@ -207,6 +233,191 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
             if let Ok(dur) = dur_str.parse::<u64>() {
                 return Some(OverrideTag::Karaoke { style, duration: dur * 10 });
             }
+        }
+    }
+    // \t(tag,duration,accel) or \t(tag,duration) or \t(tag) — transform animation
+    if s.starts_with("t(") {
+        let inner = s.trim_start_matches("t(").trim_end_matches(')');
+        let parts: Vec<&str> = inner.split(',').collect();
+        if !parts.is_empty() {
+            let tag = parts[0].trim().to_string();
+            let t1 = parts.get(1).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+            let t2 = t1;
+            let accel = parts.get(2).and_then(|v| v.trim().parse().ok()).unwrap_or(1.0);
+            return Some(OverrideTag::Transform { tag, t1, t2, accel });
+        }
+    }
+    // \clip(x1,y1,x2,y2) — rectangular clip
+    if s.starts_with("clip(") {
+        let inner = s.trim_start_matches("clip(").trim_end_matches(')');
+        let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        if nums.len() >= 4 {
+            return Some(OverrideTag::Clip { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
+        }
+    }
+    // \iclip(x1,y1,x2,y2) — inverse rectangular clip
+    if s.starts_with("iclip(") {
+        let inner = s.trim_start_matches("iclip(").trim_end_matches(')');
+        let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        if nums.len() >= 4 {
+            return Some(OverrideTag::ClipInverse { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
+        }
+    }
+    // \fade(a1,a2,a3,t1,t2,t3,t4) — 7-parameter complex fade
+    if s.starts_with("fade(") && s.matches(',').count() >= 6 {
+        let inner = s.trim_start_matches("fade(").trim_end_matches(')');
+        let nums: Vec<u64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        if nums.len() >= 7 {
+            return Some(OverrideTag::FadeComplex {
+                alpha_start: nums[0] as u8, alpha_mid: nums[1] as u8, alpha_end: nums[2] as u8,
+                t1: nums[3], t2: nums[4], t3: nums[5], t4: nums[6],
+            });
+        }
+    }
+    // \org(x,y) — rotation origin
+    if s.starts_with("org(") {
+        let inner = s.trim_start_matches("org(").trim_end_matches(')');
+        let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        if nums.len() >= 2 {
+            return Some(OverrideTag::Origin { x: nums[0], y: nums[1] });
+        }
+    }
+    // \frz(angle), \fr(angle), \frx(angle), \fry(angle) — rotation
+    if s.starts_with("frz") {
+        if let Ok(z) = s[3..].parse::<f64>() {
+            return Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z });
+        }
+    }
+    if s.starts_with("frx") {
+        if let Ok(x) = s[3..].parse::<f64>() {
+            return Some(OverrideTag::Rotation { x, y: 0.0, z: 0.0 });
+        }
+    }
+    if s.starts_with("fry") {
+        if let Ok(y) = s[3..].parse::<f64>() {
+            return Some(OverrideTag::Rotation { x: 0.0, y, z: 0.0 });
+        }
+    }
+    if s.starts_with("fr") {
+        if let Ok(z) = s[2..].parse::<f64>() {
+            return Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z });
+        }
+    }
+    // \fscx(pct), \fscy(pct) — scale
+    if s.starts_with("fscx") {
+        if let Ok(x) = s[4..].parse::<f64>() {
+            return Some(OverrideTag::Scale { x, y: 100.0 });
+        }
+    }
+    if s.starts_with("fscy") {
+        if let Ok(y) = s[4..].parse::<f64>() {
+            return Some(OverrideTag::Scale { x: 100.0, y });
+        }
+    }
+    // \fax(shear), \fay(shear) — shear
+    if s.starts_with("fax") {
+        if let Ok(x) = s[3..].parse::<f64>() {
+            return Some(OverrideTag::Shear { x, y: 0.0 });
+        }
+    }
+    if s.starts_with("fay") {
+        if let Ok(y) = s[3..].parse::<f64>() {
+            return Some(OverrideTag::Shear { x: 0.0, y });
+        }
+    }
+    // \xbord(w), \ybord(w) — border X/Y
+    if s.starts_with("xbord") {
+        if let Ok(w) = s[5..].parse::<f64>() {
+            return Some(OverrideTag::BorderX(w));
+        }
+    }
+    if s.starts_with("ybord") {
+        if let Ok(w) = s[5..].parse::<f64>() {
+            return Some(OverrideTag::BorderY(w));
+        }
+    }
+    // \xshad(d), \yshad(d) — shadow X/Y
+    if s.starts_with("xshad") {
+        if let Ok(d) = s[5..].parse::<f64>() {
+            return Some(OverrideTag::ShadowX(d));
+        }
+    }
+    if s.starts_with("yshad") {
+        if let Ok(d) = s[5..].parse::<f64>() {
+            return Some(OverrideTag::ShadowY(d));
+        }
+    }
+    // \be(strength) — blur edge
+    if s.starts_with("be") {
+        if let Ok(v) = s[2..].parse::<f64>() {
+            return Some(OverrideTag::Blur(v));
+        }
+    }
+    // \q(style) — wrap style 0-3
+    if s.starts_with("q") {
+        if let Ok(v) = s[1..].parse::<u8>() {
+            if v <= 3 {
+                return Some(OverrideTag::WrapStyle(v));
+            }
+        }
+    }
+    // \p(level) — drawing mode (0=off, 1+=on)
+    if s.starts_with("p") && !s.starts_with("pos") && !s.starts_with("pbo") {
+        if let Ok(v) = s[1..].parse::<u8>() {
+            return Some(OverrideTag::DrawingMode(v));
+        }
+    }
+    // \pbo(offset) — baseline offset
+    if s.starts_with("pbo") {
+        if let Ok(v) = s[3..].parse::<f64>() {
+            return Some(OverrideTag::BaselineOffset(v));
+        }
+    }
+    // \1c, \2c, \3c, \4c — color aliases
+    for (prefix, variant) in [("1c", "primary"), ("2c", "secondary"), ("3c", "outline"), ("4c", "shadow")] {
+        if s.starts_with(prefix) {
+            let color_str = &s[prefix.len()..];
+            if let Ok(color) = parse_ass_color(color_str) {
+                return Some(match variant {
+                    "primary" => OverrideTag::PrimaryColor(color),
+                    "secondary" => OverrideTag::SecondaryColor(color),
+                    "outline" => OverrideTag::OutlineColor(color),
+                    "shadow" => OverrideTag::ShadowColor(color),
+                    _ => unreachable!(),
+                });
+            }
+        }
+    }
+    // \alpha(value) — global alpha
+    if s.starts_with("alpha") {
+        let val_str = &s[5..];
+        if let Ok(v) = parse_hex_u8(val_str) {
+            return Some(OverrideTag::Alpha { value: v });
+        }
+    }
+    // \1a, \2a, \3a, \4a — alpha aliases
+    for (prefix, variant) in [("1a", "primary"), ("2a", "secondary"), ("3a", "outline"), ("4a", "shadow")] {
+        if s.starts_with(prefix) {
+            let val_str = &s[prefix.len()..];
+            if let Ok(v) = parse_hex_u8(val_str) {
+                return Some(match variant {
+                    "primary" => OverrideTag::PrimaryAlpha { value: v },
+                    "secondary" => OverrideTag::SecondaryAlpha { value: v },
+                    "outline" => OverrideTag::OutlineAlpha { value: v },
+                    "shadow" => OverrideTag::ShadowAlpha { value: v },
+                    _ => unreachable!(),
+                });
+            }
+        }
+    }
+    // \r(style_name) — reset to style
+    if s.starts_with("r") && !s.starts_with("reset") {
+        return Some(OverrideTag::Reset(s[1..].to_string()));
+    }
+    // \fe(encoding) — font charset encoding
+    if s.starts_with("fe") {
+        if let Ok(v) = s[2..].parse::<u8>() {
+            return Some(OverrideTag::Charset(v));
         }
     }
     None

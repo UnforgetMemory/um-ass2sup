@@ -3,8 +3,8 @@ pub enum OverrideTag {
     Pos { x: f64, y: f64 },
     Move { x1: f64, y1: f64, x2: f64, y2: f64, t1: u64, t2: u64 },
     Fade { duration_in: u64, duration_out: u64 },
-    FadeComplex { duration_in: u64, duration_out: u64, alpha_start: u8, alpha_mid: u8, alpha_end: u8 },
-    Transform { tag: String, duration: u64, accel: f64 },
+    FadeComplex { alpha_start: u8, alpha_mid: u8, alpha_end: u8, t1: u64, t2: u64, t3: u64, t4: u64 },
+    Transform { tag: String, t1: u64, t2: u64, accel: f64 },
     FontName(String),
     FontSize(f64),
     Bold(bool),
@@ -49,5 +49,7 @@ pub enum OverrideTag {
     ResetAll,
     DrawingMode(u8),
     BaselineOffset(f64),
+    Origin { x: f64, y: f64 },
+    Shear { x: f64, y: f64 },
     Unknown(String),
 }

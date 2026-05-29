@@ -44,6 +44,18 @@ pub struct RenderContext {
     pub margin_l: f32,
     pub margin_r: f32,
     pub margin_v: f32,
+    pub origin_x: f32,
+    pub origin_y: f32,
+    pub shear_x: f32,
+    pub shear_y: f32,
+    pub clip_x1: f32,
+    pub clip_y1: f32,
+    pub clip_x2: f32,
+    pub clip_y2: f32,
+    pub clip_enabled: bool,
+    pub wrap_style: u8,
+    pub underline: bool,
+    pub strikeout: bool,
 }
 
 impl Default for RenderContext {
@@ -70,6 +82,18 @@ impl Default for RenderContext {
             margin_l: 10.0,
             margin_r: 10.0,
             margin_v: 10.0,
+            origin_x: 0.0,
+            origin_y: 0.0,
+            shear_x: 0.0,
+            shear_y: 0.0,
+            clip_x1: -1.0,
+            clip_y1: -1.0,
+            clip_x2: -1.0,
+            clip_y2: -1.0,
+            clip_enabled: false,
+            wrap_style: 0,
+            underline: false,
+            strikeout: false,
         }
     }
 }

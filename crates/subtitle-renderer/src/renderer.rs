@@ -54,7 +54,7 @@ impl Renderer {
         })
     }
 
-    fn build_context(&self, event: &Event, style: &Style) -> RenderContext {
+    pub fn build_context(&self, event: &Event, style: &Style) -> RenderContext {
         let mut ctx = RenderContext {
             font_name: style.font_name.clone(),
             font_size: style.font_size as f32,
@@ -110,13 +110,46 @@ impl Renderer {
                     ctx.scale_x = *x as f32;
                     ctx.scale_y = *y as f32;
                 }
-                OverrideTag::Rotation { z, .. } => ctx.rotation = *z as f32,
+                OverrideTag::Rotation { x, y, z } => {
+                    ctx.rotation = *z as f32;
+                    if *x != 0.0 { ctx.origin_x = *x as f32; }
+                    if *y != 0.0 { ctx.origin_y = *y as f32; }
+                }
                 OverrideTag::Alignment(a) => ctx.alignment = *a,
                 OverrideTag::AlignmentNumpad(a) => ctx.alignment = *a,
                 OverrideTag::Pos { x, y } => {
                     ctx.x = *x as f32 * self.config.width as f32 / self.config.script_width as f32;
                     ctx.y = *y as f32 * self.config.height as f32 / self.config.script_height as f32;
                 }
+                OverrideTag::Move { x1, y1, .. } => {
+                    // TODO: time interpolation — for now, use start position statically
+                    ctx.x = *x1 as f32 * self.config.width as f32 / self.config.script_width as f32;
+                    ctx.y = *y1 as f32 * self.config.height as f32 / self.config.script_height as f32;
+                }
+                OverrideTag::Clip { x1, y1, x2, y2 } => {
+                    ctx.clip_x1 = *x1 as f32;
+                    ctx.clip_y1 = *y1 as f32;
+                    ctx.clip_x2 = *x2 as f32;
+                    ctx.clip_y2 = *y2 as f32;
+                    ctx.clip_enabled = true;
+                }
+                OverrideTag::ClipInverse { x1, y1, x2, y2 } => {
+                    // Same as clip for now (visual clipping)
+                    ctx.clip_x1 = *x1 as f32;
+                    ctx.clip_y1 = *y1 as f32;
+                    ctx.clip_x2 = *x2 as f32;
+                    ctx.clip_y2 = *y2 as f32;
+                    ctx.clip_enabled = true;
+                }
+                OverrideTag::BorderX(w) => ctx.outline_width = *w as f32,
+                OverrideTag::BorderY(w) => ctx.outline_width = *w as f32,
+                OverrideTag::ShadowX(d) => ctx.shadow_depth = *d as f32,
+                OverrideTag::ShadowY(d) => ctx.shadow_depth = *d as f32,
+                OverrideTag::WrapStyle(w) => ctx.wrap_style = *w,
+                OverrideTag::Underline(u) => ctx.underline = *u,
+                OverrideTag::Strikeout(s) => ctx.strikeout = *s,
+                // TODO: add when Origin variant exists in ass-parser
+                // TODO: add when Shear variant exists in ass-parser
                 _ => {}
             }
         }
@@ -173,10 +206,31 @@ impl Renderer {
             shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
             effects::composite_over(pixmap.data_mut(), shadow_pixmap.data(), w, h);
         }
+
+        if ctx.clip_enabled {
+            let w = pixmap.width();
+            let h = pixmap.height();
+            let x1 = ctx.clip_x1.max(0.0) as u32;
+            let y1 = ctx.clip_y1.max(0.0) as u32;
+            let x2 = ctx.clip_x2.max(0.0).min(w as f32) as u32;
+            let y2 = ctx.clip_y2.max(0.0).min(h as f32) as u32;
+            let data = pixmap.data_mut();
+            for py in 0..h {
+                for px in 0..w {
+                    if px < x1 || px >= x2 || py < y1 || py >= y2 {
+                        let idx = ((py * w + px) * 4) as usize;
+                        data[idx] = 0;
+                        data[idx + 1] = 0;
+                        data[idx + 2] = 0;
+                        data[idx + 3] = 0;
+                    }
+                }
+            }
+        }
     }
 }
 
-fn alignment_to_pos(alignment: u8) -> (f32, f32) {
+pub fn alignment_to_pos(alignment: u8) -> (f32, f32) {
     match alignment {
         1 => (0.0, 1.0),
         2 => (0.5, 1.0),
@@ -191,7 +245,7 @@ fn alignment_to_pos(alignment: u8) -> (f32, f32) {
     }
 }
 
-fn strip_override_blocks(text: &str) -> String {
+pub fn strip_override_blocks(text: &str) -> String {
     let mut result = String::new();
     let mut depth = 0;
     for ch in text.chars() {
