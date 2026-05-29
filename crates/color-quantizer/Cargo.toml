@@ -1,10 +1,9 @@
 [package]
 name = "color-quantizer"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-description = "Color quantization for subtitle bitmaps (Median Cut, Octree)"
+version = "0.1.0"
+edition = "2021"
+description = "Color quantization for PGS subtitle encoding (max 256 colors)"
 
 [dependencies]
-thiserror.workspace = true
-tracing.workspace = true
+thiserror = "1"
+tracing = "0.1"
