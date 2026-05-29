@@ -1,0 +1,11 @@
+[package]
+name = "subtitle-renderer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "ASS subtitle rendering to RGBA bitmaps"
+
+[dependencies]
+ass-parser.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

@@ -1,0 +1,2396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ass2sup — 全链路 Rust 实现方案 Spec</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --accent5: #f778ba;
+    --danger: #f85149;
+    --warn: #d29922;
+    --code-bg: #0d1117;
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  /* ── Navigation ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: rgba(13,17,23,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+    padding: 0 2rem;
+    display: flex; align-items: center; height: 56px;
+  }
+  nav .logo { font-weight: 700; font-size: 1.1rem; color: var(--accent); margin-right: 2rem; }
+  nav a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; margin-right: 1.2rem; transition: color .2s; }
+  nav a:hover { color: var(--accent); }
+
+  /* ── Layout ── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 80px 2rem 4rem; }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding: 4rem 0 3rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3rem;
+  }
+  .hero h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent3), var(--accent5));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.8rem;
+    letter-spacing: -0.03em;
+  }
+  .hero .subtitle { color: var(--text-muted); font-size: 1.1rem; max-width: 700px; margin: 0 auto; }
+  .hero .badges { margin-top: 1.5rem; display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; padding: 0.3rem 0.8rem; border-radius: 999px;
+    font-size: 0.75rem; font-weight: 600; border: 1px solid;
+  }
+  .badge.blue { color: var(--accent); border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .badge.green { color: var(--accent2); border-color: var(--accent2); background: rgba(63,185,80,0.1); }
+  .badge.purple { color: var(--accent3); border-color: var(--accent3); background: rgba(210,168,255,0.1); }
+  .badge.orange { color: var(--accent4); border-color: var(--accent4); background: rgba(240,136,62,0.1); }
+  .badge.pink { color: var(--accent5); border-color: var(--accent5); background: rgba(247,120,186,0.1); }
+
+  /* ── Section ── */
+  section { margin-bottom: 3.5rem; }
+  section h2 {
+    font-size: 1.8rem; font-weight: 700; margin-bottom: 1.2rem;
+    padding-bottom: 0.5rem; border-bottom: 2px solid var(--border);
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  section h2 .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2rem; height: 2rem; border-radius: 8px; font-size: 0.85rem;
+    background: var(--accent); color: var(--bg); font-weight: 800;
+  }
+  section h3 { font-size: 1.25rem; font-weight: 700; margin: 1.8rem 0 0.8rem; color: var(--accent); }
+  section h4 { font-size: 1.05rem; font-weight: 600; margin: 1.2rem 0 0.5rem; color: var(--accent3); }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .card-header {
+    display: flex; align-items: center; gap: 0.6rem;
+    font-weight: 700; font-size: 1.05rem; margin-bottom: 0.8rem;
+  }
+  .card-header .icon { font-size: 1.3rem; }
+
+  /* ── Grid ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+  @media (max-width: 768px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Code ── */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.2rem;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 1rem 0;
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: rgba(88,166,255,0.1);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  /* ── Table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  th, td {
+    padding: 0.7rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface2);
+    font-weight: 700;
+    color: var(--accent);
+    position: sticky; top: 56px;
+  }
+  tr:hover td { background: rgba(88,166,255,0.04); }
+
+  /* ── Pipeline visualization ── */
+  .pipeline {
+    display: flex; align-items: center; gap: 0; margin: 2rem 0;
+    overflow-x: auto; padding-bottom: 0.5rem;
+  }
+  .pipeline-step {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    text-align: center;
+    min-width: 140px;
+    transition: border-color .3s;
+  }
+  .pipeline-step:hover { border-color: var(--accent); }
+  .pipeline-step .step-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.3rem; }
+  .pipeline-step .step-desc { font-size: 0.75rem; color: var(--text-muted); }
+  .pipeline-arrow {
+    flex-shrink: 0;
+    font-size: 1.5rem;
+    color: var(--accent);
+    padding: 0 0.3rem;
+  }
+
+  /* ── Timeline ── */
+  .timeline { position: relative; padding-left: 2rem; }
+  .timeline::before {
+    content: '';
+    position: absolute; left: 0.5rem; top: 0; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .timeline-item { position: relative; margin-bottom: 2rem; }
+  .timeline-item::before {
+    content: '';
+    position: absolute; left: -1.65rem; top: 0.4rem;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--bg);
+  }
+  .timeline-item .week { font-weight: 700; color: var(--accent); font-size: 0.9rem; margin-bottom: 0.3rem; }
+  .timeline-item .content { color: var(--text-muted); font-size: 0.9rem; }
+
+  /* ── Alert boxes ── */
+  .alert {
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+    border-left: 4px solid;
+  }
+  .alert.info { background: rgba(88,166,255,0.08); border-color: var(--accent); }
+  .alert.warn { background: rgba(210,153,34,0.08); border-color: var(--warn); }
+  .alert.danger { background: rgba(248,81,73,0.08); border-color: var(--danger); }
+  .alert.success { background: rgba(63,185,80,0.08); border-color: var(--accent2); }
+
+  /* ── Lists ── */
+  ul, ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+
+  /* ── Diagram (ASCII-art style) ── */
+  .diagram {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 1rem 0;
+    color: var(--text-muted);
+  }
+  .diagram .highlight { color: var(--accent); font-weight: 700; }
+  .diagram .green { color: var(--accent2); }
+  .diagram .purple { color: var(--accent3); }
+  .diagram .orange { color: var(--accent4); }
+
+  /* ── Tag list ── */
+  .tag-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
+  .tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.2rem 0.6rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--accent3);
+  }
+
+  /* ── Phase cards ── */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid var(--accent);
+  }
+  .phase-card.phase-1 { border-left-color: var(--accent); }
+  .phase-card.phase-2 { border-left-color: var(--accent2); }
+  .phase-card.phase-3 { border-left-color: var(--accent3); }
+  .phase-card.phase-4 { border-left-color: var(--accent4); }
+  .phase-card.phase-5 { border-left-color: var(--accent5); }
+  .phase-card .phase-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .phase-card .phase-meta { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.8rem; }
+
+  /* ── Metrics ── */
+  .metric-row { display: flex; gap: 1rem; margin: 1rem 0; flex-wrap: wrap; }
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.5rem;
+    text-align: center;
+    flex: 1; min-width: 120px;
+  }
+  .metric .value { font-size: 2rem; font-weight: 800; color: var(--accent); }
+  .metric .label { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+  /* ── Footer ── */
+  footer {
+    margin-top: 4rem;
+    padding: 2rem 0;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="logo">ass2sup</div>
+  <a href="#overview">概述</a>
+  <a href="#architecture">架构</a>
+  <a href="#pipeline">管线</a>
+  <a href="#modules">模块</a>
+  <a href="#features">特性</a>
+  <a href="#validation">校验</a>
+  <a href="#pgs">PGS</a>
+  <a href="#testing">测试</a>
+  <a href="#milestones">里程碑</a>
+  <a href="#risks">风险</a>
+</nav>
+
+<div class="container">
+
+<!-- Hero -->
+<div class="hero">
+  <h1>ass2sup</h1>
+  <p class="subtitle">全链路 Rust 实现方案 — ASS/SRT → BDN XML + PNG → PGS/SUP 蓝光字幕编码器的完整技术规格说明书</p>
+  <div class="badges">
+    <span class="badge blue">Rust 2024 Edition</span>
+    <span class="badge green">ASS + SRT Input</span>
+    <span class="badge purple">Karaoke Support</span>
+    <span class="badge orange">Syntax Pre-detection</span>
+    <span class="badge pink">Overlap Warning</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 1: Overview -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="overview">
+  <h2><span class="num">1</span> 项目概述</h2>
+
+  <h3>1.1 目标</h3>
+  <p>构建一个 <strong>100% Rust 实现</strong> 的命令行工具，将 ASS/SSA/SRT 字幕文件转换为蓝光兼容的 PGS (Presentation Graphic Stream) SUP 文件。无需外部依赖（无 AviSynth、无 Java、无 DLL），跨平台运行。</p>
+
+  <h3>1.2 核心价值主张</h3>
+  <div class="grid-3">
+    <div class="metric">
+      <div class="value">0</div>
+      <div class="label">外部依赖</div>
+    </div>
+    <div class="metric">
+      <div class="value">100%</div>
+      <div class="label">Rust 实现</div>
+    </div>
+    <div class="metric">
+      <div class="value">3</div>
+      <div class="label">平台支持</div>
+    </div>
+  </div>
+
+  <h3>1.3 与现有方案对比</h3>
+  <table>
+    <tr>
+      <th>特性</th>
+      <th>easyavs2bdnxml</th>
+      <th>ass2bdnxml (C)</th>
+      <th>SUPer (Python)</th>
+      <th><strong>ass2sup (Rust)</strong></th>
+    </tr>
+    <tr>
+      <td>外部依赖</td>
+      <td>AviSynth + Java + DLL</td>
+      <td>libass (C lib)</td>
+      <td>Python + Pillow</td>
+      <td><strong>无</strong></td>
+    </tr>
+    <tr>
+      <td>ASS 特效</td>
+      <td>✅ (via VSFilter)</td>
+      <td>✅ (via libass)</td>
+      <td>部分</td>
+      <td><strong>✅ 完整</strong></td>
+    </tr>
+    <tr>
+      <td>Karaoke</td>
+      <td>✅</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td><strong>✅</strong></td>
+    </tr>
+    <tr>
+      <td>语法预检测</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td><strong>✅</strong></td>
+    </tr>
+    <tr>
+      <td>堆叠预警</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td><strong>✅</strong></td>
+    </tr>
+    <tr>
+      <td>跨平台</td>
+      <td>❌ Windows only</td>
+      <td>✅</td>
+      <td>✅</td>
+      <td><strong>✅</strong></td>
+    </tr>
+    <tr>
+      <td>性能</td>
+      <td>中</td>
+      <td>高</td>
+      <td>低</td>
+      <td><strong>高</strong></td>
+    </tr>
+  </table>
+
+  <h3>1.4 用户界面</h3>
+  <p>CLI-first 设计，支持以下用法：</p>
+  <pre><code># 基础用法
+ass2sup input.ass -o output.sup
+
+# 带选项
+ass2sup input.ass -o output.sup \
+  --resolution 1920x1080 \
+  --fps 23.976 \
+  --validate \
+  --overlap-warn \
+  --karaoke-mode split \
+  --quantizer median-cut \
+  --verbose
+
+# SRT 输入
+ass2sup input.srt -o output.sup --font "Arial" --font-size 48
+
+# 批量处理
+ass2sup *.ass --output-dir ./sup/ --parallel</code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 2: Architecture -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="architecture">
+  <h2><span class="num">2</span> 项目架构</h2>
+
+  <h3>2.1 Rust Workspace 结构</h3>
+  <pre><code>ass2sup/
+├── Cargo.toml                  # workspace root
+├── crates/
+│   ├── ass-parser/             # ASS/SSA/SRT 解析器
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── ass.rs          # ASS 格式解析
+│   │       ├── srt.rs          # SRT 格式解析
+│   │       ├── styles.rs       # 样式定义
+│   │       ├── events.rs       # 事件解析
+│   │       ├── tags.rs         # override tag 解析器
+│   │       └── karaoke.rs      # karaoke tag 处理
+│   │
+│   ├── subtitle-validator/     # 校验引擎
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── syntax.rs       # 语法预检测
+│   │       ├── overlap.rs      # 堆叠检测
+│   │       ├── timeline.rs     # 时间线分析
+│   │       └── report.rs       # 校验报告生成
+│   │
+│   ├── subtitle-renderer/      # 字幕渲染引擎
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── rasterizer.rs   # 字形光栅化
+│   │       ├── compositor.rs   # Alpha 合成
+│   │       ├── effects.rs      # 特效处理
+│   │       ├── karaoke.rs      # karaoke 渲染
+│   │       └── font.rs         # 字体管理
+│   │
+│   ├── color-quantizer/        # 颜色量化
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── median_cut.rs   # Median Cut 算法
+│   │       ├── octree.rs       # Octree 算法
+│   │       └── dither.rs       # 抖动处理
+│   │
+│   ├── bdn-xml/                # BDN XML 生成
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── writer.rs       # XML 写入
+│   │       └── png.rs          # PNG 编码
+│   │
+│   ├── pgs-encoder/            # PGS/SUP 二进制编码
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── types.rs        # PGS 数据结构
+│   │       ├── segments.rs     # 段类型定义
+│   │       ├── pes.rs          # PES 封装
+│   │       ├── window.rs       # 窗口/合成
+│   │       └── palette.rs      # 调色板管理
+│   │
+│   └── ass2sup-cli/            # CLI 入口
+│       ├── Cargo.toml
+│       └── src/
+│           ├── main.rs
+│           ├── args.rs         # 参数解析
+│           ├── pipeline.rs     # 管线编排
+│           ├── progress.rs     # 进度条
+│           └── report.rs       # 输出报告
+│
+├── tests/                      # 集成测试
+│   ├── fixtures/               # 测试用例文件
+│   ├── golden/                 # 黄金文件对比
+│   └── e2e/                    # 端到端测试
+│
+└── docs/                       # 文档</code></pre>
+
+  <h3>2.2 Crate 依赖关系</h3>
+  <div class="diagram"><span class="highlight">ass2sup-cli</span>
+  ├── <span class="green">ass-parser</span>
+  ├── <span class="purple">subtitle-validator</span>  (depends on ass-parser)
+  ├── <span class="orange">subtitle-renderer</span>   (depends on ass-parser)
+  ├── <span class="green">color-quantizer</span>
+  ├── <span class="purple">bdn-xml</span>             (depends on color-quantizer)
+  └── <span class="orange">pgs-encoder</span>
+
+External crates (planned):
+  ├── <span class="highlight">fontdb</span>           — 字体发现与加载
+  ├── <span class="highlight">rustybuzz</span>        — OpenType shaping
+  ├── <span class="highlight">ttf-parser</span>        — TrueType 解析
+  ├── <span class="highlight">tiny-skia</span>         — 2D 光栅化
+  ├── <span class="highlight">png</span>               — PNG 编码
+  ├── <span class="highlight">clap</span>              — CLI 参数解析
+  ├── <span class="highlight">tracing</span>           — 结构化日志
+  └── <span class="highlight">rayon</span>             — 并行处理</div>
+
+  <h3>2.3 设计原则</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><span class="icon">🔌</span> 模块化</div>
+      <p>每个 crate 职责单一，可独立测试、独立复用。<code>ass-parser</code> 可被其他项目引用，<code>pgs-encoder</code> 可独立使用。</p>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">⚡</span> 零拷贝</div>
+      <p>解析阶段使用 <code>&amp;str</code> 引用原始文本，避免不必要的分配。渲染阶段使用 arena 分配器管理帧缓冲区。</p>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">🛡️</span> 类型安全</div>
+      <p>时间戳使用新类型 <code>Timestamp(u64)</code>（毫秒），颜色使用 <code>Rgba(u8,u8,u8,u8)</code>，杜绝类型混淆。</p>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">🔄</span> 流式处理</div>
+      <p>采用 iterator/stream 模式，逐帧处理而非全量加载，支持处理数万条字幕的大型文件。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 3: Pipeline -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="pipeline">
+  <h2><span class="num">3</span> 全链路管线</h2>
+
+  <h3>3.1 数据流</h3>
+  <div class="pipeline">
+    <div class="pipeline-step">
+      <div class="step-name">📄 Input</div>
+      <div class="step-desc">ASS / SRT 文件</div>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">
+      <div class="step-name">🔍 Parse</div>
+      <div class="step-desc">解析为 AST</div>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">
+      <div class="step-name">✅ Validate</div>
+      <div class="step-desc">语法 + 堆叠检测</div>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">
+      <div class="step-name">🎨 Render</div>
+      <div class="step-desc">光栅化 + 特效</div>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">
+      <div class="step-name">🖌️ Quantize</div>
+      <div class="step-desc">256 色量化</div>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">
+      <div class="step-name">📦 BDN XML</div>
+      <div class="step-desc">+ PNG 帧</div>
+    </div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">
+      <div class="step-name">💾 PGS</div>
+      <div class="step-desc">SUP 二进制</div>
+    </div>
+  </div>
+
+  <h3>3.2 各阶段详细说明</h3>
+
+  <h4>Stage 1: 解析 (Parse)</h4>
+  <div class="card">
+    <p><strong>输入</strong>: 原始文本文件 (UTF-8/UTF-16/GBK)</p>
+    <p><strong>输出</strong>: <code>SubtitleDocument</code> AST</p>
+    <pre><code>struct SubtitleDocument {
+    script_info: ScriptInfo,
+    styles: Vec&lt;Style&gt;,
+    events: Vec&lt;Event&gt;,
+    attachments: Vec&lt;Attachment&gt;,  // 字体文件等
+}
+
+struct Event {
+    layer: u32,
+    start: Timestamp,
+    end: Timestamp,
+    style_name: String,
+    text: String,
+    parsed_tags: Vec&lt;OverrideTag&gt;,  // 预解析的 override tags
+    karaoke_segments: Option&lt;Vec&lt;KaraokeSegment&gt;&gt;,
+}</code></pre>
+    <p><strong>关键行为</strong>:</p>
+    <ul>
+      <li>自动检测编码 (BOM / chardet)</li>
+      <li>预解析所有 override tags 为结构化类型</li>
+      <li>识别并标记 karaoke 段</li>
+      <li>容错处理：跳过无法解析的行，收集 warnings</li>
+    </ul>
+  </div>
+
+  <h4>Stage 2: 校验 (Validate)</h4>
+  <div class="card">
+    <p><strong>输入</strong>: <code>SubtitleDocument</code></p>
+    <p><strong>输出</strong>: <code>ValidationReport</code>（warnings + errors）</p>
+    <p>详见 <a href="#validation">Section 6: 校验机制</a></p>
+  </div>
+
+  <h4>Stage 3: 渲染 (Render)</h4>
+  <div class="card">
+    <p><strong>输入</strong>: <code>SubtitleDocument</code> + 目标分辨率 + 帧率</p>
+    <p><strong>输出</strong>: 帧序列 <code>Vec&lt;RenderedFrame&gt;</code></p>
+    <pre><code>struct RenderedFrame {
+    pts: u64,           // Presentation Timestamp (90kHz)
+    duration: u64,      // 显示时长 (90kHz)
+    width: u16,
+    height: u16,
+    bitmap: Vec&lt;u8&gt;,    // RGBA pixels
+    windows: Vec&lt;Window&gt;, // 支持多窗口（字幕堆叠时）
+}</code></pre>
+    <p><strong>渲染管线</strong>:</p>
+    <ol>
+      <li>字体匹配与加载 (fontdb)</li>
+      <li>文本 shaping (rustybuzz)</li>
+      <li>字形光栅化 (ttf-parser + tiny-skia)</li>
+      <li>应用特效 (blur, border, shadow, rotation)</li>
+      <li>Alpha 合成 (premultiplied alpha)</li>
+      <li>Karaoke 效果叠加</li>
+    </ol>
+  </div>
+
+  <h4>Stage 4: 量化 (Quantize)</h4>
+  <div class="card">
+    <p><strong>输入</strong>: RGBA 帧</p>
+    <p><strong>输出</strong>: 索引色帧 (8-bit palette + indices)</p>
+    <p>PGS 格式限制每帧最多 256 色。使用 Median Cut 或 Octree 算法进行颜色量化，配合 Floyd-Steinberg 抖动减少色带。</p>
+    <pre><code>struct QuantizedFrame {
+    palette: [Rgba; 256],      // 最多 256 色
+    indices: Vec&lt;u8&gt;,          // 每像素调色板索引
+    transparent_index: u8,     // 透明色索引
+}</code></pre>
+  </div>
+
+  <h4>Stage 5: PGS 编码 (Encode)</h4>
+  <div class="card">
+    <p><strong>输入</strong>: 量化帧序列</p>
+    <p><strong>输出</strong>: PGS SUP 二进制流</p>
+    <p>详见 <a href="#pgs">Section 7: PGS 编码</a></p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 4: Modules -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="modules">
+  <h2><span class="num">4</span> 模块详细设计</h2>
+
+  <h3>4.1 ass-parser</h3>
+  <div class="card">
+    <div class="card-header"><span class="icon">📄</span> ASS/SRT 解析器</div>
+
+    <h4>核心数据结构</h4>
+    <pre><code>/// 时间戳 — 毫秒精度
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Timestamp(pub u64);
+
+/// 颜色 — ASS 格式: &amp;HAABBGGRR (注意顺序!)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AssColor {
+    pub alpha: u8,
+    pub blue: u8,
+    pub green: u8,
+    pub red: u8,
+}
+
+/// Override Tag — 预解析为强类型枚举
+#[derive(Debug, Clone)]
+pub enum OverrideTag {
+    // 位置
+    Pos { x: f64, y: f64 },
+    Move { x1: f64, y1: f64, x2: f64, y2: f64,
+           t1: Option&lt;u64&gt;, t2: Option&lt;u64&gt; },
+    // 淡入淡出
+    Fade { alpha1: u8, alpha2: u8, alpha3: u8,
+           t1: u64, t2: u64, t3: u64, t4: u64 },
+    Fad { fade_in: u64, fade_out: u64 },
+    // 变换
+    Transform { start: Option&lt;u64&gt;, end: Option&lt;u64&gt;, accel: f64,
+                tags: Vec&lt;OverrideTag&gt; },
+    // 样式覆盖
+    FontName(String),
+    FontSize(f64),
+    Bold(bool),
+    Italic(bool),
+    Underline(bool),
+    Strikeout(bool),
+    PrimaryColor(AssColor),
+    SecondaryColor(AssColor),
+    OutlineColor(AssColor),
+    ShadowColor(AssColor),
+    Alpha(u8),
+    // 几何
+    Rotation { x: f64, y: f64, z: f64 },
+    ScaleX(f64),
+    ScaleY(f64),
+    Spacing(f64),
+    // 效果
+    Blur(f64),
+    Border(f64),
+    XBorder(f64),
+    YBorder(f64),
+    Shadow(f64),
+    XShadow(f64),
+    YShadow(f64),
+    // 裁剪
+    Clip(ClipRegion),
+    InverseClip(ClipRegion),
+    // 绘图
+    DrawingMode(u8),
+    DrawingInstructions(Vec&lt;DrawingOp&gt;),
+    // Karaoke
+    Karaoke { duration: u64, style: KaraokeStyle },
+    // 重置
+    Reset(Option&lt;String&gt;),
+    // 包装
+    WrapStyle(u8),
+    Alignment(u8),
+    // 未知标签（容错）
+    Unknown { tag: String, value: String },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum KaraokeStyle {
+    Fill,           // \kf — 平滑填充
+    Outline,        // \ko — 轮廓高亮
+    Instant,        // \k  — 瞬间切换
+    Timing,         // \kt — 精确时间
+}
+
+#[derive(Debug, Clone)]
+pub struct KaraokeSegment {
+    pub duration: u64,           // 毫秒
+    pub text: String,
+    pub style: KaraokeStyle,
+    pub tags_before: Vec&lt;OverrideTag&gt;,
+}
+
+#[derive(Debug, Clone)]
+pub enum ClipRegion {
+    Rectangle { x1: f64, y1: f64, x2: f64, y2: f64 },
+    Vector(Vec&lt;DrawingOp&gt;),
+}
+
+/// ASS 文档完整 AST
+#[derive(Debug)]
+pub struct SubtitleDocument {
+    pub script_info: ScriptInfo,
+    pub styles: Vec&lt;Style&gt;,
+    pub events: Vec&lt;Event&gt;,
+    pub fonts: HashMap&lt;String, Vec&lt;u8&gt;&gt;,  // 内嵌字体
+}
+
+#[derive(Debug)]
+pub struct ScriptInfo {
+    pub title: Option&lt;String&gt;,
+    pub play_res_x: u32,
+    pub play_res_y: u32,
+    pub timer: f64,
+    pub wrap_style: u8,
+    pub scaled_border_and_shadow: bool,
+}
+
+#[derive(Debug)]
+pub struct Style {
+    pub name: String,
+    pub font_name: String,
+    pub font_size: f64,
+    pub primary_color: AssColor,
+    pub secondary_color: AssColor,
+    pub outline_color: AssColor,
+    pub shadow_color: AssColor,
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub strikeout: bool,
+    pub scale_x: f64,
+    pub scale_y: f64,
+    pub spacing: f64,
+    pub angle: f64,
+    pub border_style: u8,
+    pub outline_width: f64,
+    pub shadow_depth: f64,
+    pub alignment: u8,
+    pub margin_l: u16,
+    pub margin_r: u16,
+    pub margin_v: u16,
+    pub encoding: u8,
+}
+
+#[derive(Debug)]
+pub struct Event {
+    pub layer: u32,
+    pub start: Timestamp,
+    pub end: Timestamp,
+    pub style_name: String,
+    pub name: String,
+    pub margin_l: u16,
+    pub margin_r: u16,
+    pub margin_v: u16,
+    pub effect: String,
+    pub text: String,
+    pub parsed_tags: Vec&lt;OverrideTag&gt;,
+    pub karaoke: Option&lt;Vec&lt;KaraokeSegment&gt;&gt;,
+}</code></pre>
+
+    <h4>SRT 支持策略</h4>
+    <div class="alert info">
+      <strong>设计决策</strong>: SRT 解析后自动转换为 ASS AST，后续流程统一。SRT 缺失的样式信息使用默认值，用户可通过 CLI 参数覆盖。
+    </div>
+    <pre><code>/// SRT → ASS 转换
+pub fn srt_to_ass(srt: &amp;str, defaults: &amp;SrtDefaults) -&gt; SubtitleDocument {
+    // 1. 解析 SRT 条目
+    // 2. 生成默认 [Script Info]
+    // 3. 生成默认 Style（用户可通过 --font, --font-size 覆盖）
+    // 4. 将 SRT 条目转为 ASS Event
+    // 5. 处理 SRT 的 &lt;b&gt;, &lt;i&gt;, &lt;u&gt; 标签 → ASS override tags
+}
+
+pub struct SrtDefaults {
+    pub font_name: String,       // 默认 "Arial"
+    pub font_size: f64,          // 默认 48.0
+    pub primary_color: AssColor, // 默认白色
+    pub outline_color: AssColor, // 默认黑色
+    pub play_res_x: u32,         // 默认 1920
+    pub play_res_y: u32,         // 默认 1080
+}</code></pre>
+  </div>
+
+  <h3>4.2 subtitle-validator</h3>
+  <p>详见 <a href="#validation">Section 6</a>。</p>
+
+  <h3>4.3 subtitle-renderer</h3>
+  <div class="card">
+    <div class="card-header"><span class="icon">🎨</span> 字幕渲染引擎</div>
+
+    <h4>渲染架构</h4>
+    <pre><code>/// 渲染器配置
+pub struct RenderConfig {
+    pub width: u32,
+    pub height: u32,
+    pub script_width: u32,      // ASS 中的 PlayResX
+    pub script_height: u32,     // ASS 中的 PlayResY
+    pub font_dirs: Vec&lt;PathBuf&gt;,
+    pub default_font: String,
+    pub default_font_size: f64,
+}
+
+/// 单字形信息
+struct GlyphInfo {
+    codepoint: u32,
+    font_id: fontdb::ID,
+    glyph_id: u32,
+    advance_x: f64,
+    advance_y: f64,
+    bbox: Rect,
+    bitmap: Option&lt;Vec&lt;u8&gt;&gt;,  // 光栅化后的 alpha 位图
+}
+
+/// 渲染上下文 — 每个事件的渲染状态
+struct RenderContext {
+    pos_x: f64,
+    pos_y: f64,
+    font_name: String,
+    font_size: f64,
+    primary_color: Rgba,
+    secondary_color: Rgba,
+    outline_color: Rgba,
+    shadow_color: Rgba,
+    bold: bool,
+    italic: bool,
+    outline_width: f64,
+    shadow_depth: f64,
+    blur: f64,
+    rotation: (f64, f64, f64),
+    scale: (f64, f64),
+    clip: Option&lt;ClipRegion&gt;,
+    alignment: u8,
+    karaoke_phase: Option&lt;KaraokePhase&gt;,
+}</code></pre>
+
+    <h4>特效渲染实现</h4>
+    <table>
+      <tr><th>特效</th><th>实现方式</th><th>复杂度</th></tr>
+      <tr>
+        <td><code>\pos(x,y)</code></td>
+        <td>直接设置渲染偏移</td>
+        <td>低</td>
+      </tr>
+      <tr>
+        <td><code>\move(x1,y1,x2,y2)</code></td>
+        <td>按时间插值计算当前位置</td>
+        <td>中</td>
+      </tr>
+      <tr>
+        <td><code>\fad(in,out)</code></td>
+        <td>Alpha 通道按时间渐变</td>
+        <td>低</td>
+      </tr>
+      <tr>
+        <td><code>\fade(a1..t4)</code></td>
+        <td>三段 Alpha 渐变</td>
+        <td>中</td>
+      </tr>
+      <tr>
+        <td><code>\blur(n)</code></td>
+        <td>高斯模糊 (tiny-skia 或自实现)</td>
+        <td>中</td>
+      </tr>
+      <tr>
+        <td><code>\bord(n)</code></td>
+        <td>SDF (Signed Distance Field) 描边</td>
+        <td>中</td>
+      </tr>
+      <tr>
+        <td><code>\shad(x,y)</code></td>
+        <td>偏移 + 模糊的阴影层</td>
+        <td>低</td>
+      </tr>
+      <tr>
+        <td><code>\frz(angle)</code></td>
+        <td>2D 旋转矩阵变换</td>
+        <td>中</td>
+      </tr>
+      <tr>
+        <td><code>\fscx, \fscy</code></td>
+        <td>缩放变换</td>
+        <td>低</td>
+      </tr>
+      <tr>
+        <td><code>\clip(x1,y1,x2,y2)</code></td>
+        <td>矩形裁剪 (alpha mask)</td>
+        <td>低</td>
+      </tr>
+      <tr>
+        <td><code>\clip(矢量)</code></td>
+        <td>矢量路径裁剪 (tiny-skia clip)</td>
+        <td>高</td>
+      </tr>
+      <tr>
+        <td><code>\t(tag)</code></td>
+        <td>按时间插值属性值</td>
+        <td>高</td>
+      </tr>
+      <tr>
+        <td><code>\p(绘图模式)</code></td>
+        <td>ASS 绘图指令 → tiny-skia Path</td>
+        <td>高</td>
+      </tr>
+    </table>
+
+    <h4>渲染流程（单帧）</h4>
+    <pre><code>fn render_frame(events: &amp;[&amp;Event], time: Timestamp, config: &amp;RenderConfig) -&gt; RenderedFrame {
+    let mut frame = FrameBuffer::new(config.width, config.height);
+
+    // 按 layer 排序
+    let mut sorted: Vec&lt;_&gt; = events.iter().collect();
+    sorted.sort_by_key(|e| e.layer);
+
+    for event in sorted {
+        let ctx = build_render_context(event, time, config);
+
+        // 1. Text layout (shaping)
+        let glyphs = shape_text(&amp;ctx, config);
+
+        // 2. Rasterize glyphs
+        let bitmaps = rasterize_glyphs(&amp;glyphs, &amp;ctx);
+
+        // 3. Apply effects (outline, shadow, blur)
+        let composited = apply_effects(&amp;bitmaps, &amp;ctx);
+
+        // 4. Apply karaoke highlighting if applicable
+        let final_bitmap = if let Some(phase) = &amp;ctx.karaoke_phase {
+            apply_karaoke(&amp;composited, phase, &amp;ctx)
+        } else {
+            composited
+        };
+
+        // 5. Apply transformations (rotation, scale)
+        let transformed = apply_transforms(&amp;final_bitmap, &amp;ctx);
+
+        // 6. Composite onto frame (premultiplied alpha blending)
+        frame.composite(&amp;transformed, ctx.pos_x, ctx.pos_y);
+    }
+
+    frame.to_rendered_frame(time)
+}</code></pre>
+  </div>
+
+  <h3>4.4 color-quantizer</h3>
+  <div class="card">
+    <div class="card-header"><span class="icon">🖌️</span> 颜色量化引擎</div>
+
+    <h4>算法选择</h4>
+    <table>
+      <tr><th>算法</th><th>质量</th><th>速度</th><th>内存</th><th>推荐场景</th></tr>
+      <tr>
+        <td>Median Cut</td>
+        <td>★★★☆</td>
+        <td>★★★★</td>
+        <td>低</td>
+        <td><strong>默认</strong></td>
+      </tr>
+      <tr>
+        <td>Octree</td>
+        <td>★★★☆</td>
+        <td>★★★★</td>
+        <td>中</td>
+        <td>颜色分布均匀时</td>
+      </tr>
+      <tr>
+        <td>K-means</td>
+        <td>★★★★</td>
+        <td>★★☆☆</td>
+        <td>高</td>
+        <td>质量优先模式</td>
+      </tr>
+    </table>
+
+    <h4>实现细节</h4>
+    <pre><code>pub trait Quantizer {
+    fn quantize(&amp;self, rgba: &amp;[u8], width: u32, height: u32) -&gt; QuantizedFrame;
+}
+
+pub struct QuantizedFrame {
+    pub palette: Vec&lt;Rgba&gt;,       // ≤ 256 色
+    pub indices: Vec&lt;u8&gt;,          // 宽×高 的索引
+    pub transparent_index: u8,     // 透明色索引（通常 0）
+}
+
+/// Median Cut 实现
+pub struct MedianCut {
+    pub max_colors: usize,        // 默认 255 (留一个给透明)
+    pub dither: DitherMethod,     // Floyd-Steinberg / None
+}
+
+pub enum DitherMethod {
+    None,
+    FloydSteinberg,
+    Ordered,                      // Bayer 矩阵抖动
+}</code></pre>
+
+    <h4>优化策略</h4>
+    <ul>
+      <li><strong>完全透明像素跳过</strong>：alpha=0 的像素不参与量化计算</li>
+      <li><strong>帧间调色板复用</strong>：如果相邻帧颜色分布相似，复用上一帧调色板</li>
+      <li><strong>热点优化</strong>：使用 SIMD 加速颜色距离计算</li>
+    </ul>
+  </div>
+
+  <h3>4.5 pgs-encoder</h3>
+  <p>详见 <a href="#pgs">Section 7</a>。</p>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 5: Features -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="features">
+  <h2><span class="num">5</span> 特性详细规格</h2>
+
+  <h3>5.1 Karaoke 支持</h3>
+  <div class="card">
+    <div class="card-header"><span class="icon">🎤</span> Karaoke 渲染策略</div>
+
+    <h4>Karaoke Tag 类型</h4>
+    <table>
+      <tr><th>Tag</th><th>行为</th><th>渲染效果</th></tr>
+      <tr>
+        <td><code>{\k d}</code></td>
+        <td>瞬间切换 — 持续 d/100 秒后高亮</td>
+        <td>音节到时间点立即变色</td>
+      </tr>
+      <tr>
+        <td><code>{\kf d}</code></td>
+        <td>填充 — 从左到右平滑扫过</td>
+        <td>渐变高亮从左到右覆盖音节</td>
+      </tr>
+      <tr>
+        <td><code>{\ko d}</code></td>
+        <td>轮廓 — 音节开始时轮廓闪烁</td>
+        <td>开始时短暂轮廓高亮</td>
+      </tr>
+      <tr>
+        <td><code>{\kt d}</code></td>
+        <td>精确时间 — 使用绝对时间</td>
+        <td>与 \k 类但使用绝对时间</td>
+      </tr>
+    </table>
+
+    <h4>渲染方案</h4>
+    <pre><code>/// Karaoke 渲染阶段
+#[derive(Debug, Clone)]
+pub enum KaraokePhase {
+    /// 未开始 — 显示为次要颜色
+    Pending,
+    /// 活跃 — 正在高亮
+    Active { progress: f64 },  // 0.0..=1.0
+    /// 完成 — 显示为主要颜色
+    Done,
+}
+
+/// Karaoke 帧渲染
+fn render_karaoke_segment(
+    segment: &amp;KaraokeSegment,
+    time: Timestamp,
+    ctx: &amp;RenderContext,
+) -&gt; KaraokePhase {
+    let seg_start = /* segment absolute start time */;
+    let seg_end = seg_start + Duration::from_millis(segment.duration);
+
+    if time &lt; seg_start {
+        KaraokePhase::Pending
+    } else if time &gt;= seg_end {
+        KaraokePhase::Done
+    } else {
+        let progress = (time - seg_start).as_secs_f64()
+                     / segment.duration as f64;
+        KaraokePhase::Active { progress }
+    }
+}
+
+/// 根据 karaoke phase 调整颜色
+fn karaoke_color(phase: &amp;KaraokePhase, ctx: &amp;RenderContext) -&gt; Rgba {
+    match phase {
+        KaraokePhase::Pending =&gt; ctx.secondary_color,
+        KaraokePhase::Done =&gt; ctx.primary_color,
+        KaraokePhase::Active { progress } =&gt; {
+            // 对于 \kf: 从 secondary 渐变到 primary
+            lerp_color(ctx.secondary_color, ctx.primary_color, *progress)
+        }
+    }
+}</code></pre>
+
+    <h4>双层渲染策略（Karaoke）</h4>
+    <div class="alert info">
+      <strong>关键设计</strong>: Karaoke 字幕需要双层渲染——底层显示完整文本（次要颜色），顶层显示当前音节（主要颜色）。对于 \kf 模式，顶层使用 clip 实现渐变扫描效果。
+    </div>
+    <pre><code>fn render_with_karaoke(
+    event: &amp;Event,
+    time: Timestamp,
+    frame: &amp;mut FrameBuffer,
+) {
+    let segments = event.karaoke.as_ref().unwrap();
+
+    // Layer 1: 完整文本（次要颜色 / 已完成音节用主要颜色）
+    for seg in segments {
+        let phase = render_karaoke_segment(seg, time, event);
+        let color = karaoke_color(&amp;phase, &amp;ctx);
+        render_text_segment(seg, color, frame);
+    }
+
+    // Layer 2: 当前活跃音节的高亮效果
+    if let Some(active) = find_active_segment(segments, time) {
+        match active.style {
+            KaraokeStyle::Fill =&gt; {
+                // 使用矩形 clip 实现从左到右扫描
+                let progress = get_progress(active, time);
+                let clip_x = segment_start_x + segment_width * progress;
+                render_with_clip(active, 0.0, 0.0, clip_x, height, frame);
+            }
+            KaraokeStyle::Outline =&gt; {
+                // 轮廓闪烁效果
+                render_with_outline_highlight(active, frame);
+            }
+            _ =&gt; { /* \k, \kt: 直接变色，无需额外层 */ }
+        }
+    }
+}</code></pre>
+  </div>
+
+  <h3>5.2 ASS Override Tags 完整支持</h3>
+  <div class="card">
+    <h4>支持的标签完整列表</h4>
+    <div class="tag-list">
+      <span class="tag">\pos</span>
+      <span class="tag">\move</span>
+      <span class="tag">\fad</span>
+      <span class="tag">\fade</span>
+      <span class="tag">\org</span>
+      <span class="tag">\t</span>
+      <span class="tag">\frz</span>
+      <span class="tag">\frx</span>
+      <span class="tag">\fry</span>
+      <span class="tag">\fscx</span>
+      <span class="tag">\fscy</span>
+      <span class="tag">\fax</span>
+      <span class="tag">\fay</span>
+      <span class="tag">\fn</span>
+      <span class="tag">\fs</span>
+      <span class="tag">\fsp</span>
+      <span class="tag">\b</span>
+      <span class="tag">\i</span>
+      <span class="tag">\u</span>
+      <span class="tag">\s</span>
+      <span class="tag">\c</span>
+      <span class="tag">\1c</span>
+      <span class="tag">\2c</span>
+      <span class="tag">\3c</span>
+      <span class="tag">\4c</span>
+      <span class="tag">\alpha</span>
+      <span class="tag">\1a</span>
+      <span class="tag">\2a</span>
+      <span class="tag">\3a</span>
+      <span class="tag">\4a</span>
+      <span class="tag">\an</span>
+      <span class="tag">\a</span>
+      <span class="tag">\q</span>
+      <span class="tag">\blur</span>
+      <span class="tag">\be</span>
+      <span class="tag">\bord</span>
+      <span class="tag">\xbord</span>
+      <span class="tag">\ybord</span>
+      <span class="tag">\shad</span>
+      <span class="tag">\xshad</span>
+      <span class="tag">\yshad</span>
+      <span class="tag">\clip</span>
+      <span class="tag">\iclip</span>
+      <span class="tag">\p</span>
+      <span class="tag">\pbo</span>
+      <span class="tag">\k</span>
+      <span class="tag">\kf</span>
+      <span class="tag">\ko</span>
+      <span class="tag">\kt</span>
+      <span class="tag">\r</span>
+      <span class="tag">\fe</span>
+    </div>
+
+    <h4>Tag 解析器设计</h4>
+    <pre><code>/// Override tag 解析器 — 支持嵌套
+pub fn parse_override_tags(input: &amp;str) -&gt; Result&lt;Vec&lt;OverrideTag&gt;, ParseError&gt; {
+    let mut tags = Vec::new();
+    let mut chars = input.char_indices().peekable();
+
+    while let Some((i, ch)) = chars.next() {
+        match ch {
+            '\\' =&gt; {
+                let tag_name = consume_tag_name(&amp;mut chars);
+                let tag_value = consume_tag_value(&amp;mut chars);
+                let tag = match tag_name.as_str() {
+                    "pos" =&gt; parse_pos(&amp;tag_value)?,
+                    "move" =&gt; parse_move(&amp;tag_value)?,
+                    "fad" =&gt; parse_fad(&amp;tag_value)?,
+                    "fade" =&gt; parse_fade(&amp;tag_value)?,
+                    "t" =&gt; parse_transform(&amp;tag_value)?,
+                    "k" | "K" =&gt; parse_karaoke(&amp;tag_name, &amp;tag_value)?,
+                    // ... 其他标签
+                    _ =&gt; OverrideTag::Unknown {
+                        tag: tag_name, value: tag_value
+                    },
+                };
+                tags.push(tag);
+            }
+            '{' =&gt; { /* 进入嵌套 */ }
+            '}' =&gt; { /* 退出嵌套 */ }
+            _ =&gt; { /* 普通文本字符 */ }
+        }
+    }
+    Ok(tags)
+}</code></pre>
+  </div>
+
+  <h3>5.3 字体管理</h3>
+  <div class="card">
+    <div class="card-header"><span class="icon">🔤</span> 字体发现与加载</div>
+    <pre><code>/// 字体管理器
+pub struct FontManager {
+    db: fontdb::Database,
+    cache: HashMap&lt;FontKey, LoadedFont&gt;,
+}
+
+#[derive(Hash, Eq, PartialEq)]
+struct FontKey {
+    family: String,
+    bold: bool,
+    italic: bool,
+}
+
+impl FontManager {
+    /// 从系统字体目录 + 用户指定目录加载
+    pub fn new(font_dirs: &amp;[PathBuf]) -&gt; Self { ... }
+
+    /// 匹配字体 — 按 ASS font matching 逻辑
+    pub fn match_font(&amp;self, family: &amp;str, bold: bool, italic: bool)
+        -&gt; Option&lt;&amp;LoadedFont&gt; { ... }
+
+    /// 加载 ASS 内嵌字体
+    pub fn load_embedded(&amp;mut self, name: &amp;str, data: &amp;[u8]) { ... }
+
+    /// 字体回退链
+    pub fn fallback(&amp;self, family: &amp;str) -&gt; &amp;LoadedFont { ... }
+}</code></pre>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 6: Validation -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="validation">
+  <h2><span class="num">6</span> 校验机制</h2>
+
+  <h3>6.1 语法预检测 (Syntax Pre-detection)</h3>
+  <div class="card">
+    <div class="card-header"><span class="icon">🔍</span> 多阶段语法校验</div>
+
+    <h4>校验阶段</h4>
+    <div class="diagram"><span class="highlight">Stage 0: 编码检测</span>
+  └─ BOM 检测 → UTF-8 / UTF-16 / GBK
+
+<span class="green">Stage 1: 结构校验</span>
+  ├─ [Script Info] 必须存在
+  ├─ PlayResX / PlayResY 必须存在且 &gt; 0
+  ├─ [V4+ Styles] 必须存在
+  └─ [Events] 必须存在
+
+<span class="purple">Stage 2: 样式校验</span>
+  ├─ 每个 Event 引用的 Style 必须存在
+  ├─ 颜色格式校验 (&amp;HAABBGGRR)
+  ├─ 数值范围校验 (font_size &gt; 0, etc.)
+  └─ 字体名称非空
+
+<span class="orange">Stage 3: 事件校验</span>
+  ├─ 时间格式校验 (H:MM:SS.CC)
+  ├─ start &lt; end 校验
+  ├─ Override tag 语法校验
+  ├─ Karaoke tag 参数校验
+  └─ 嵌套括号匹配校验
+
+<span class="highlight">Stage 4: 语义校验</span>
+  ├─ 引用的字体是否存在于系统
+  ├─ 颜色值是否在有效范围
+  └─ 坐标值是否在画面范围内</div>
+
+    <h4>校验报告数据结构</h4>
+    <pre><code>#[derive(Debug)]
+pub struct ValidationReport {
+    pub errors: Vec&lt;ValidationIssue&gt;,    // 阻断性错误
+    pub warnings: Vec&lt;ValidationIssue&gt;,  // 警告（可继续）
+    pub infos: Vec&lt;ValidationIssue&gt;,     // 信息提示
+    pub stats: ValidationStats,
+}
+
+#[derive(Debug)]
+pub struct ValidationIssue {
+    pub severity: Severity,
+    pub category: IssueCategory,
+    pub line: Option&lt;usize&gt;,
+    pub column: Option&lt;usize&gt;,
+    pub message: String,
+    pub suggestion: Option&lt;String&gt;,      // 修复建议
+}
+
+#[derive(Debug)]
+pub enum Severity {
+    Error,    // 阻断：无法继续处理
+    Warning,  // 警告：可以继续但结果可能有问题
+    Info,     // 信息：值得注意但不影响处理
+}
+
+#[derive(Debug)]
+pub enum IssueCategory {
+    Encoding,
+    Structure,
+    Style,
+    Timeline,
+    Tag,
+    Karaoke,
+    Overlap,
+    Font,
+    Resolution,
+}
+
+#[derive(Debug)]
+pub struct ValidationStats {
+    pub total_events: usize,
+    pub total_styles: usize,
+    pub total_duration: Duration,
+    pub unique_fonts: HashSet&lt;String&gt;,
+    pub resolution: (u32, u32),
+    pub fps_detected: Option&lt;f64&gt;,
+}</code></pre>
+
+    <h4>检测规则详细列表</h4>
+    <table>
+      <tr><th>规则 ID</th><th>类别</th><th>严重级</th><th>描述</th></tr>
+      <tr><td>V001</td><td>Structure</td><td>Error</td><td>缺少 [Script Info] 段</td></tr>
+      <tr><td>V002</td><td>Structure</td><td>Error</td><td>缺少 PlayResX/PlayResY</td></tr>
+      <tr><td>V003</td><td>Structure</td><td>Error</td><td>缺少 [V4+ Styles] 段</td></tr>
+      <tr><td>V004</td><td>Structure</td><td>Error</td><td>缺少 [Events] 段</td></tr>
+      <tr><td>V005</td><td>Style</td><td>Error</td><td>事件引用不存在的样式</td></tr>
+      <tr><td>V006</td><td>Timeline</td><td>Error</td><td>start ≥ end（无效时间范围）</td></tr>
+      <tr><td>V007</td><td>Tag</td><td>Error</td><td>未闭合的花括号</td></tr>
+      <tr><td>V008</td><td>Tag</td><td>Warning</td><td>未知的 override tag</td></tr>
+      <tr><td>V009</td><td>Tag</td><td>Warning</td><td>tag 参数数量不匹配</td></tr>
+      <tr><td>V010</td><td>Karaoke</td><td>Warning</td><td>karaoke 音节时长为 0</td></tr>
+      <tr><td>V011</td><td>Karaoke</td><td>Warning</td><td>karaoke 标签与文本音节数不匹配</td></tr>
+      <tr><td>V012</td><td>Font</td><td>Warning</td><td>字体在系统中未找到</td></tr>
+      <tr><td>V013</td><td>Resolution</td><td>Info</td><td>字幕坐标超出画面范围</td></tr>
+      <tr><td>V014</td><td>Encoding</td><td>Error</td><td>无法检测文件编码</td></tr>
+      <tr><td>V015</td><td>Timeline</td><td>Warning</td><td>事件时间重叠（堆叠）</td></tr>
+    </table>
+  </div>
+
+  <h3>6.2 堆叠预警检测 (Overlap Detection)</h3>
+  <div class="card">
+    <div class="card-header"><span class="icon">⚠️</span> 字幕堆叠/重叠检测</div>
+
+    <h4>检测策略</h4>
+    <pre><code>/// 重叠检测配置
+pub struct OverlapConfig {
+    /// 检测模式
+    pub mode: OverlapMode,
+    /// 同层检测 vs 跨层检测
+    pub check_cross_layer: bool,
+    /// 最小间隔（毫秒）— 小于此值也视为"风险"
+    pub min_gap_ms: u64,
+    /// 视觉重叠检测（考虑位置）
+    pub check_visual_overlap: bool,
+}
+
+pub enum OverlapMode {
+    /// 严格模式：任何时间重叠都报告
+    Strict,
+    /// 宽松模式：仅当视觉上可能重叠时报告
+    Lenient,
+    /// 自定义：用户定义的规则
+    Custom(Box&lt;dyn Fn(&amp;Event, &amp;Event) -&gt; bool&gt;),
+}</code></pre>
+
+    <h4>检测算法</h4>
+    <pre><code>/// 检测事件列表中的所有重叠
+pub fn detect_overlaps(
+    events: &amp;[Event],
+    config: &amp;OverlapConfig,
+) -&gt; Vec&lt;OverlapWarning&gt; {
+    let mut warnings = Vec::new();
+
+    // 1. 构建时间线区间树 (Interval Tree) — O(n log n)
+    let tree = build_interval_tree(events);
+
+    // 2. 对每个事件，查询重叠区间
+    for (i, event) in events.iter().enumerate() {
+        let overlapping = tree.query_overlapping(event.start, event.end);
+
+        for j in overlapping {
+            if j &lt;= i { continue; }  // 避免重复报告
+
+            let other = &amp;events[j];
+
+            // 3. 层级过滤
+            if !config.check_cross_layer &amp;&amp; event.layer != other.layer {
+                continue;
+            }
+
+            // 4. 视觉重叠检测（可选）
+            if config.check_visual_overlap {
+                if !may_visually_overlap(event, other) {
+                    continue;
+                }
+            }
+
+            // 5. 计算重叠信息
+            let overlap_start = event.start.max(other.start);
+            let overlap_end = event.end.min(other.end);
+            let overlap_duration = overlap_end - overlap_start;
+
+            warnings.push(OverlapWarning {
+                event_a_idx: i,
+                event_b_idx: j,
+                overlap_start,
+                overlap_duration,
+                severity: classify_severity(overlap_duration, config),
+                suggestion: generate_suggestion(event, other),
+            });
+        }
+
+        // 6. 间隔过短检测
+        let nearest_after = find_nearest_after(events, i);
+        if let Some((j, gap)) = nearest_after {
+            if gap &lt; Duration::from_millis(config.min_gap_ms) {
+                warnings.push(OverlapWarning {
+                    event_a_idx: i,
+                    event_b_idx: j,
+                    overlap_start: event.end,
+                    overlap_duration: Duration::ZERO,
+                    severity: Severity::Info,
+                    suggestion: Some(format!(
+                        "间隔仅 {}ms，视觉上可能产生堆叠感",
+                        gap.as_millis()
+                    )),
+                });
+            }
+        }
+    }
+
+    warnings
+}
+
+/// 视觉重叠判断 — 基于对齐方式和位置
+fn may_visually_overlap(a: &amp;Event, b: &amp;Event) -&gt; bool {
+    // 如果两者都有 \pos，比较坐标
+    if let (Some(pos_a), Some(pos_b)) = (get_pos(a), get_pos(b)) {
+        let distance = ((pos_a.x - pos_b.x).powi(2)
+                      + (pos_a.y - pos_b.y).powi(2)).sqrt();
+        return distance &lt; 100.0;  // 阈值可配置
+    }
+
+    // 如果没有 \pos，根据 alignment 和 margin 推断位置
+    let rect_a = estimate_bounding_rect(a);
+    let rect_b = estimate_bounding_rect(b);
+    rect_a.intersects(&amp;rect_b)
+}</code></pre>
+
+    <h4>重叠报告输出</h4>
+    <pre><code>#[derive(Debug)]
+pub struct OverlapWarning {
+    pub event_a_idx: usize,
+    pub event_b_idx: usize,
+    pub overlap_start: Timestamp,
+    pub overlap_duration: Duration,
+    pub severity: Severity,
+    pub suggestion: Option&lt;String&gt;,
+}
+
+/// CLI 输出示例:
+/// ⚠️  WARNING [OVL001] 事件 #42 与 #45 时间重叠
+///    事件 #42: 00:01:23.40 → 00:01:26.80 "你好世界"
+///    事件 #45: 00:01:25.00 → 00:01:28.00 "这是测试"
+///    重叠时长: 1800ms
+///    建议: 调整事件 #45 的开始时间到 00:01:26.80 之后</code></pre>
+
+    <h4>Karaoke 特殊处理</h4>
+    <div class="alert warn">
+      <strong>注意</strong>: Karaoke 字幕的音节之间天然存在"重叠"（前一音节结束 = 后一音节开始），检测器需要识别 karaoke 事件并排除音节内的正常重叠。
+    </div>
+    <pre><code>fn is_karaoke_internal_overlap(event: &amp;Event) -&gt; bool {
+    // 如果事件包含 karaoke 标签，音节之间的边界不算重叠
+    event.karaoke.is_some()
+}</code></pre>
+  </div>
+
+  <h3>6.3 校验模式</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><span class="icon">🔍</span> 预检模式 (--validate)</div>
+      <p>仅执行校验，不进行转换。适合在批处理前预先检查所有文件。</p>
+      <pre><code>ass2sup --validate input.ass
+# 输出校验报告，退出码: 0=通过, 1=有错误</code></pre>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">🔄</span> 内联模式 (默认)</div>
+      <p>校验后继续处理。Error 级别问题阻断处理，Warning 级别仅输出提示。</p>
+      <pre><code>ass2sup input.ass -o output.sup
+# 输出 warnings 后继续生成 SUP</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 7: PGS Encoding -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="pgs">
+  <h2><span class="num">7</span> PGS/SUP 编码</h2>
+
+  <h3>7.1 PGS 段类型</h3>
+  <table>
+    <tr><th>段类型</th><th>Hex</th><th>描述</th><th>必要性</th></tr>
+    <tr>
+      <td>PCS (Presentation Composition)</td>
+      <td>0x16</td>
+      <td>定义显示状态：窗口、对象、调色板</td>
+      <td><strong>必须</strong></td>
+    </tr>
+    <tr>
+      <td>WDS (Window Definition)</td>
+      <td>0x17</td>
+      <td>定义渲染窗口的位置和大小</td>
+      <td><strong>必须</strong></td>
+    </tr>
+    <tr>
+      <td>PDS (Palette Definition)</td>
+      <td>0x14</td>
+      <td>定义 256 色调色板</td>
+      <td><strong>必须</strong></td>
+    </tr>
+    <tr>
+      <td>ODS (Object Definition)</td>
+      <td>0x15</td>
+      <td>定义图形对象（RLE 编码的位图）</td>
+      <td><strong>必须</strong></td>
+    </tr>
+    <tr>
+      <td>END (End of Display Set)</td>
+      <td>0x80</td>
+      <td>标记一个 Display Set 结束</td>
+      <td><strong>必须</strong></td>
+    </tr>
+  </table>
+
+  <h3>7.2 PGS 数据结构</h3>
+  <pre><code>/// PGS SUP 文件 — 由一系列段组成
+pub struct SupFile {
+    pub segments: Vec&lt;Segment&gt;,
+}
+
+/// PGS 段 — 每个段包含类型、PTS、DTS 和载荷
+pub struct Segment {
+    pub segment_type: SegmentType,
+    pub pts: u64,           // Presentation Timestamp (90kHz)
+    pub dts: u64,           // Decode Timestamp (90kHz)
+    pub payload: SegmentPayload,
+}
+
+pub enum SegmentType {
+    Pcs = 0x16,
+    Wds = 0x17,
+    Pds = 0x14,
+    Ods = 0x15,
+    End = 0x80,
+}
+
+pub enum SegmentPayload {
+    Pcs(PcsPayload),
+    Wds(WdsPayload),
+    Pds(PdsPayload),
+    Ods(OdsPayload),
+    End,
+}
+
+/// PCS — 显示合成段
+pub struct PcsPayload {
+    pub width: u16,
+    pub height: u16,
+    pub frame_rate: u8,         // 0x10=24p, 0x20=25p, 0x40=30p...
+    pub composition_number: u16,
+    pub composition_state: CompositionState,
+    pub palette_update: bool,
+    pub palette_id: u8,
+    pub num_objects: u8,
+    pub compositions: Vec&lt;ObjectComposition&gt;,
+}
+
+pub enum CompositionState {
+    EpochStart = 0x00,      // 新 epoch 开始
+    AcquirePoint = 0x40,    // 获取点
+    NormalCase = 0x80,      // 普通情况
+}
+
+/// WDS — 窗口定义段
+pub struct WdsPayload {
+    pub num_windows: u8,
+    pub windows: Vec&lt;WindowDef&gt;,
+}
+
+pub struct WindowDef {
+    pub window_id: u8,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+}
+
+/// PDS — 调色板定义段
+pub struct PdsPayload {
+    pub palette_id: u8,
+    pub version: u8,
+    pub entries: Vec&lt;PaletteEntry&gt;,  // 最多 256 个
+}
+
+pub struct PaletteEntry {
+    pub index: u8,
+    pub y: u8,      // YCbCr Y 分量
+    pub cb: u8,     // YCbCr Cb 分量
+    pub cr: u8,     // YCbCr Cr 分量
+    pub alpha: u8,  // Alpha (0=透明, 255=不透明)
+}
+
+/// ODS — 对象定义段
+pub struct OdsPayload {
+    pub object_id: u16,
+    pub object_version: u8,
+    pub last_in_sequence: bool,
+    pub width: u16,
+    pub height: u16,
+    pub rle_data: Vec&lt;u8&gt;,    // RLE 编码的像素数据
+}</code></pre>
+
+  <h3>7.3 RLE 编码</h3>
+  <div class="card">
+    <div class="card-header"><span class="icon">📦</span> PGS RLE (Run-Length Encoding)</div>
+    <p>PGS 使用特定的 RLE 变体压缩像素数据：</p>
+    <pre><code>/// PGS RLE 编码器
+pub fn rle_encode(palette_indices: &amp;[u8], width: u32, height: u32) -&gt; Vec&lt;u8&gt; {
+    let mut output = Vec::new();
+
+    for y in 0..height {
+        let row = &amp;palette_indices[(y * width) as usize..((y + 1) * width) as usize];
+        let mut x = 0;
+
+        while x &lt; width as usize {
+            let color = row[x];
+
+            // 计算连续相同像素的数量
+            let mut run_length = 1;
+            while x + run_length &lt; width as usize
+                &amp;&amp; row[x + run_length] == color
+                &amp;&amp; run_length &lt; 0x3FFF  // 最大 RLE 长度
+            {
+                run_length += 1;
+            }
+
+            // 编码
+            if run_length == 1 {
+                // 单像素：直接输出
+                if color == 0 {
+                    // 透明像素特殊处理
+                    output.push(0x00);
+                } else {
+                    output.push(color);
+                }
+            } else if run_length &lt;= 0x3F {
+                // 短行程：1 字节长度
+                let byte1 = 0x00 | ((run_length &gt;&gt; 8) as u8 &amp; 0x03);
+                let byte2 = (run_length &amp; 0xFF) as u8;
+                if color == 0 {
+                    output.push(byte1);
+                    output.push(byte2);
+                } else {
+                    output.push(color);
+                    output.push(byte1 | 0x40);
+                    output.push(byte2);
+                }
+            } else {
+                // 长行程：2 字节长度
+                let byte1 = 0x00 | ((run_length &gt;&gt; 8) as u8 &amp; 0x3F);
+                let byte2 = (run_length &amp; 0xFF) as u8;
+                if color == 0 {
+                    output.push(byte1 | 0x40);
+                    output.push(byte2);
+                } else {
+                    output.push(color);
+                    output.push(byte1 | 0x80);
+                    output.push(byte2);
+                }
+            }
+
+            x += run_length;
+        }
+
+        // 行结束标记
+        if y &lt; height - 1 {
+            output.push(0x00);  // end of line
+        }
+    }
+
+    output
+}</code></pre>
+  </div>
+
+  <h3>7.4 YCbCr 颜色转换</h3>
+  <pre><code>/// RGBA → YCbCr 转换 (BT.601)
+pub fn rgba_to_ycbcr(r: u8, g: u8, b: u8) -&gt; (u8, u8, u8) {
+    let r = r as f64;
+    let g = g as f64;
+    let b = b as f64;
+
+    let y  = ( 0.299 * r + 0.587 * g + 0.114 * b).round() as u8;
+    let cb = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0).round() as u8;
+    let cr = ( 0.500 * r - 0.419 * g - 0.081 * b + 128.0).round() as u8;
+
+    (y, cb, cr)
+}
+
+/// 调色板条目构建
+pub fn build_palette(quantized: &amp;QuantizedFrame) -&gt; Vec&lt;PaletteEntry&gt; {
+    quantized.palette.iter().enumerate().map(|(i, rgba)| {
+        let (y, cb, cr) = rgba_to_ycbcr(rgba.r, rgba.g, rgba.b);
+        PaletteEntry {
+            index: i as u8,
+            y, cb, cr,
+            alpha: rgba.a,
+        }
+    }).collect()
+}</code></pre>
+
+  <h3>7.5 Display Set 构造</h3>
+  <pre><code>/// 一帧字幕 = 一个 Display Set
+pub fn build_display_set(
+    frame: &amp;QuantizedFrame,
+    pts: u64,
+    object_id: u16,
+    window_id: u8,
+    composition_number: u16,
+) -&gt; Vec&lt;Segment&gt; {
+    let mut segments = Vec::new();
+
+    // 1. PCS — 定义显示合成
+    segments.push(Segment {
+        segment_type: SegmentType::Pcs,
+        pts,
+        dts: pts,  // 对于字幕，DTS 通常等于 PTS
+        payload: SegmentPayload::Pcs(PcsPayload {
+            width: frame.width as u16,
+            height: frame.height as u16,
+            frame_rate: 0x10,  // 根据实际 FPS 设置
+            composition_number,
+            composition_state: CompositionState::EpochStart,
+            palette_update: false,
+            palette_id: 0,
+            num_objects: 1,
+            compositions: vec![ObjectComposition {
+                object_id,
+                window_id,
+                cropped: false,
+                forced: false,
+                x: 0, y: 0,
+                crop_x: 0, crop_y: 0,
+                crop_w: 0, crop_h: 0,
+            }],
+        }),
+    });
+
+    // 2. WDS — 定义窗口
+    segments.push(Segment {
+        segment_type: SegmentType::Wds,
+        pts,
+        dts: pts,
+        payload: SegmentPayload::Wds(WdsPayload {
+            num_windows: 1,
+            windows: vec![WindowDef {
+                window_id,
+                x: 0, y: 0,
+                width: frame.width as u16,
+                height: frame.height as u16,
+            }],
+        }),
+    });
+
+    // 3. PDS — 定义调色板
+    segments.push(Segment {
+        segment_type: SegmentType::Pds,
+        pts,
+        dts: pts,
+        payload: SegmentPayload::Pds(PdsPayload {
+            palette_id: 0,
+            version: 0,
+            entries: build_palette(frame),
+        }),
+    });
+
+    // 4. ODS — 定义对象（可能分多个段，如果 RLE 数据很大）
+    let rle = rle_encode(&amp;frame.indices, frame.width, frame.height);
+    let chunks = chunk_rle_data(&amp;rle, 0xFFE0);  // 每段最大 ~64KB
+    for (i, chunk) in chunks.iter().enumerate() {
+        segments.push(Segment {
+            segment_type: SegmentType::Ods,
+            pts,
+            dts: pts,
+            payload: SegmentPayload::Ods(OdsPayload {
+                object_id,
+                object_version: 0,
+                last_in_sequence: i == chunks.len() - 1,
+                width: frame.width as u16,
+                height: frame.height as u16,
+                rle_data: chunk.clone(),
+            }),
+        });
+    }
+
+    // 5. END — 结束 Display Set
+    segments.push(Segment {
+        segment_type: SegmentType::End,
+        pts,
+        dts: pts,
+        payload: SegmentPayload::End,
+    });
+
+    segments
+}</code></pre>
+
+  <h3>7.6 多窗口支持</h3>
+  <div class="alert info">
+    <strong>Blu-ray 规范</strong>: 一个 Display Set 最多可以包含 2 个对象和 2 个窗口。当两条字幕在同一时间点出现但位置不同时（如双语字幕），需要使用多窗口机制。
+  </div>
+  <pre><code>/// 多窗口场景处理
+pub fn handle_multi_subtitle_frame(
+    events: &amp;[&amp;Event],
+    time: Timestamp,
+    config: &amp;RenderConfig,
+) -&gt; Vec&lt;Segment&gt; {
+    // 最多 2 个对象（Blu-ray 限制）
+    let objects: Vec&lt;_&gt; = events.iter().take(2).collect();
+
+    if objects.len() == 1 {
+        // 单字幕 — 单窗口
+        build_display_set_single(objects[0], time, config)
+    } else {
+        // 双字幕 — 双窗口
+        build_display_set_dual(objects[0], objects[1], time, config)
+    }
+}</code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 8: Testing -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="testing">
+  <h2><span class="num">8</span> 测试策略</h2>
+
+  <h3>8.1 测试层次</h3>
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-header"><span class="icon">🧪</span> 单元测试</div>
+      <p>每个模块内部函数的独立测试。</p>
+      <ul>
+        <li>ASS tag 解析</li>
+        <li>RLE 编码/解码</li>
+        <li>颜色转换</li>
+        <li>时间戳计算</li>
+        <li>重叠检测算法</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">🔗</span> 集成测试</div>
+      <p>模块间交互的端到端测试。</p>
+      <ul>
+        <li>ASS → AST → 渲染</li>
+        <li>SRT → ASS 转换</li>
+        <li>量化 + RLE 编码</li>
+        <li>完整 Display Set 构建</li>
+        <li>校验报告生成</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">📹</span> 黄金文件测试</div>
+      <p>与已知正确的输出对比。</p>
+      <ul>
+        <li>SUP 二进制对比</li>
+        <li>BDN XML 对比</li>
+        <li>PNG 帧对比</li>
+        <li>回归测试集</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>8.2 测试用例设计</h3>
+  <pre><code>#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── ASS Parser Tests ──
+
+    #[test]
+    fn test_parse_basic_ass() {
+        let ass = r#"
+[Script Info]
+Title: Test
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, ...
+Style: Default,Arial,48,...
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello World
+"#;
+        let doc = parse_ass(ass).unwrap();
+        assert_eq!(doc.events.len(), 1);
+        assert_eq!(doc.events[0].start, Timestamp(1000));
+        assert_eq!(doc.events[0].end, Timestamp(3000));
+    }
+
+    #[test]
+    fn test_parse_override_tags() {
+        let tags = parse_override_tags(r"\pos(100,200)\fad(300,500)").unwrap();
+        assert_eq!(tags.len(), 2);
+        assert!(matches!(tags[0], OverrideTag::Pos { x: 100.0, y: 200.0 }));
+    }
+
+    #[test]
+    fn test_parse_karaoke() {
+        let ass = r#"Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\k50}Hel{\k100}lo"#;
+        let doc = parse_ass(ass).unwrap();
+        let karaoke = doc.events[0].karaoke.as_ref().unwrap();
+        assert_eq!(karaoke.len(), 2);
+        assert_eq!(karaoke[0].duration, 500); // 50cs = 500ms
+    }
+
+    // ── Overlap Detection Tests ──
+
+    #[test]
+    fn test_detect_overlap() {
+        let events = vec![
+            Event { start: Timestamp(1000), end: Timestamp(3000), ..default() },
+            Event { start: Timestamp(2000), end: Timestamp(4000), ..default() },
+        ];
+        let warnings = detect_overlaps(&amp;events, &amp;OverlapConfig::strict());
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].overlap_duration, Duration::from_millis(1000));
+    }
+
+    #[test]
+    fn test_no_overlap_different_layers() {
+        let events = vec![
+            Event { start: Timestamp(1000), end: Timestamp(3000), layer: 0, ..default() },
+            Event { start: Timestamp(2000), end: Timestamp(4000), layer: 1, ..default() },
+        ];
+        let config = OverlapConfig { check_cross_layer: false, ..strict() };
+        let warnings = detect_overlaps(&amp;events, &amp;config);
+        assert!(warnings.is_empty());
+    }
+
+    // ── RLE Tests ──
+
+    #[test]
+    fn test_rle_encode_decode_roundtrip() {
+        let original = vec![0, 0, 0, 5, 5, 5, 5, 5, 3, 0, 0];
+        let encoded = rle_encode(&amp;original, original.len() as u32, 1);
+        let decoded = rle_decode(&amp;encoded, original.len() as u32, 1);
+        assert_eq!(original, decoded);
+    }
+
+    // ── Color Tests ──
+
+    #[test]
+    fn test_rgba_to_ycbcr() {
+        let (y, cb, cr) = rgba_to_ycbcr(255, 0, 0); // 纯红
+        assert_eq!(y, 76);
+        assert_eq!(cb, 84);
+        assert_eq!(cr, 255);
+    }
+
+    // ── Golden File Tests ──
+
+    #[test]
+    fn test_golden_simple_subtitle() {
+        let sup = convert_file("tests/fixtures/simple.ass", &amp;Config::default());
+        let expected = std::fs::read("tests/golden/simple.sup").unwrap();
+        assert_eq!(sup, expected);
+    }
+}</code></pre>
+
+  <h3>8.3 性能基准测试</h3>
+  <pre><code>// benches/render_bench.rs
+use criterion::{criterion_group, criterion_main, Criterion};
+
+fn bench_render_frame(c: &amp;mut Criterion) {
+    let doc = load_fixture("complex_karaoke.ass");
+    let config = RenderConfig::full_hd();
+
+    c.bench_function("render_single_frame", |b| {
+        b.iter(|| {
+            render_frame(&amp;doc.events, Timestamp(5000), &amp;config)
+        })
+    });
+}
+
+fn bench_quantize(c: &amp;mut Criterion) {
+    let frame = generate_test_frame(1920, 1080);
+    let quantizer = MedianCut::default();
+
+    c.bench_function("quantize_1080p", |b| {
+        b.iter(|| quantizer.quantize(&amp;frame, 1920, 1080))
+    });
+}
+
+fn bench_rle_encode(c: &amp;mut Criterion) {
+    let indices = generate_test_indices(1920, 1080);
+
+    c.bench_function("rle_encode_1080p", |b| {
+        b.iter(|| rle_encode(&amp;indices, 1920, 1080))
+    });
+}
+
+criterion_group!(benches, bench_render_frame, bench_quantize, bench_rle_encode);
+criterion_main!(benches);</code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 9: Milestones -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="milestones">
+  <h2><span class="num">9</span> 里程碑与开发计划</h2>
+
+  <div class="metric-row">
+    <div class="metric">
+      <div class="value">11</div>
+      <div class="label">开发周数</div>
+    </div>
+    <div class="metric">
+      <div class="value">6</div>
+      <div class="label">主要 Crate</div>
+    </div>
+    <div class="metric">
+      <div class="value">5</div>
+      <div class="label">里程碑阶段</div>
+    </div>
+    <div class="metric">
+      <div class="value">50+</div>
+      <div class="label">Override Tags</div>
+    </div>
+  </div>
+
+  <div class="phase-card phase-1">
+    <div class="phase-title">Phase 1: 基础解析与验证</div>
+    <div class="phase-meta">Week 1–2 | Crates: ass-parser, subtitle-validator</div>
+    <ul>
+      <li>✅ ASS/SSA 解析器 (Script Info, Styles, Events)</li>
+      <li>✅ SRT 解析器 + ASS 转换</li>
+      <li>✅ Override tag 解析器 (全部标签)</li>
+      <li>✅ Karaoke tag 解析与分段</li>
+      <li>✅ 编码检测 (UTF-8/16/GBK)</li>
+      <li>✅ 语法校验引擎 (全部规则)</li>
+      <li>✅ 堆叠/重叠检测</li>
+      <li>✅ 校验报告生成 (CLI 格式)</li>
+      <li>✅ 单元测试覆盖 >90%</li>
+    </ul>
+    <div class="alert success">
+      <strong>交付物</strong>: 可独立使用的 <code>ass-parser</code> 和 <code>subtitle-validator</code> crate，支持 <code>ass2sup --validate</code> 命令。
+    </div>
+  </div>
+
+  <div class="phase-card phase-2">
+    <div class="phase-title">Phase 2: 字幕渲染引擎</div>
+    <div class="phase-meta">Week 3–5 | Crates: subtitle-renderer</div>
+    <ul>
+      <li>✅ 字体管理 (fontdb 集成)</li>
+      <li>✅ 文本 shaping (rustybuzz)</li>
+      <li>✅ 字形光栅化 (ttf-parser)</li>
+      <li>✅ 基础渲染: 颜色、描边、阴影</li>
+      <li>✅ 位置特效: \pos, \move</li>
+      <li>✅ 淡入淡出: \fad, \fade</li>
+      <li>✅ 模糊特效: \blur, \be</li>
+      <li>✅ 几何变换: \frz, \fscx, \fscy</li>
+      <li>✅ 裁剪: \clip, \iclip (矩形 + 矢量)</li>
+      <li>✅ 动画: \t (属性插值)</li>
+      <li>✅ 绘图模式: \p (ASS drawing)</li>
+      <li>✅ Karaoke 渲染 (\k, \kf, \ko, \kt)</li>
+      <li>✅ Alpha 合成 (premultiplied)</li>
+      <li>✅ 集成测试 + 黄金文件</li>
+    </ul>
+    <div class="alert success">
+      <strong>交付物</strong>: 完整的字幕渲染引擎，可输出 RGBA 帧序列。
+    </div>
+  </div>
+
+  <div class="phase-card phase-3">
+    <div class="phase-title">Phase 3: 颜色量化与 BDN XML</div>
+    <div class="phase-meta">Week 6–7 | Crates: color-quantizer, bdn-xml</div>
+    <ul>
+      <li>✅ Median Cut 量化算法</li>
+      <li>✅ Octree 量化算法</li>
+      <li>✅ Floyd-Steinberg 抖动</li>
+      <li>✅ BDN XML 生成器</li>
+      <li>✅ PNG 帧输出</li>
+      <li>✅ 帧间调色板复用优化</li>
+      <li>✅ 可选: K-means 高质量模式</li>
+    </ul>
+    <div class="alert success">
+      <strong>交付物</strong>: 可输出 BDN XML + PNG 帧序列，可用 BDSup2Sub 转换验证。
+    </div>
+  </div>
+
+  <div class="phase-card phase-4">
+    <div class="phase-title">Phase 4: PGS/SUP 编码</div>
+    <div class="phase-meta">Week 8–9 | Crates: pgs-encoder</div>
+    <ul>
+      <li>✅ PGS 段类型实现 (PCS, WDS, PDS, ODS, END)</li>
+      <li>✅ RLE 编码器</li>
+      <li>✅ YCbCr 颜色转换</li>
+      <li>✅ Display Set 构建</li>
+      <li>✅ 多窗口支持 (双字幕)</li>
+      <li>✅ 帧率映射</li>
+      <li>✅ SUP 文件输出</li>
+      <li>✅ 与 BDSup2Sub 输出对比验证</li>
+    </ul>
+    <div class="alert success">
+      <strong>交付物</strong>: 可输出蓝光兼容的 SUP 文件。
+    </div>
+  </div>
+
+  <div class="phase-card phase-5">
+    <div class="phase-title">Phase 5: CLI 集成与优化</div>
+    <div class="phase-meta">Week 10–11 | Crates: ass2sup-cli</div>
+    <ul>
+      <li>✅ CLI 参数解析 (clap)</li>
+      <li>✅ 管线编排 (Parse → Validate → Render → Quantize → Encode)</li>
+      <li>✅ 进度条显示</li>
+      <li>✅ 详细日志输出 (tracing)</li>
+      <li>✅ 并行处理 (rayon)</li>
+      <li>✅ 批量处理模式</li>
+      <li>✅ 错误报告格式化</li>
+      <li>✅ 性能基准测试</li>
+      <li>✅ 文档编写</li>
+      <li>✅ 跨平台构建 CI</li>
+    </ul>
+    <div class="alert success">
+      <strong>交付物</strong>: 完整可用的 CLI 工具，发布 v0.1.0。
+    </div>
+  </div>
+
+  <h3>9.1 开发顺序依赖图</h3>
+  <div class="diagram">Week 1─2: <span class="highlight">ass-parser</span> ─────────────────────────────┐
+                      │                                         │
+                      ▼                                         │
+Week 1─2: <span class="green">subtitle-validator</span> (依赖 ass-parser)          │
+                      │                                         │
+Week 3─5: <span class="purple">subtitle-renderer</span> (依赖 ass-parser) ◄─────────┘
+                      │
+                      ├──→ Week 6─7: <span class="orange">color-quantizer</span> (独立)
+                      │         │
+                      │         ▼
+                      ├──→ Week 6─7: <span class="green">bdn-xml</span> (依赖 color-quantizer)
+                      │         │
+                      │         ▼
+                      └──→ Week 8─9: <span class="purple">pgs-encoder</span> (独立，但集成时需要渲染输出)
+                                │
+                                ▼
+Week 10─11: <span class="highlight">ass2sup-cli</span> (集成所有 crate)</div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 10: Risks -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="risks">
+  <h2><span class="num">10</span> 风险分析与缓解</h2>
+
+  <table>
+    <tr>
+      <th>风险</th>
+      <th>严重度</th>
+      <th>可能性</th>
+      <th>缓解策略</th>
+    </tr>
+    <tr>
+      <td><strong>PGS 二进制格式兼容性</strong><br>蓝光播放器可能拒绝非标准 SUP</td>
+      <td>🔴 高</td>
+      <td>中</td>
+      <td>与 BDSup2Sub 输出逐字节对比；在多个播放器上测试（PowerDVD, VLC, mpv）；参考 SUPer 的测试用例</td>
+    </tr>
+    <tr>
+      <td><strong>字体渲染质量</strong><br>纯 Rust 渲染与 VSFilter/libass 的视觉差异</td>
+      <td>🟡 中</td>
+      <td>高</td>
+      <td>以 libass 输出为黄金标准进行像素级对比；支持 fallback 到 libass FFI；提供 <code>--engine libass</code> 选项</td>
+    </tr>
+    <tr>
+      <td><strong>ASS 特效完整性</strong><br>部分冷门标签可能遗漏</td>
+      <td>🟡 中</td>
+      <td>中</td>
+      <td>参考 libass 源码的完整标签列表；使用 Aegisub 测试集；对未知标签输出 warning 而非 error</td>
+    </tr>
+    <tr>
+      <td><strong>性能瓶颈</strong><br>大量字幕的渲染速度</td>
+      <td>🟡 中</td>
+      <td>低</td>
+      <td>rayon 并行渲染；帧间复用优化；SIMD 加速；profiling 驱动优化</td>
+    </tr>
+    <tr>
+      <td><strong>颜色量化质量</strong><br>256 色限制导致的色带</td>
+      <td>🟢 低</td>
+      <td>中</td>
+      <td>Floyd-Steinberg 抖动；支持 K-means 高质量模式；帧间调色板复用</td>
+    </tr>
+    <tr>
+      <td><strong>Karaoke 渲染复杂度</strong><br>\kf 扫描效果实现难度</td>
+      <td>🟡 中</td>
+      <td>中</td>
+      <td>使用 clip 实现渐变扫描；参考 ASS 规范文档；提供简化模式 fallback</td>
+    </tr>
+    <tr>
+      <td><strong>跨平台字体差异</strong><br>不同 OS 字体渲染不一致</td>
+      <td>🟢 低</td>
+      <td>高</td>
+      <td>内置 Noto Sans CJK 作为 fallback；支持 <code>--font-dir</code> 指定字体目录</td>
+    </tr>
+  </table>
+
+  <h3>10.1 技术债务预防</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><span class="icon">📏</span> 代码质量</div>
+      <ul>
+        <li><code>clippy::all</code> + <code>clippy::pedantic</code> 强制检查</li>
+        <li><code>rustfmt</code> 统一格式</li>
+        <li>CI 中集成 <code>cargo audit</code> 安全扫描</li>
+        <li>公共 API 必须有文档注释</li>
+        <li>测试覆盖率目标: >85%</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="icon">🔄</span> 持续集成</div>
+      <ul>
+        <li>每次 PR: build + test + clippy + fmt check</li>
+        <li>跨平台: Linux + macOS + Windows</li>
+        <li>性能回归检测 (criterion)</li>
+        <li>黄金文件对比测试</li>
+        <li>发布: cargo release 自动化</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- Section 11: Appendix -->
+<!-- ═══════════════════════════════════════════ -->
+<section id="appendix">
+  <h2><span class="num">A</span> 附录</h2>
+
+  <h3>A.1 关键 Crate 依赖</h3>
+  <table>
+    <tr><th>Crate</th><th>用途</th><th>版本</th><th>许可证</th></tr>
+    <tr><td>fontdb</td><td>字体发现与加载</td><td>0.16</td><td>MIT</td></tr>
+    <tr><td>rustybuzz</td><td>OpenType text shaping</td><td>0.14</td><td>MIT</td></tr>
+    <tr><td>ttf-parser</td><td>TrueType/OpenType 解析</td><td>0.21</td><td>MIT/Apache-2.0</td></tr>
+    <tr><td>tiny-skia</td><td>2D 光栅化</td><td>0.11</td><td>BSD-3</td></tr>
+    <tr><td>png</td><td>PNG 编码</td><td>0.17</td><td>MIT/Apache-2.0</td></tr>
+    <tr><td>clap</td><td>CLI 参数解析</td><td>4.x</td><td>MIT/Apache-2.0</td></tr>
+    <tr><td>tracing</td><td>结构化日志</td><td>0.1</td><td>MIT</td></tr>
+    <tr><td>rayon</td><td>数据并行</td><td>1.x</td><td>MIT/Apache-2.0</td></tr>
+    <tr><td>thiserror</td><td>错误类型派生</td><td>1.x</td><td>MIT/Apache-2.0</td></tr>
+    <tr><td>criterion</td><td>基准测试</td><td>0.5</td><td>MIT/Apache-2.0</td></tr>
+  </table>
+
+  <h3>A.2 PGS 帧率映射表</h3>
+  <table>
+    <tr><th>帧率</th><th>PGS code</th><th>常见用法</th></tr>
+    <tr><td>23.976</td><td>0x10</td><td>电影 (24p)</td></tr>
+    <tr><td>24.000</td><td>0x10</td><td>电影 (真 24p)</td></tr>
+    <tr><td>25.000</td><td>0x20</td><td>PAL 电视</td></tr>
+    <tr><td>29.970</td><td>0x30</td><td>NTSC 电视</td></tr>
+    <tr><td>30.000</td><td>0x40</td><td>30p</td></tr>
+    <tr><td>50.000</td><td>0x50</td><td>PAL 50i</td></tr>
+    <tr><td>59.940</td><td>0x60</td><td>NTSC 60i</td></tr>
+    <tr><td>60.000</td><td>0x70</td><td>60p</td></tr>
+  </table>
+
+  <h3>A.3 ASS 对齐方式映射</h3>
+  <pre><code>┌─────────┬─────────┬─────────┐
+│  7 (TL) │  8 (TC) │  9 (TR) │
+├─────────┼─────────┼─────────┤
+│  4 (ML) │  5 (MC) │  6 (MR) │
+├─────────┼─────────┼─────────┤
+│  1 (BL) │  2 (BC) │  3 (BR) │
+└─────────┴─────────┴─────────┘
+
+旧版 \a 值 (1-11) 到 \an 值 (1-9) 的映射:
+  a=1 → an=1, a=2 → an=2, a=3 → an=3
+  a=5 → an=4, a=6 → an=5, a=7 → an=6
+  a=9 → an=7, a=10 → an=8, a=11 → an=9</code></pre>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>ass2sup — 全链路 Rust ASS/SRT → PGS/SUP 转换器 — 技术规格说明书 v1.0</p>
+  <p>本文档为规划阶段产物，具体实现可能根据开发过程中的发现进行调整。</p>
+</footer>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,10 @@
+[package]
+name = "pgs-encoder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "PGS/SUP binary format encoder for Blu-ray subtitles"
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true

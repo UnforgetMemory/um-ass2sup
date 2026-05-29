@@ -1,0 +1,10 @@
+[package]
+name = "color-quantizer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Color quantization for subtitle bitmaps (Median Cut, Octree)"
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true

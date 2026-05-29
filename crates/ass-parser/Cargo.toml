@@ -1,0 +1,10 @@
+[package]
+name = "ass-parser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "ASS/SSA/SRT subtitle file parser with full AST representation"
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "subtitle-validator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Subtitle syntax validation and overlap detection"
+
+[dependencies]
+ass-parser.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "ass2sup-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "CLI tool for converting ASS/SRT subtitles to SUP/PGS format"
+
+[[bin]]
+name = "ass2sup"
+path = "src/main.rs"
+
+[dependencies]
+ass-parser.workspace = true
+subtitle-validator.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
