@@ -11,11 +11,14 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/user/ass2sup"
+repository = "https://github.com/UnforgetMemory/um-ass2sup"
+description = "ASS/SSA/SRT to Blu-ray SUP/PGS subtitle converter written in Rust"
+keywords = ["subtitle", "blu-ray", "pgs", "sup", "ass"]
+categories = ["multimedia", "command-line-utilities"]
 
 [workspace.dependencies]
 ass-parser = { path = "crates/ass-parser" }
