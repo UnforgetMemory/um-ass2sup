@@ -1,0 +1,25 @@
+[Script Info]
+Title: Unicode Text Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: CJK,Microsoft YaHei,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Arabic,Traditional Arabic,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Emoji,Segoe UI Emoji,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Mixed,Microsoft YaHei,40,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,CJK,,0,0,0,,中文测试字幕
+Dialogue: 0,0:00:05.00,0:00:08.00,CJK,,0,0,0,,日本語テスト字幕
+Dialogue: 0,0:00:09.00,0:00:12.00,CJK,,0,0,0,,한국어 테스트 자막
+Dialogue: 0,0:00:13.00,0:00:16.00,Emoji,,0,0,0,,🎬🎥🍿🎭🎨🎪
+Dialogue: 0,0:00:17.00,0:00:20.00,Mixed,,0,0,0,,Mix: English 中文 日本語 한국어
+Dialogue: 0,0:00:21.00,0:00:24.00,CJK,,0,0,0,,特殊字符：©®™€£¥§¶†‡
+Dialogue: 0,0:00:25.00,0:00:28.00,CJK,,0,0,0,,数学符号：∑∏∫∂√∞≈≠≤≥
+Dialogue: 0,0:00:29.00,0:00:32.00,CJK,,0,0,0,,箭头符号：←→↑↓↔↕⇐⇒⇑⇓
+Dialogue: 0,0:00:33.00,0:00:36.00,CJK,,0,0,0,,制表符：┌─┬─┐│├┼┤└─┴─┘
+Dialogue: 0,0:00:37.00,0:00:40.00,CJK,,0,0,0,,音标：əʊɪiːæʌɜːɒʊ

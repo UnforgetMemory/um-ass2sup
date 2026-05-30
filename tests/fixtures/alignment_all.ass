@@ -1,0 +1,24 @@
+[Script Info]
+Title: All 9 Alignment Positions
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\an1}Alignment 1 (bottom-left)
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\an2}Alignment 2 (bottom-center)
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\an3}Alignment 3 (bottom-right)
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,{\an4}Alignment 4 (middle-left)
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\an5}Alignment 5 (middle-center)
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,{\an6}Alignment 6 (middle-right)
+Dialogue: 0,0:00:30.00,0:00:35.00,Default,,0,0,0,,{\an7}Alignment 7 (top-left)
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,{\an8}Alignment 8 (top-center)
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\an9}Alignment 9 (top-right)
+Dialogue: 0,0:00:45.00,0:00:50.00,Default,,0,0,0,,{\an5\pos(960,540)}Center with explicit pos
+Dialogue: 0,0:00:50.00,0:00:55.00,Default,,0,0,0,,{\an7\pos(100,100)}Top-left at specific pos
+Dialogue: 0,0:00:55.00,0:01:00.00,Default,,0,0,0,,{\an9\pos(1820,980)}Bottom-right corner

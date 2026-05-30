@@ -1,0 +1,41 @@
+[Script Info]
+Title: Typography Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fs24}Small text 24pt
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fs36}Medium text 36pt
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fs48}Default text 48pt
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fs72}Large text 72pt
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fs96}Huge text 96pt
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\sp5}Wide spacing
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\sp-2}Tight spacing
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\fscx50}Half width
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\fscx200}Double width
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\fscy50}Half height
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\fscy200}Double height
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,{\fn Arial}Arial font
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,{\fn Courier New}Courier font
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,{\fn Times New Roman}Times font
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\b1}Bold text
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\b0}Non-bold text
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\i1}Italic text
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\i0}Non-italic text
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,{\b100}Weight 100
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,{\b400}Weight 400
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,{\b700}Weight 700
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,{\b900}Weight 900
+Dialogue: 0,0:00:30.00,0:00:35.00,Default,,0,0,0,,{\fs48\fscx150\fscy80\sp3}Combined typography
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,{\fe1}Charset 1 (default)
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,{\fe128}Charset 128 (Shift-JIS)
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\frz30}Rotated 30deg
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\frz-30}Rotated -30deg
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\frz90}Rotated 90deg
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\frz180}Rotated 180deg

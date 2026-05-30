@@ -1,0 +1,29 @@
+[Script Info]
+Title: Rotation Transform Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Rotated,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,45,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,0,,{\frz30}Rotated 30 degrees
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,100,,{\frz-30}Rotated -30 degrees
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,200,,{\frz90}Rotated 90 degrees
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\frz180}Rotated 180 degrees
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,100,,{\frz45\pos(960,540)}Centered 45 degrees
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\frx20}X-axis rotation
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,100,,{\fry20}Y-axis rotation
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,200,,{\frz20\frx10\fry10}Combined rotation
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,0,,{\fscx200}Scale X 200%
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,100,,{\fscy200}Scale Y 200%
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,200,,{\fscx150\fscy150}Scale both 150%
+Dialogue: 0,0:00:17.00,0:00:20.00,Default,,0,0,0,,{\frz45\fscx200\fscy200}Rotate and scale
+Dialogue: 0,0:00:21.00,0:00:24.00,Default,,0,0,0,,{\org(960,540)\frz45}Origin center rotation
+Dialogue: 0,0:00:25.00,0:00:28.00,Default,,0,0,0,,{\fax0.5}Shear X
+Dialogue: 0,0:00:25.00,0:00:28.00,Default,,0,0,100,,{\fay0.5}Shear Y
+Dialogue: 0,0:00:25.00,0:00:28.00,Default,,0,0,200,,{\fax0.3\fay0.3}Shear both

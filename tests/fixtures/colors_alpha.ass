@@ -1,0 +1,32 @@
+[Script Info]
+Title: Colors and Alpha Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Red,Arial,48,&H000000FF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Green,Arial,48,&H0000FF00,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Blue,Arial,48,&H00FF0000,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,0,,Default white text
+Dialogue: 0,0:00:01.00,0:00:04.00,Red,,0,0,0,,Red style text
+Dialogue: 0,0:00:01.00,0:00:04.00,Green,,0,0,0,,Green style text
+Dialogue: 0,0:00:01.00,0:00:04.00,Blue,,0,0,0,,Blue style text
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\1c&H0000FF&}Red override
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\2c&HFF0000&}Blue secondary
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\3c&H00FF00&}Green outline
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\4c&HFFFF00&}Cyan shadow
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\alpha&H80&}Semi-transparent
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\1a&H80&}Primary semi-transparent
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\3a&HC0&}Outline semi-transparent
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\4a&HFF&}Shadow fully transparent
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,0,,{\fad(500,500)}Fade in/out
+Dialogue: 0,0:00:17.00,0:00:21.00,Default,,0,0,0,,{\fade(255,0,255,0,1000,3000,4000)}Complex fade
+Dialogue: 0,0:00:22.00,0:00:25.00,Default,,0,0,0,,{\1c&H0000FF&\3c&HFF0000&}Red text blue outline
+Dialogue: 0,0:00:26.00,0:00:29.00,Default,,0,0,0,,{\alpha&H00&\1c&H00FFFF&}Opaque yellow
+Dialogue: 0,0:00:30.00,0:00:33.00,Default,,0,0,0,,{\1c&HFF8000&\bord3\shad5}Orange thick border

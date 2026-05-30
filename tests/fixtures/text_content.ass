@@ -1,0 +1,32 @@
+[Script Info]
+Title: Text Content Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.00,Default,,0,0,0,,Hello World
+Dialogue: 0,0:00:03.00,0:00:06.00,Default,,0,0,0,,Line1\NLine2
+Dialogue: 0,0:00:06.00,0:00:09.00,Default,,0,0,0,,Line1\NLine2\NLine3
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,Spaces   between   words
+Dialogue: 0,0:00:12.00,0:00:15.00,Default,,0,0,0,,Tab\there
+Dialogue: 0,0:00:15.00,0:00:18.00,Default,,0,0,0,,Trailing spaces   
+Dialogue: 0,0:00:18.00,0:00:21.00,Default,,0,0,0,,Leading    spaces
+Dialogue: 0,0:00:21.00,0:00:24.00,Default,,0,0,0,,Punctuation: !@#$%^&*()
+Dialogue: 0,0:00:24.00,0:00:27.00,Default,,0,0,0,,Quotes: "Hello" 'World'
+Dialogue: 0,0:00:27.00,0:00:30.00,Default,,0,0,0,,Brackets: [text] {text} (text)
+Dialogue: 0,0:00:30.00,0:00:33.00,Default,,0,0,0,,Math: 2+2=4, 10*5=50
+Dialogue: 0,0:00:33.00,0:00:36.00,Default,,0,0,0,,URL: https://example.com/path?q=1
+Dialogue: 0,0:00:36.00,0:00:39.00,Default,,0,0,0,,Email: user@example.com
+Dialogue: 0,0:00:39.00,0:00:42.00,Default,,0,0,0,,Path: C:\Users\test\file.txt
+Dialogue: 0,0:00:42.00,0:00:45.00,Default,,0,0,0,,HTML: <b>bold</b> <i>italic</i>
+Dialogue: 0,0:00:45.00,0:00:48.00,Default,,0,0,0,,Numbers: 0 1 2 3 4 5 6 7 8 9
+Dialogue: 0,0:00:48.00,0:00:51.00,Default,,0,0,0,,Mixed: ABC 123 !@# xyz
+Dialogue: 0,0:00:51.00,0:00:54.00,Default,,0,0,0,,Long text: The quick brown fox jumps over the lazy dog repeatedly
+Dialogue: 0,0:00:54.00,0:00:57.00,Default,,0,0,0,,Repeated: AAAAA BBBBB CCCCC
+Dialogue: 0,0:00:57.00,0:01:00.00,Default,,0,0,0,,Special: — – … ™ © ®

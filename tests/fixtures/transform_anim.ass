@@ -1,0 +1,22 @@
+[Script Info]
+Title: Transform Animation Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\t(\fs96)}Grow to 96pt
+Dialogue: 0,0:00:06.00,0:00:10.00,Default,,0,0,0,,{\t(0,2000,\frz180)}Spin 180 degrees
+Dialogue: 0,0:00:11.00,0:00:15.00,Default,,0,0,0,,{\t(\fscx300)}Scale X to 300%
+Dialogue: 0,0:00:16.00,0:00:20.00,Default,,0,0,0,,{\t(\1c&H0000FF&)}Color to red
+Dialogue: 0,0:00:21.00,0:00:25.00,Default,,0,0,0,,{\t(\alpha&HFF&)}Fade out
+Dialogue: 0,0:00:26.00,0:00:30.00,Default,,0,0,0,,{\t(0,1000,\bord8)}Grow border
+Dialogue: 0,0:00:31.00,0:00:35.00,Default,,0,0,0,,{\t(\blur5)}Increase blur
+Dialogue: 0,0:00:36.00,0:00:40.00,Default,,0,0,0,,{\t(0,2000,\frz360)\pos(960,540)}Full rotation
+Dialogue: 0,0:00:41.00,0:00:45.00,Default,,0,0,0,,{\t(1000,3000,2,\fs24)}Accel transform
+Dialogue: 0,0:00:46.00,0:00:50.00,Default,,0,0,0,,{\t(\1c&H0000FF&\2c&HFF0000&)}Both colors

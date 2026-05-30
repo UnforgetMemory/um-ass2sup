@@ -1,0 +1,22 @@
+[Script Info]
+Title: Override Tag Combinations
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\b1\i1\u1}Bold+Italic+Underline
+Dialogue: 0,0:00:02.00,0:00:04.00,Default,,0,0,0,,{\fs72\fnArial\c&H0000FF&}Large red Arial
+Dialogue: 0,0:00:04.00,0:00:06.00,Default,,0,0,0,,{\pos(400,300)\frz30\fs60}Positioned rotated
+Dialogue: 0,0:00:06.00,0:00:08.00,Default,,0,0,0,,{\fad(500,500)\bord4\shad6}Fade with border
+Dialogue: 0,0:00:08.00,0:00:10.00,Default,,0,0,0,,{\blur3\1c&H00FF00&\2c&HFF0000&}Blur green/red
+Dialogue: 0,0:00:10.00,0:00:12.00,Default,,0,0,0,,{\fscx150\fscy80\fax0.3}Stretched sheared
+Dialogue: 0,0:00:12.00,0:00:14.00,Default,,0,0,0,,{\clip(100,100,500,300)\frz-15}Clipped rotated
+Dialogue: 0,0:00:14.00,0:00:16.00,Default,,0,0,0,,{\move(100,100,500,300,0,3000)\fad(300,300)}Moving with fade
+Dialogue: 0,0:00:16.00,0:00:18.00,Default,,0,0,0,,{\an8\pos(960,50)\b1\fs36\c&H00FFFF&}Title bar
+Dialogue: 0,0:00:18.00,0:00:20.00,Default,,0,0,0,,{\t(\fs96\frz360)\fad(1000,0)}Animated grow+spin

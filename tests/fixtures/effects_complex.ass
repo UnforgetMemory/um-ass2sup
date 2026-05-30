@@ -1,0 +1,22 @@
+[Script Info]
+Title: Complex Effects Chains
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.00,Default,,0,0,0,,{\fad(500,500)\pos(960,540)\frz10\fs72\b1\c&H0000FFFF&\3c&H000000&\bord4\shad8}Full effect combo
+Dialogue: 0,0:00:03.00,0:00:06.00,Default,,0,0,0,,{\t(0,2000,\fs96\frz360\fscx200)}Animated transform
+Dialogue: 0,0:00:06.00,0:00:09.00,Default,,0,0,0,,{\move(100,100,1820,980,0,3000)\t(\frz720)\fad(300,300)}Moving spinning fade
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\clip(200,200,800,600)\iclip(300,300,700,500)\b1}Nested clip regions
+Dialogue: 0,0:00:12.00,0:00:15.00,Default,,0,0,0,,{\blur8\bord6\shad12\1c&HFF0000&\3c&H00FF00&}Heavily styled
+Dialogue: 0,0:00:15.00,0:00:18.00,Default,,0,0,0,,{\fscx200\fscy50\fax0.5\fay-0.3\org(960,540)\frz45}Transform with origin
+Dialogue: 0,0:00:18.00,0:00:21.00,Default,,0,0,0,,{\fade(255,0,255,0,500,1500,2000)\pos(960,100)\an8}Complex fade positioned
+Dialogue: 0,0:00:21.00,0:00:24.00,Default,,0,0,0,,{\t(0,1000,\1c&H0000FF&)\t(1000,2000,\1c&HFF0000&)\t(2000,3000,\1c&H00FF00&)}Color animation chain
+Dialogue: 0,0:00:24.00,0:00:27.00,Default,,0,0,0,,{\k50\kf100\pos(100,500)\b1\c&H00FFFF&}Karaoke with effects
+Dialogue: 0,0:00:27.00,0:00:30.00,Default,,0,0,0,,{\an5\move(200,200,1720,880,500,2500)\frz0\t(\frz360)\fad(500,0)}Complex animation

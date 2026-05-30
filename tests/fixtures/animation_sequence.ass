@@ -1,0 +1,26 @@
+[Script Info]
+Title: Animation Sequence Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.00,Default,,0,0,0,,{\fad(500,500)}Fade in and out
+Dialogue: 0,0:00:04.00,0:00:08.00,Default,,0,0,0,,{\move(100,100,1800,900,0,4000)}Moving text
+Dialogue: 0,0:00:09.00,0:00:15.00,Default,,0,0,0,,{\t(\fs20,\fs100,2)}Growing text
+Dialogue: 0,0:00:16.00,0:00:22.00,Default,,0,0,0,,{\t(\frz0,\frz360,3)}Spinning text
+Dialogue: 0,0:00:23.00,0:00:28.00,Default,,0,0,0,,{\t(\fscx100,\fscx300,2)}Scaling X text
+Dialogue: 0,0:00:29.00,0:00:35.00,Default,,0,0,0,,{\t(\fscy100,\fscy300,2)}Scaling Y text
+Dialogue: 0,0:00:36.00,0:00:42.00,Default,,0,0,0,,{\fade(255,0,255,0,2000,4000,6000)}Complex fade
+Dialogue: 0,0:00:43.00,0:00:48.00,Default,,0,0,0,,{\t(\bord0,\bord10,2)}Border animation
+Dialogue: 0,0:00:49.00,0:00:55.00,Default,,0,0,0,,{\t(\blur0,\blur10,2)}Blur animation
+Dialogue: 0,0:00:56.00,0:01:02.00,Default,,0,0,0,,{\t(\shad0,\shad20,2)}Shadow animation
+Dialogue: 0,0:01:03.00,0:01:08.00,Default,,0,0,0,,{\fad(1000,0)\move(960,540,960,100,0,4000)}Fade + move combo
+Dialogue: 0,0:01:09.00,0:01:15.00,Default,,0,0,0,,{\t(\1c&H0000FF&,\1c&HFF0000&,3)}Color animation
+Dialogue: 0,0:01:16.00,0:01:22.00,Default,,0,0,0,,{\t(\alpha&H00&,\alpha&HFF&,3)}Alpha animation
+Dialogue: 0,0:01:23.00,0:01:28.00,Default,,0,0,0,,{\pos(960,540)\t(\frz0,\frz180,2)\t(\fscx100,\fscx200,2)}Multi-transform

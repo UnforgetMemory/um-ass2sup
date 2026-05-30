@@ -1,0 +1,23 @@
+[Script Info]
+Title: Multiline with Breaks
+ScriptType: v4.00+
+WrapStyle: 0
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.00,Default,,0,0,0,,Line one\NLine two
+Dialogue: 0,0:00:03.00,0:00:06.00,Default,,0,0,0,,Line one\nLine two
+Dialogue: 0,0:00:06.00,0:00:09.00,Default,,0,0,0,,A\NB\C\ND
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\b1}Bold line\N{\b0}Normal line
+Dialogue: 0,0:00:12.00,0:00:15.00,Default,,0,0,0,,Line 1\nLine 2\nLine 3\nLine 4
+Dialogue: 0,0:00:15.00,0:00:18.00,Default,,0,0,0,,Long line that should wrap automatically when it exceeds the available width of the screen
+Dialogue: 0,0:00:18.00,0:00:21.00,Default,,0,0,0,,{\q2}No wrapping mode for this long line that goes on and on and on and on and on and on
+Dialogue: 0,0:00:21.00,0:00:24.00,Default,,0,0,0,,{\q0}Smart wrapping for this line that is very very very very very very very very very long
+Dialogue: 0,0:00:24.00,0:00:27.00,Default,,0,0,0,,First\NSecond\NThird\NFourth\NFifth line
+Dialogue: 0,0:00:27.00,0:00:30.00,Default,,0,0,0,,{\an8}Top aligned\nwith line break

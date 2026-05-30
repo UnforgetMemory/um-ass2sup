@@ -1,0 +1,24 @@
+[Script Info]
+Title: Multi-line Subtitles
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Single line
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,Two\Nlines
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,Three\Nlines\Nhere
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,Using\nsoft newline
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,Mixed\Nhard\nand\nsoft
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,Line 1\NLine 2\NLine 3\NLine 4\NLine 5
+Dialogue: 0,0:00:30.00,0:00:35.00,Default,,0,0,0,,{\an7}Multi-line\Ntop aligned
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,{\an8}Multi-line\Ncenter top
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\an4}Multi-line\Nmiddle left
+Dialogue: 0,0:00:45.00,0:00:50.00,Default,,0,0,0,,{\q2}No word wrap: This is a very long line that should not wrap at all even if it extends beyond the screen boundaries
+Dialogue: 0,0:00:50.00,0:00:55.00,Default,,0,0,0,,{\q0}Smart wrap:\NThis line uses smart wrapping behavior
+Dialogue: 0,0:00:55.00,0:01:00.00,Default,,0,0,0,,{\pos(960,540)}Centered\Nmulti-line\Nwith position

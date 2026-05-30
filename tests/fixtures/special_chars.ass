@@ -1,0 +1,24 @@
+[Script Info]
+Title: Special Characters
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Caf\u00e9 \u00e9\u00e8\u00ea\u00eb \u00e0\u00e1\u00e2\u00e3 \u00f1 \u00fc\u00f6\u00e4
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,\u201cSmart quotes\u201d \u2018single\u2019 \u2014 em dash \u2013 en dash
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,\u00a9\u00ae\u2122 Copyright Registered Trademark
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,\u00b0\u00b1\u00d7\u00f7\u2260\u2248\u221e Plus minus times divide not-equal approx infinity
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,\u2190\u2191\u2192\u2193 Arrows up down left right
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,\u2660\u2663\u2665\u2666 Card suits spade club heart diamond
+Dialogue: 0,0:00:30.00,0:00:35.00,Default,,0,0,0,,\u2605\u2606\u266a\u266b Music notes stars
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,Zero width: a\u200bb\u200bc\u200bd (ZWSP test)
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,Tab\there and back
+Dialogue: 0,0:00:45.00,0:00:50.00,Default,,0,0,0,,<>&" XML-like characters
+Dialogue: 0,0:00:50.00,0:00:55.00,Default,,0,0,0,,\{curly\} and \backslash
+Dialogue: 0,0:00:55.00,0:01:00.00,Default,,0,0,0,,100% done & finished @home #tag

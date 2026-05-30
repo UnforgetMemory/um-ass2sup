@@ -1,0 +1,33 @@
+[Script Info]
+Title: Transform and Rotation Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,0,,{\frz30}Rotated 30 degrees
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,100,,{\frz45}Rotated 45 degrees
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,200,,{\frz90}Rotated 90 degrees
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,300,,{\frz180}Flipped upside down
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\fscx200}Double width
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,100,,{\fscy200}Double height
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,200,,{\fscx200\fscy200}Double both
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,300,,{\fscx50\fscy50}Half size
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\fax0.5}Shear X
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,100,,{\fay0.3}Shear Y
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,200,,{\fax0.5\fay0.3}Shear both
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,0,,{\org(960,540)\frz45}Rotate around center
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,100,,{\org(0,0)\frz45}Rotate around origin
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,200,,{\org(1920,1080)\frz45}Rotate around corner
+Dialogue: 0,0:00:17.00,0:00:20.00,Default,,0,0,0,,{\t(\frz360)}Animated rotation
+Dialogue: 0,0:00:17.00,0:00:20.00,Default,,0,0,100,,{\t(\fscx200)}Animated scale
+Dialogue: 0,0:00:17.00,0:00:20.00,Default,,0,0,200,,{\t(\fscx100,500,2,\fscy100)}Animated scale with accel
+Dialogue: 0,0:00:21.00,0:00:24.00,Default,,0,0,0,,{\frz30\fscx150\fscy150}Combo transform
+Dialogue: 0,0:00:21.00,0:00:24.00,Default,,0,0,100,,{\frz-30}Negative rotation
+Dialogue: 0,0:00:25.00,0:00:28.00,Default,,0,0,0,,{\frx20}X-axis rotation
+Dialogue: 0,0:00:25.00,0:00:28.00,Default,,0,0,100,,{\fry20}Y-axis rotation

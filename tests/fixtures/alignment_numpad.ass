@@ -1,0 +1,21 @@
+[Script Info]
+Title: Alignment Numpad Tags
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\an1}Bottom-left \an1
+Dialogue: 0,0:00:02.00,0:00:04.00,Default,,0,0,0,,{\an2}Bottom-center \an2
+Dialogue: 0,0:00:04.00,0:00:06.00,Default,,0,0,0,,{\an3}Bottom-right \an3
+Dialogue: 0,0:00:06.00,0:00:08.00,Default,,0,0,0,,{\an4}Middle-left \an4
+Dialogue: 0,0:00:08.00,0:00:10.00,Default,,0,0,0,,{\an5}Middle-center \an5
+Dialogue: 0,0:00:10.00,0:00:12.00,Default,,0,0,0,,{\an6}Middle-right \an6
+Dialogue: 0,0:00:12.00,0:00:14.00,Default,,0,0,0,,{\an7}Top-left \an7
+Dialogue: 0,0:00:14.00,0:00:16.00,Default,,0,0,0,,{\an8}Top-center \an8
+Dialogue: 0,0:00:16.00,0:00:18.00,Default,,0,0,0,,{\an9}Top-right \an9

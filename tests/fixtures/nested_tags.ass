@@ -1,0 +1,27 @@
+[Script Info]
+Title: Nested Override Tags
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\b1\i1\u1}Multiple toggles at once
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\fs36\b1\1c&H0000FF&}Font+bold+color override
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\an8\pos(960,50)\bord3}Alignment+pos+border
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,{\fad(500,500)\move(100,100,500,500)}Fade+move combined
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\blur3\bord2\shad4\1c&HFF0000&\3c&H00FF00&}Full effect stack
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,{\frz45\fscx150\fscy150\org(960,540)}Rotation+scale+origin
+Dialogue: 0,0:00:30.00,0:00:35.00,Default,,0,0,0,,{\clip(100,100,500,300)\1c&H00FFFF&\b1}Clip+color+bold
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,{\t(\fs72\b1\1c&H0000FF&)}Transform with multiple attributes
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\k50}{\b1}Sylla{\k30}{\i1}ble {\k40}{\u1}ka{\k20}ra{\k35}oke
+Dialogue: 0,0:00:45.00,0:00:50.00,Default,,0,0,0,,{\b1}Bold {\i1}and italic {\b0}just italic {\i0}normal
+Dialogue: 0,0:00:50.00,0:00:55.00,Default,,0,0,0,,{\1c&H0000FF&}Red {\1c&H00FF00&}green {\1c&HFF0000&}blue
+Dialogue: 0,0:00:55.00,0:01:00.00,Default,,0,0,0,,{\alpha&H80&}Semi {\alpha&H00&}opaque {\alpha&HFF&}transparent
+Dialogue: 0,0:01:00.00,0:01:05.00,Default,,0,0,0,,{\fs24}small {\fs48}medium {\fs72}large {\fs96}huge
+Dialogue: 0,0:01:05.00,0:01:10.00,Default,,0,0,0,,{\r}Reset to style defaults
+Dialogue: 0,0:01:10.00,0:01:15.00,Default,,0,0,0,,{\rTitle}Reset to Title style

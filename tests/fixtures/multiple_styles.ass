@@ -1,0 +1,36 @@
+[Script Info]
+Title: Multiple Styles Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Title,Arial,72,&H0000FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,3,2,20,20,20,1
+Style: Subtitle,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Italic,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,-1,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Bold,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Small,Arial,24,&H00CCCCCC,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,1,1,2,5,5,5,1
+Style: Large,Arial,96,&H0080FF80,&H000000FF,&H00000000,&H80000000,-1,-1,0,0,100,100,0,0,1,4,4,8,30,30,30,1
+Style: TopCenter,Arial,36,&H00FFFF00,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,8,10,10,10,1
+Style: BottomLeft,Arial,36,&H00FF8000,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,1,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Title,,0,0,0,,Main Title
+Dialogue: 0,0:00:00.00,0:00:05.00,Subtitle,,0,0,200,,Subtitle text below
+Dialogue: 0,0:00:05.00,0:00:10.00,Italic,,0,0,0,,Italic style text
+Dialogue: 0,0:00:05.00,0:00:10.00,Bold,,0,0,0,,Bold style text
+Dialogue: 0,0:00:10.00,0:00:15.00,Small,,0,0,0,,Small font style
+Dialogue: 0,0:00:10.00,0:00:15.00,Large,,0,0,0,,Large font style
+Dialogue: 0,0:00:15.00,0:00:20.00,TopCenter,,0,0,0,,Top center aligned
+Dialogue: 0,0:00:15.00,0:00:20.00,BottomLeft,,0,0,0,,Bottom left aligned
+Dialogue: 0,0:00:20.00,0:00:25.00,Title,,0,0,0,,{\fs36}Title with override size
+Dialogue: 0,0:00:20.00,0:00:25.00,Subtitle,,0,0,0,,{\b-1}Subtitle forced non-bold
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,Default style text
+Dialogue: 0,0:00:25.00,0:00:30.00,Small,,0,0,0,,{\b1}Small forced bold
+Dialogue: 0,0:00:30.00,0:00:35.00,Title,,0,0,0,,Title at 30 seconds
+Dialogue: 0,0:00:30.00,0:00:35.00,Subtitle,,0,0,0,,Subtitle at 30 seconds
+Dialogue: 0,0:00:30.00,0:00:35.00,Italic,,0,0,0,,Italic at 30 seconds
+Dialogue: 0,0:00:35.00,0:00:40.00,Bold,,0,0,0,,{\1c&H0000FF&}Bold with red override
+Dialogue: 0,0:00:35.00,0:00:40.00,Large,,0,0,0,,{\pos(960,540)}Large centered

@@ -1,0 +1,29 @@
+[Script Info]
+Title: Complex Colors Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Red,Arial,48,&H000000FF,&H0000FFFF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Green,Arial,48,&H0000FF00,&H00FFFF00,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Blue,Arial,48,&H00FF0000,&H00FF00FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: SemiTransparent,Arial,48,&H80FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Red,,0,0,0,,Red primary color
+Dialogue: 0,0:00:00.00,0:00:05.00,Green,,0,0,0,,Green primary color
+Dialogue: 0,0:00:00.00,0:00:05.00,Blue,,0,0,0,,Blue primary color
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\1c&H0000FF&}Override red
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\2c&H00FF00&}Override green secondary
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\3c&HFF0000&}Override blue outline
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\4c&H808080&}Override grey shadow
+Dialogue: 0,0:00:10.00,0:00:15.00,SemiTransparent,,0,0,0,,Semi-transparent style
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\alpha&H80&}Half transparent
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\1a&H80&}Primary half alpha
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,{\alpha&HFF&}Fully transparent
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,{\1c&H00FFFF&\2c&HFF00FF&\3c&HFFFF00&}Multi-color override
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\1a&HC0&\3a&H40&}Different alpha per channel
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\fad(0,2000)\1c&H0000FF&}Fade with color

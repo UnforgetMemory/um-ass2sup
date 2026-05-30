@@ -1,0 +1,36 @@
+[Script Info]
+Title: Font Styles Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Bold,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Italic,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,-1,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Small,Arial,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: Large,Arial,72,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0,0,0,,Normal Arial
+Dialogue: 0,0:00:01.00,0:00:04.00,Bold,,0,0,0,,Bold Arial
+Dialogue: 0,0:00:01.00,0:00:04.00,Italic,,0,0,0,,Italic Arial
+Dialogue: 0,0:00:01.00,0:00:04.00,Small,,0,0,0,,Small 24pt
+Dialogue: 0,0:00:01.00,0:00:04.00,Large,,0,0,0,,Large 72pt
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\b1}Bold override
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\i1}Italic override
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\u1}Underline override
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,,0,0,0,,{\s1}Strikeout override
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\fs24}Font size 24
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\fs96}Font size 96
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\fscx200}Double width
+Dialogue: 0,0:00:09.00,0:00:12.00,Default,,0,0,0,,{\fscy200}Double height
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,0,,{\fsp5}Extra spacing
+Dialogue: 0,0:00:13.00,0:00:16.00,Default,,0,0,0,,{\frz30}Rotated 30 degrees
+Dialogue: 0,0:00:17.00,0:00:20.00,Default,,0,0,0,,{\b1\i1\u1\s1}All decorations
+Dialogue: 0,0:00:17.00,0:00:20.00,Default,,0,0,0,,{\b0\i0}Remove bold italic
+Dialogue: 0,0:00:21.00,0:00:24.00,Default,,0,0,0,,{\fnCourier New}Courier font
+Dialogue: 0,0:00:21.00,0:00:24.00,Default,,0,0,0,,{\fnTimes New Roman}Times font
+Dialogue: 0,0:00:25.00,0:00:28.00,Default,,0,0,0,,{\fax0.5}Shear X

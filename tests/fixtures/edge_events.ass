@@ -1,0 +1,31 @@
+[Script Info]
+Title: Edge Events Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.01,Default,,0,0,0,,Single frame event
+Dialogue: 0,0:00:01.00,0:00:01.10,Default,,0,0,0,,10 centisecond event
+Dialogue: 99,0:00:02.00,0:00:07.00,Default,,0,0,0,,Layer 99
+Dialogue: 0,0:59:59.00,1:00:05.00,Default,,0,0,0,,Crosses one hour mark
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,A
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,0123456789 !@#$%^&*()
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,Line1\NLine2\NLine3\NLine4\NLine5
+Dialogue: 0,0:00:30.00,0:00:35.00,Default,,999,999,999,,Overridden margins
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,{\pos(0,0)}Top-left corner
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,{\pos(1920,1080)}Bottom-right corner
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\pos(-100,-100)}Off-screen negative
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\pos(2000,1200)}Off-screen positive
+Dialogue: 0,0:00:45.00,0:00:50.00,Default,,0,0,0,,{\an5\pos(960,540)}Centered exactly
+Dialogue: 0,0:00:50.00,0:00:55.00,Default,,0,0,0,,{\fs1}Tiny font
+Dialogue: 0,0:00:50.00,0:00:55.00,Default,,0,0,0,,{\fs200}Huge font
+Dialogue: 0,0:00:55.00,0:01:00.00,Default,,0,0,0,,{\bord0\shad0}No border no shadow
+Dialogue: 0,0:00:55.00,0:01:00.00,Default,,0,0,0,,{\bord20\shad20}Thick border thick shadow
+Dialogue: 0,0:01:00.00,0:01:05.00,Default,,0,0,0,,{\pos(960,540)\frz45}\Nrotated newline

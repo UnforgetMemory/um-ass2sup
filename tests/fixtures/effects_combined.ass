@@ -1,0 +1,32 @@
+[Script Info]
+Title: Combined Effects Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\b1\i1\u1\s1}All decorations
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,,{\pos(960,540)\frz45}Position + rotation
+Dialogue: 0,0:00:10.00,0:00:15.00,Default,,0,0,0,,{\fad(500,500)\bord5}Fade + border
+Dialogue: 0,0:00:15.00,0:00:20.00,Default,,0,0,0,,{\blur3\shad5}Blur + shadow
+Dialogue: 0,0:00:20.00,0:00:25.00,Default,,0,0,0,,{\fscx150\fscy150\frz30}Scale + rotate
+Dialogue: 0,0:00:25.00,0:00:30.00,Default,,0,0,0,,{\1c&H0000FF&\bord3\shad5}Color + border + shadow
+Dialogue: 0,0:00:30.00,0:00:35.00,Default,,0,0,0,,{\pos(960,540)\fad(500,500)\frz90}Pos + fade + rotate
+Dialogue: 0,0:00:35.00,0:00:40.00,Default,,0,0,0,,{\clip(100,100,1800,1000)\blur2}Clip + blur
+Dialogue: 0,0:00:40.00,0:00:45.00,Default,,0,0,0,,{\t(\fs48,\fs96,2)\fad(0,2000)}Transform + fade
+Dialogue: 0,0:00:45.00,0:00:50.00,Default,,0,0,0,,{\move(100,100,1800,1000,0,5000)\fad(500,500)}Move + fade
+Dialogue: 0,0:00:50.00,0:00:55.00,Default,,0,0,0,,{\an8\pos(960,100)\b1\i1}Top + pos + bold + italic
+Dialogue: 0,0:00:55.00,0:01:00.00,Default,,0,0,0,,{\frz45\fscx200\1c&H00FFFF&}Rotate + scale + color
+Dialogue: 0,0:01:00.00,0:01:05.00,Default,,0,0,0,,{\bord5\3c&HFF0000&\shad8}Border + outline color + shadow
+Dialogue: 0,0:01:05.00,0:01:10.00,Default,,0,0,0,,{\blur5\alpha&H80&\pos(960,540)}Blur + alpha + pos
+Dialogue: 0,0:01:10.00,0:01:15.00,Default,,0,0,0,,{\t(\frz0,\frz360,3)\fscx150}Animate rotation + static scale
+Dialogue: 0,0:01:15.00,0:01:20.00,Default,,0,0,0,,{\fade(255,0,128,0,1000,3000,5000)\bord3}Complex fade + border
+Dialogue: 0,0:01:20.00,0:01:25.00,Default,,0,0,0,,{\org(960,540)\frz45}Origin + rotation
+Dialogue: 0,0:01:25.00,0:01:30.00,Default,,0,0,0,,{\fax0.5\fay0.3}Shear X and Y
+Dialogue: 0,0:01:30.00,0:01:35.00,Default,,0,0,0,,{\iclip(200,200,800,600)}Inverse clip
+Dialogue: 0,0:01:35.00,0:01:40.00,Default,,0,0,0,,{\xbord5\ybord10}Different X/Y border
