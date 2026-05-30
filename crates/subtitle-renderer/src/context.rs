@@ -53,9 +53,12 @@ pub struct RenderContext {
     pub clip_x2: f32,
     pub clip_y2: f32,
     pub clip_enabled: bool,
+    pub clip_inverse: bool,
     pub wrap_style: u8,
     pub underline: bool,
     pub strikeout: bool,
+    /// Alpha multiplier for fade effects (1.0 = fully opaque, 0.0 = fully transparent)
+    pub alpha_multiplier: f32,
 }
 
 impl Default for RenderContext {
@@ -91,9 +94,11 @@ impl Default for RenderContext {
             clip_x2: -1.0,
             clip_y2: -1.0,
             clip_enabled: false,
+            clip_inverse: false,
             wrap_style: 0,
             underline: false,
             strikeout: false,
+            alpha_multiplier: 1.0,
         }
     }
 }
