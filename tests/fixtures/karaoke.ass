@@ -1,0 +1,16 @@
+[Script Info]
+Title: Karaoke Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Karaoke,Arial,52,&H000000FF,&H0000FFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Karaoke,,0,0,0,,{\k50}Hel{\k100}lo {\k75}World
+Dialogue: 0,0:00:06.00,0:00:10.00,Karaoke,,0,0,0,,{\kf80}Sing {\kf120}a {\kf60}song
+Dialogue: 0,0:00:11.00,0:00:15.00,Karaoke,,0,0,0,,{\ko100}Out{\ko50}line {\ko90}style
+Dialogue: 0,0:00:16.00,0:00:20.00,Karaoke,,0,0,0,,{\k40}Mix{\kf60}ed {\ko80}ka{\k100}ra{\kf50}o{\ko70}ke

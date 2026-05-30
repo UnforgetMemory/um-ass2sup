@@ -104,6 +104,51 @@ impl AssFile {
         Ok(ass)
     }
 
+    /// Parse ASS content leniently, recovering from errors instead of aborting.
+    ///
+    /// Returns a tuple of (partial AssFile, list of errors encountered).
+    /// Invalid events and styles are skipped; valid portions are still parsed correctly.
+    /// Missing [Script Info] section uses defaults (1920x1080, v4.00+).
+    pub fn parse_lenient(content: &str) -> (Self, Vec<ParseError>) {
+        let mut ass = Self::new();
+        let mut errors = Vec::new();
+        let mut current_section = String::new();
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with(';') || line.starts_with('!') {
+                continue;
+            }
+            if line.starts_with('[') && line.ends_with(']') {
+                current_section = line[1..line.len() - 1].to_string();
+                continue;
+            }
+            match current_section.as_str() {
+                "Script Info" => {
+                    let _ = ass.parse_script_info(line);
+                }
+                "V4+ Styles" | "V4 Styles" => {
+                    if line.starts_with("Format:") {
+                        continue;
+                    }
+                    if let Err(e) = ass.parse_style_line(line) {
+                        errors.push(e);
+                    }
+                }
+                "Events" => {
+                    if line.starts_with("Format:") {
+                        continue;
+                    }
+                    if let Err(e) = ass.parse_event_line(line) {
+                        errors.push(e);
+                    }
+                }
+                _ => {}
+            }
+        }
+        (ass, errors)
+    }
+
     pub fn parse_file(path: &Path) -> Result<Self, ParseError> {
         let content = std::fs::read_to_string(path)?;
         let format = SubtitleFormat::detect(path).unwrap_or(SubtitleFormat::Ass);

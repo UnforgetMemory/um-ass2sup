@@ -32,6 +32,16 @@ impl Quantizer {
     }
 
     pub fn quantize(&self, rgba: &[u8], width: u32, height: u32) -> QuantizedFrame {
+        if self.max_colors == 0 || rgba.is_empty() {
+            return QuantizedFrame {
+                width,
+                height,
+                palette: Vec::new(),
+                indices: vec![0u8; (width * height) as usize],
+                transparent_index: 0,
+            };
+        }
+
         assert_eq!(rgba.len(), (width * height * 4) as usize);
 
         let pixels: Vec<Rgba> = rgba
@@ -46,7 +56,13 @@ impl Quantizer {
             .collect();
 
         let mut palette = if opaque_pixels.len() <= self.max_colors {
-            opaque_pixels.clone()
+            let mut deduped: Vec<Rgba> = Vec::new();
+            for p in &opaque_pixels {
+                if !deduped.contains(p) {
+                    deduped.push(*p);
+                }
+            }
+            deduped
         } else {
             median_cut::median_cut(&opaque_pixels, self.max_colors)
         };
@@ -55,6 +71,9 @@ impl Quantizer {
         let transparent_index = if has_transparent {
             palette.push(Rgba::new(0, 0, 0, 0));
             (palette.len() - 1) as u8
+        } else if palette.is_empty() {
+            palette.push(Rgba::new(0, 0, 0, 0));
+            0
         } else {
             0
         };

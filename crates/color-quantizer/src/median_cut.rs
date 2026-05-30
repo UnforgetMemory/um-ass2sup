@@ -13,7 +13,10 @@ struct BoundingBox {
 }
 
 impl BoundingBox {
-    fn from_pixels(pixels: &[Rgba]) -> Self {
+    fn from_pixels(pixels: &[Rgba]) -> Option<Self> {
+        if pixels.is_empty() {
+            return None;
+        }
         let mut bx = BoundingBox {
             r_min: 255, r_max: 0,
             g_min: 255, g_max: 0,
@@ -30,7 +33,7 @@ impl BoundingBox {
             bx.a_min = bx.a_min.min(p.a);
             bx.a_max = bx.a_max.max(p.a);
         }
-        bx
+        Some(bx)
     }
 
     fn longest_axis(&self) -> usize {
@@ -92,7 +95,13 @@ pub fn median_cut(pixels: &[Rgba], max_colors: usize) -> Vec<Rgba> {
         };
 
         let mut cube = cubes.swap_remove(idx);
-        let bb = BoundingBox::from_pixels(&cube.pixels);
+        let bb = match BoundingBox::from_pixels(&cube.pixels) {
+            Some(bb) => bb,
+            None => {
+                cubes.push(cube);
+                break;
+            }
+        };
         let axis = bb.longest_axis();
 
         cube.pixels.sort_by(|a, b| {

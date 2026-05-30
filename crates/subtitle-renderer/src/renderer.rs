@@ -6,6 +6,7 @@ use crate::effects;
 use crate::font::FontManager;
 use crate::rasterizer::Rasterizer;
 use crate::shaper::Shaper;
+use crate::transform::AffineTransform;
 
 pub struct Renderer {
     config: RenderConfig,
@@ -180,36 +181,49 @@ impl Renderer {
             Err(_) => return,
         };
 
+        let w = pixmap.width();
+        let h = pixmap.height();
+        let mut layer = Pixmap::new(w, h).unwrap();
+
         let mut x = ctx.x;
         for glyph in &shaped.glyphs {
-            Rasterizer::rasterize_glyph(pixmap, &self.font_manager, font_id, glyph, x, ctx.y, ctx);
+            Rasterizer::rasterize_glyph(&mut layer, &self.font_manager, font_id, glyph, x, ctx.y, ctx);
             x += glyph.x_advance + ctx.spacing;
         }
 
         if ctx.blur > 0.0 {
-            effects::apply_gaussian_blur(pixmap, ctx.blur);
+            effects::apply_gaussian_blur(&mut layer, ctx.blur);
         }
 
         if ctx.shadow_depth > 0.0 {
-            let w = pixmap.width();
-            let h = pixmap.height();
-            let src_data = pixmap.data().to_vec();
+            let layer_data = layer.data().to_vec();
             let shadow_layer = effects::apply_shadow(
-                &src_data,
+                &layer_data,
                 w,
                 h,
                 ctx.shadow_depth,
                 ctx.shadow_depth,
+                ctx.blur,
                 ctx.shadow_color,
             );
             let mut shadow_pixmap = Pixmap::new(w, h).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
-            effects::composite_over(pixmap.data_mut(), shadow_pixmap.data(), w, h);
+            effects::composite_over(layer.data_mut(), shadow_pixmap.data(), w, h);
         }
 
+        let transform = AffineTransform::rotate_at(ctx.rotation, ctx.origin_x, ctx.origin_y)
+            .then(&AffineTransform::scale(ctx.scale_x / 100.0, ctx.scale_y / 100.0))
+            .then(&AffineTransform::shear(ctx.shear_x, ctx.shear_y));
+
+        let final_data = if transform.is_identity() {
+            layer.data().to_vec()
+        } else {
+            transform.apply_to_pixmap(layer.data(), w, h, w, h)
+        };
+
+        effects::composite_over(pixmap.data_mut(), &final_data, w, h);
+
         if ctx.clip_enabled {
-            let w = pixmap.width();
-            let h = pixmap.height();
             let x1 = ctx.clip_x1.max(0.0) as u32;
             let y1 = ctx.clip_y1.max(0.0) as u32;
             let x2 = ctx.clip_x2.max(0.0).min(w as f32) as u32;

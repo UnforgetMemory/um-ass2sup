@@ -94,7 +94,7 @@ fn test_shadow_basic_offset() {
     src_mut[idx + 2] = 255;
     src_mut[idx + 3] = 255;
     let shadow_color = [0, 0, 0, 200];
-    let result = apply_shadow(&src_mut, w, h, 2.0, 2.0, shadow_color);
+    let result = apply_shadow(&src_mut, w, h, 2.0, 2.0, 0.0, shadow_color);
     let dst_idx = ((7 * w + 7) * 4) as usize;
     assert!(result[dst_idx + 3] > 0, "shadow should appear at offset position");
     assert_eq!(result[dst_idx], 0);
@@ -114,7 +114,7 @@ fn test_shadow_zero_offset() {
     src_mut[idx + 2] = 255;
     src_mut[idx + 3] = 255;
     let shadow_color = [0, 0, 0, 128];
-    let result = apply_shadow(&src_mut, w, h, 0.0, 0.0, shadow_color);
+    let result = apply_shadow(&src_mut, w, h, 0.0, 0.0, 0.0, shadow_color);
     let dst_idx = ((5 * w + 5) * 4) as usize;
     assert_eq!(result[dst_idx + 3], 128, "shadow at zero offset should use shadow alpha");
 }
@@ -123,7 +123,7 @@ fn test_shadow_zero_offset() {
 fn test_shadow_empty_source() {
     let src = vec![0u8; 10 * 10 * 4];
     let shadow_color = [0, 0, 0, 255];
-    let result = apply_shadow(&src, 10, 10, 3.0, 3.0, shadow_color);
+    let result = apply_shadow(&src, 10, 10, 3.0, 3.0, 0.0, shadow_color);
     assert!(result.iter().all(|&b| b == 0), "shadow of empty source should be empty");
 }
 
@@ -138,7 +138,7 @@ fn test_shadow_proportional_alpha() {
     src[idx + 2] = 255;
     src[idx + 3] = 128;
     let shadow_color = [0, 0, 0, 255];
-    let result = apply_shadow(&src, w, h, 1.0, 1.0, shadow_color);
+    let result = apply_shadow(&src, w, h, 1.0, 1.0, 0.0, shadow_color);
     let dst_idx = ((6 * w + 6) * 4) as usize;
     let expected_alpha = (255u32 * 128) / 255;
     assert_eq!(result[dst_idx + 3], expected_alpha as u8);

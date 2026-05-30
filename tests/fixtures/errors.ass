@@ -1,0 +1,20 @@
+[Script Info]
+Title: Error Recovery Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: BadStyle,Arial,notanumber,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10
+Style: NonExistentFont,NoSuchFont,36,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Valid subtitle before errors
+Dialogue: 0,0:00:04.00,0:00:06.00,Default,,0,0,0,,{\bord(3}Missing closing brace
+Dialogue: 0,0:00:not-a-time,0:00:08.00,Default,,0,0,0,,Invalid start timestamp
+Dialogue: 0,0:00:08.00,0:00:10.00,Default,,0,0,0,,Valid subtitle after errors
+Dialogue: 0,0:00:11.00,0:00:13.00,Default,,0,0,0,,
+Dialogue: 0,0:00:14.00,0:00:16.00,NonExistentFont,,0,0,0,,Text with missing font style
