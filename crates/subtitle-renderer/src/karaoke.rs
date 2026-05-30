@@ -16,6 +16,7 @@ pub struct SyllableState {
     pub end_ms: u64,
     pub text: String,
     pub phase: KaraokePhase,
+    pub style: KaraokeStyle,
 }
 
 pub struct KaraokeRenderer;
@@ -50,6 +51,7 @@ impl KaraokeRenderer {
                 end_ms: end,
                 text: seg.text.clone(),
                 phase,
+                style: seg.style,
             });
             cursor = end;
         }

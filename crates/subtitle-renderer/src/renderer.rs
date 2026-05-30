@@ -5,6 +5,7 @@ use crate::context::{RenderConfig, RenderContext, RenderedFrame};
 use crate::effects;
 use crate::font::FontManager;
 use crate::karaoke::{KaraokePhase, KaraokeRenderer};
+use ass_parser::karaoke::KaraokeStyle;
 use crate::rasterizer::Rasterizer;
 use crate::shaper::Shaper;
 use crate::transform::AffineTransform;
@@ -305,6 +306,8 @@ impl Renderer {
         let h = pixmap.height();
         let mut layer = Pixmap::new(w, h).unwrap();
 
+        let align_col = ctx.alignment % 3;
+
         for (line_idx, line) in lines.iter().enumerate() {
             if line.is_empty() {
                 continue;
@@ -315,14 +318,20 @@ impl Renderer {
             };
 
             let line_y = ctx.y + line_idx as f32 * line_height;
-            let mut x = ctx.x;
+            let text_width = shaped.total_advance;
+            let x_start = match align_col {
+                2 => ctx.x + (available_width - text_width) / 2.0,
+                0 => ctx.x + available_width - text_width,
+                _ => ctx.x,
+            };
+
+            let mut x = x_start;
             for glyph in &shaped.glyphs {
                 Rasterizer::rasterize_glyph(&mut layer, &self.font_manager, font_id, glyph, x, line_y, ctx);
                 x += glyph.x_advance + ctx.spacing;
             }
 
             if ctx.underline || ctx.strikeout {
-                let text_width = shaped.total_advance;
                 let line_thickness = (ctx.font_size / 16.0).max(1.0);
                 let mut paint = tiny_skia::Paint::default();
                 paint.set_color_rgba8(ctx.primary_color[0], ctx.primary_color[1], ctx.primary_color[2], ctx.primary_color[3]);
@@ -331,8 +340,8 @@ impl Renderer {
                 if ctx.underline {
                     let uy = line_y + ctx.font_size * 0.1;
                     let mut pb = tiny_skia::PathBuilder::new();
-                    pb.move_to(ctx.x, uy);
-                    pb.line_to(ctx.x + text_width, uy);
+                    pb.move_to(x_start, uy);
+                    pb.line_to(x_start + text_width, uy);
                     pb.close();
                     if let Some(path) = pb.finish() {
                         let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
@@ -343,8 +352,8 @@ impl Renderer {
                 if ctx.strikeout {
                     let sy = line_y - ctx.font_size * 0.35;
                     let mut pb = tiny_skia::PathBuilder::new();
-                    pb.move_to(ctx.x, sy);
-                    pb.line_to(ctx.x + text_width, sy);
+                    pb.move_to(x_start, sy);
+                    pb.line_to(x_start + text_width, sy);
                     pb.close();
                     if let Some(path) = pb.finish() {
                         let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
@@ -425,6 +434,8 @@ impl Renderer {
         let mut bg_layer = Pixmap::new(w, h).unwrap();
         let mut fg_layer = Pixmap::new(w, h).unwrap();
 
+        let mut cursor_x = ctx.x;
+
         for syllable in &syllables {
             if syllable.text.is_empty() {
                 continue;
@@ -432,6 +443,10 @@ impl Renderer {
 
             let is_done = matches!(syllable.phase, KaraokePhase::Done);
             let is_active = matches!(syllable.phase, KaraokePhase::Active { .. });
+            let progress = match syllable.phase {
+                KaraokePhase::Active { progress } => progress,
+                _ => 0.0,
+            };
 
             let mut sy_ctx = ctx.clone();
             if is_done || is_active {
@@ -441,15 +456,41 @@ impl Renderer {
             }
 
             if let Ok(shaped) = shaper.shape(&syllable.text, font_id, ctx.font_size) {
-                let mut sx = ctx.x;
+                let syllable_x = cursor_x;
+                let syllable_width = shaped.total_advance;
+
+                let target_layer = if is_active {
+                    &mut fg_layer
+                } else {
+                    &mut bg_layer
+                };
+
+                let mut sx = syllable_x;
                 for glyph in &shaped.glyphs {
-                    if is_active {
-                        Rasterizer::rasterize_glyph(&mut fg_layer, &self.font_manager, font_id, glyph, sx, ctx.y, &sy_ctx);
-                    } else {
-                        Rasterizer::rasterize_glyph(&mut bg_layer, &self.font_manager, font_id, glyph, sx, ctx.y, &sy_ctx);
-                    }
+                    Rasterizer::rasterize_glyph(target_layer, &self.font_manager, font_id, glyph, sx, ctx.y, &sy_ctx);
                     sx += glyph.x_advance + ctx.spacing;
                 }
+
+                if is_active && matches!(syllable.style, KaraokeStyle::Fill) {
+                    let clip_x = syllable_x + KaraokeRenderer::get_fill_clip_x(progress, syllable_width);
+                    let fg_w = fg_layer.width() as usize;
+                    let y_start = ctx.y.max(0.0) as usize;
+                    let y_end = (ctx.y + ctx.font_size * 1.5).min(h as f32) as usize;
+                    let data = fg_layer.data_mut();
+                    for py in y_start..y_end.min(h as usize) {
+                        for px in (clip_x as usize)..fg_w.min(w as usize) {
+                            let idx = (py * fg_w + px) * 4;
+                            if idx + 3 < data.len() {
+                                data[idx] = 0;
+                                data[idx + 1] = 0;
+                                data[idx + 2] = 0;
+                                data[idx + 3] = 0;
+                            }
+                        }
+                    }
+                }
+
+                cursor_x += syllable_width + ctx.spacing;
             }
         }
 
