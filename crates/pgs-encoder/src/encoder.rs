@@ -97,10 +97,10 @@ impl PgsEncoder {
             CompositionState::NormalCase
         };
 
-        let rle_size_est = 13 + 4 + rle.len(); // segment header + ODS 4-byte prefix + data
+        let rle_size_est = 13 + 4 + rle.len();
         let use_multi_window = rle_size_est > MAX_DECODE_BUFFER / 2 && frame.height > 100;
 
-        if use_multi_window {
+        let segments = if use_multi_window {
             self.build_multi_window_display_set(
                 frame, pts, dts, pts, &palette_entries, &rle,
                 composition_state, palette_changed,
@@ -110,7 +110,61 @@ impl PgsEncoder {
                 frame, pts, dts, &palette_entries, &rle,
                 composition_state, palette_changed,
             )
+        };
+
+        let total_size: usize = segments.iter().map(|s| s.to_bytes().len()).sum();
+        if total_size > MAX_DECODE_BUFFER * 3 / 4 {
+            self.build_epoch_split_display_set(frame, pts, dts, composition_state, palette_changed)
+        } else {
+            segments
         }
+    }
+
+    fn build_epoch_split_display_set(
+        &self,
+        frame: &QuantizedFrame,
+        pts: u64, dts: u64,
+        composition_state: CompositionState,
+        palette_changed: bool,
+    ) -> Vec<Segment> {
+        let palette_entries = build_palette(&frame.palette);
+        let band_height = (frame.height / 3).max(64);
+        let mut all_segments = Vec::new();
+
+        for band_idx in 0..3u32 {
+            let y_start = band_idx * band_height;
+            let y_end = ((band_idx + 1) * band_height).min(frame.height);
+            if y_start >= frame.height {
+                break;
+            }
+            let band_h = y_end - y_start;
+            let start_offset = (y_start * frame.width) as usize;
+            let end_offset = (y_end * frame.width) as usize;
+            let band_indices = &frame.indices[start_offset..end_offset];
+
+            let band_frame = QuantizedFrame {
+                width: frame.width,
+                height: band_h,
+                palette: frame.palette.clone(),
+                indices: band_indices.to_vec(),
+                transparent_index: frame.transparent_index,
+            };
+
+            let band_rle = rle_encode(&band_frame.indices, band_frame.width, band_frame.height);
+            let band_state = if band_idx == 0 {
+                composition_state
+            } else {
+                CompositionState::NormalCase
+            };
+
+            let band_segments = self.build_single_window_display_set(
+                &band_frame, pts, dts, &palette_entries, &band_rle,
+                band_state, palette_changed,
+            );
+            all_segments.extend(band_segments);
+        }
+
+        all_segments
     }
 
     fn build_single_window_display_set(

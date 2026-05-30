@@ -1,5 +1,5 @@
 use ass_parser::{AssFile, Event, OverrideTag, Style, Timestamp};
-use tiny_skia::Pixmap;
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Stroke, Transform as SkiaTransform};
 
 use crate::context::{RenderConfig, RenderContext, RenderedFrame};
 use crate::effects;
@@ -236,6 +236,9 @@ impl Renderer {
                         ctx.alignment = style.alignment;
                     }
                 }
+                OverrideTag::Unknown(tag) => {
+                    tracing::warn!(tag = %tag, "unrecognized override tag ignored");
+                }
                 _ => {}
             }
         }
@@ -285,20 +288,70 @@ impl Renderer {
             return;
         }
 
+        let drawing_level = parse_drawing_level(&event.text);
+
+        if drawing_level > 0 {
+            self.render_drawing(pixmap, &plain_text, ctx, drawing_level);
+            return;
+        }
+
         let shaper = Shaper::new(&self.font_manager);
-        let shaped = match shaper.shape(&plain_text, font_id, ctx.font_size) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
+
+        let available_width = self.config.width as f32 - ctx.margin_l - ctx.margin_r;
+        let lines = wrap_text(&plain_text, ctx.wrap_style, &shaper, font_id, ctx.font_size, ctx.spacing, available_width);
+        let line_height = ctx.font_size * 1.2;
 
         let w = pixmap.width();
         let h = pixmap.height();
         let mut layer = Pixmap::new(w, h).unwrap();
 
-        let mut x = ctx.x;
-        for glyph in &shaped.glyphs {
-            Rasterizer::rasterize_glyph(&mut layer, &self.font_manager, font_id, glyph, x, ctx.y, ctx);
-            x += glyph.x_advance + ctx.spacing;
+        for (line_idx, line) in lines.iter().enumerate() {
+            if line.is_empty() {
+                continue;
+            }
+            let shaped = match shaper.shape(line, font_id, ctx.font_size) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+
+            let line_y = ctx.y + line_idx as f32 * line_height;
+            let mut x = ctx.x;
+            for glyph in &shaped.glyphs {
+                Rasterizer::rasterize_glyph(&mut layer, &self.font_manager, font_id, glyph, x, line_y, ctx);
+                x += glyph.x_advance + ctx.spacing;
+            }
+
+            if ctx.underline || ctx.strikeout {
+                let text_width = shaped.total_advance;
+                let line_thickness = (ctx.font_size / 16.0).max(1.0);
+                let mut paint = tiny_skia::Paint::default();
+                paint.set_color_rgba8(ctx.primary_color[0], ctx.primary_color[1], ctx.primary_color[2], ctx.primary_color[3]);
+                paint.anti_alias = true;
+
+                if ctx.underline {
+                    let uy = line_y + ctx.font_size * 0.1;
+                    let mut pb = tiny_skia::PathBuilder::new();
+                    pb.move_to(ctx.x, uy);
+                    pb.line_to(ctx.x + text_width, uy);
+                    pb.close();
+                    if let Some(path) = pb.finish() {
+                        let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
+                        layer.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                    }
+                }
+
+                if ctx.strikeout {
+                    let sy = line_y - ctx.font_size * 0.35;
+                    let mut pb = tiny_skia::PathBuilder::new();
+                    pb.move_to(ctx.x, sy);
+                    pb.line_to(ctx.x + text_width, sy);
+                    pb.close();
+                    if let Some(path) = pb.finish() {
+                        let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
+                        layer.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                    }
+                }
+            }
         }
 
         if ctx.blur > 0.0 {
@@ -332,8 +385,12 @@ impl Renderer {
         };
 
         if ctx.clip_enabled {
-            apply_clip_mask(&mut final_data.clone(), w, h, ctx);
-            effects::composite_over(pixmap.data_mut(), &final_data, w, h);
+            let mut clipped = final_data;
+            apply_clip_mask(&mut clipped, w, h, ctx);
+            if ctx.alpha_multiplier < 0.999 {
+                apply_alpha_multiplier(&mut clipped, ctx.alpha_multiplier);
+            }
+            effects::composite_over(pixmap.data_mut(), &clipped, w, h);
         } else {
             if ctx.alpha_multiplier < 0.999 {
                 let mut alpha_data = final_data;
@@ -403,6 +460,65 @@ impl Renderer {
 
         effects::composite_over(pixmap.data_mut(), bg_layer.data(), w, h);
         effects::composite_over(pixmap.data_mut(), fg_layer.data(), w, h);
+    }
+
+    fn render_drawing(&self, pixmap: &mut Pixmap, text: &str, ctx: &RenderContext, drawing_level: u8) {
+        let w = pixmap.width();
+        let h = pixmap.height();
+        let mut layer = Pixmap::new(w, h).unwrap();
+        let scale = 1.0 / (drawing_level as f32);
+
+        let commands = parse_drawing_commands(text);
+        let mut current_path = PathBuilder::new();
+
+        for cmd in &commands {
+            match cmd {
+                DrawingCommand::MoveTo(x, y) => {
+                    let px = x * scale + ctx.x;
+                    let py = y * scale + ctx.y;
+                    current_path.move_to(px, py);
+                }
+                DrawingCommand::LineTo(x, y) => {
+                    let px = x * scale + ctx.x;
+                    let py = y * scale + ctx.y;
+                    current_path.line_to(px, py);
+                }
+                DrawingCommand::BezierTo(x1, y1, x2, y2, x3, y3) => {
+                    let cx1 = x1 * scale + ctx.x;
+                    let cy1 = y1 * scale + ctx.y;
+                    let cx2 = x2 * scale + ctx.x;
+                    let cy2 = y2 * scale + ctx.y;
+                    let ex = x3 * scale + ctx.x;
+                    let ey = y3 * scale + ctx.y;
+                    current_path.cubic_to(cx1, cy1, cx2, cy2, ex, ey);
+                }
+                DrawingCommand::Close => {
+                    current_path.close();
+                }
+            }
+        }
+
+        if let Some(path) = current_path.finish() {
+            let mut paint = Paint::default();
+            paint.set_color_rgba8(ctx.primary_color[0], ctx.primary_color[1], ctx.primary_color[2], ctx.primary_color[3]);
+            paint.anti_alias = true;
+
+            if ctx.outline_width > 0.0 {
+                let stroke = Stroke { width: ctx.outline_width * 2.0, ..Default::default() };
+                let mut outline_paint = Paint::default();
+                outline_paint.set_color_rgba8(ctx.outline_color[0], ctx.outline_color[1], ctx.outline_color[2], ctx.outline_color[3]);
+                outline_paint.anti_alias = true;
+                layer.stroke_path(&path, &outline_paint, &stroke, SkiaTransform::identity(), None);
+            }
+
+            layer.fill_path(&path, &paint, FillRule::Winding, SkiaTransform::identity(), None);
+        }
+
+        if ctx.blur > 0.0 {
+            effects::apply_gaussian_blur(&mut layer, ctx.blur);
+        }
+
+        effects::composite_over(pixmap.data_mut(), layer.data(), w, h);
     }
 }
 
@@ -813,6 +929,172 @@ pub fn strip_override_blocks(text: &str) -> String {
         }
     }
     result
+}
+
+fn wrap_text(text: &str, wrap_style: u8, shaper: &Shaper, font_id: fontdb::ID, font_size: f32, spacing: f32, available_width: f32) -> Vec<String> {
+    let explicit_lines: Vec<&str> = text.split('\n').collect();
+
+    match wrap_style {
+        1 | 2 => explicit_lines.into_iter().map(String::from).collect(),
+        _ => {
+            let mut result = Vec::new();
+            for line in &explicit_lines {
+                if line.is_empty() {
+                    result.push(String::new());
+                    continue;
+                }
+                let words: Vec<&str> = line.split(' ').collect();
+                let mut current_line = String::new();
+                let mut current_width = 0.0f32;
+
+                for (i, word) in words.iter().enumerate() {
+                    let test_str = if current_line.is_empty() {
+                        word.to_string()
+                    } else {
+                        format!("{} {}", current_line, word)
+                    };
+                    if let Ok(shaped) = shaper.shape(&test_str, font_id, font_size) {
+                        let word_width = shaped.total_advance + spacing * shaped.glyphs.len() as f32;
+                        if current_width > 0.0 && word_width > available_width {
+                            result.push(current_line.clone());
+                            current_line = word.to_string();
+                            if let Ok(sw) = shaper.shape(word, font_id, font_size) {
+                                current_width = sw.total_advance;
+                            } else {
+                                current_width = 0.0;
+                            }
+                        } else {
+                            current_line = test_str;
+                            current_width = word_width;
+                        }
+                    }
+                    if i == words.len() - 1 && !current_line.is_empty() {
+                        result.push(current_line.clone());
+                    }
+                }
+                if current_line.is_empty() && !line.is_empty() {
+                    result.push(line.to_string());
+                }
+            }
+            result
+        }
+    }
+}
+
+enum DrawingCommand {
+    MoveTo(f32, f32),
+    LineTo(f32, f32),
+    BezierTo(f32, f32, f32, f32, f32, f32),
+    Close,
+}
+
+fn parse_drawing_level(text: &str) -> u8 {
+    for tag_block in text.chars().collect::<Vec<_>>().windows(4) {
+        if tag_block[0] == '\\' && tag_block[1] == 'p' {
+            if let Some(d) = tag_block.get(2).and_then(|c| c.to_digit(10)) {
+                return d as u8;
+            }
+        }
+    }
+    0
+}
+
+fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
+    let mut commands = Vec::new();
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let mut i = 0;
+
+    while i < tokens.len() {
+        let token = tokens[i];
+        if token.len() == 1 {
+            match token {
+                "m" => {
+                    if i + 2 < tokens.len() {
+                        if let (Ok(x), Ok(y)) = (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>()) {
+                            commands.push(DrawingCommand::MoveTo(x, y));
+                            i += 3;
+                            continue;
+                        }
+                    }
+                }
+                "l" => {
+                    if i + 2 < tokens.len() {
+                        if let (Ok(x), Ok(y)) = (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>()) {
+                            commands.push(DrawingCommand::LineTo(x, y));
+                            i += 3;
+                            continue;
+                        }
+                    }
+                }
+                "b" => {
+                    if i + 6 < tokens.len() {
+                        let nums: Option<Vec<f32>> = (1..=6)
+                            .map(|j| tokens[i + j].parse::<f32>().ok())
+                            .collect::<Option<Vec<_>>>();
+                        if let Some(n) = nums {
+                            commands.push(DrawingCommand::BezierTo(n[0], n[1], n[2], n[3], n[4], n[5]));
+                            i += 7;
+                            continue;
+                        }
+                    }
+                }
+                "p" | "n" => {
+                    if i + 1 < tokens.len() {
+                        if tokens[i + 1] == "c" {
+                            commands.push(DrawingCommand::Close);
+                            i += 2;
+                            continue;
+                        }
+                    }
+                    commands.push(DrawingCommand::Close);
+                    i += 1;
+                    continue;
+                }
+                _ => {}
+            }
+        } else {
+            if let Ok(repeat) = token.parse::<usize>() {
+                if i + 1 < tokens.len() {
+                    let cmd_char = tokens[i + 1];
+                    let args_needed = match cmd_char {
+                        "m" | "l" => 2,
+                        "b" => 6,
+                        _ => 0,
+                    };
+                    for _ in 0..repeat {
+                        if i + 1 + args_needed < tokens.len() {
+                            match cmd_char {
+                                "m" => {
+                                    let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
+                                    let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
+                                    commands.push(DrawingCommand::MoveTo(x, y));
+                                }
+                                "l" => {
+                                    let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
+                                    let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
+                                    commands.push(DrawingCommand::LineTo(x, y));
+                                }
+                                "b" => {
+                                    let nums: Vec<f32> = (2..=7)
+                                        .filter_map(|j| tokens.get(i + j)?.parse().ok())
+                                        .collect();
+                                    if nums.len() == 6 {
+                                        commands.push(DrawingCommand::BezierTo(nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]));
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    i += 2 + args_needed;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    commands
 }
 
 trait EventExt {

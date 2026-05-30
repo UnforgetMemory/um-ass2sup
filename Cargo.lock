@@ -81,7 +81,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "ass-parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror",
  "tracing",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "ass2sup-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ass-parser",
  "bdn-xml",
@@ -508,7 +508,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "pgs-encoder"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "color-quantizer",
  "thiserror",
@@ -684,7 +684,7 @@ dependencies = [
 
 [[package]]
 name = "subtitle-validator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ass-parser",
  "thiserror",
