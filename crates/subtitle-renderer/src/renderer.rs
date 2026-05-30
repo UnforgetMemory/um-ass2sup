@@ -4,6 +4,7 @@ use tiny_skia::Pixmap;
 use crate::context::{RenderConfig, RenderContext, RenderedFrame};
 use crate::effects;
 use crate::font::FontManager;
+use crate::karaoke::{KaraokePhase, KaraokeRenderer};
 use crate::rasterizer::Rasterizer;
 use crate::shaper::Shaper;
 use crate::transform::AffineTransform;
@@ -45,7 +46,7 @@ impl Renderer {
             let event_end = event.end.as_ms();
             let ctx = self.build_context(event, &style, timestamp_ms, event_start, event_end);
 
-            self.render_event(&mut pixmap, event, &ctx);
+            self.render_event(&mut pixmap, event, &ctx, timestamp_ms, event_start);
         }
 
         Some(RenderedFrame {
@@ -252,16 +253,21 @@ impl Renderer {
         ctx
     }
 
-    fn render_event(&self, pixmap: &mut Pixmap, event: &Event, ctx: &RenderContext) {
+    fn render_event(&self, pixmap: &mut Pixmap, event: &Event, ctx: &RenderContext, timestamp_ms: u64, event_start_ms: u64) {
         let plain_text = strip_override_blocks(&event.text);
         if plain_text.is_empty() {
             return;
         }
 
-        let font_id = match self.font_manager.query(&ctx.font_name, ctx.bold, ctx.italic) {
+        let font_id = match self.font_manager.query_with_fallback(&ctx.font_name, ctx.bold, ctx.italic) {
             Some(id) => id,
             None => return,
         };
+
+        if event.has_karaoke() && !event.karaoke_segments.is_empty() {
+            self.render_karaoke(pixmap, event, ctx, font_id, timestamp_ms, event_start_ms);
+            return;
+        }
 
         let shaper = Shaper::new(&self.font_manager);
         let shaped = match shaper.shape(&plain_text, font_id, ctx.font_size) {
@@ -321,6 +327,66 @@ impl Renderer {
                 effects::composite_over(pixmap.data_mut(), &final_data, w, h);
             }
         }
+    }
+
+    fn render_karaoke(
+        &self,
+        pixmap: &mut Pixmap,
+        event: &Event,
+        ctx: &RenderContext,
+        font_id: fontdb::ID,
+        timestamp_ms: u64,
+        event_start_ms: u64,
+    ) {
+        let w = pixmap.width();
+        let h = pixmap.height();
+
+        let syllables = KaraokeRenderer::compute_syllable_states(
+            &event.karaoke_segments,
+            event_start_ms,
+            timestamp_ms,
+        );
+
+        let shaper = Shaper::new(&self.font_manager);
+
+        let mut bg_layer = Pixmap::new(w, h).unwrap();
+        let mut fg_layer = Pixmap::new(w, h).unwrap();
+
+        for syllable in &syllables {
+            if syllable.text.is_empty() {
+                continue;
+            }
+
+            let is_done = matches!(syllable.phase, KaraokePhase::Done);
+            let is_active = matches!(syllable.phase, KaraokePhase::Active { .. });
+
+            let mut sy_ctx = ctx.clone();
+            if is_done || is_active {
+                sy_ctx.primary_color = ctx.primary_color;
+            } else {
+                sy_ctx.primary_color = ctx.secondary_color;
+            }
+
+            if let Ok(shaped) = shaper.shape(&syllable.text, font_id, ctx.font_size) {
+                let mut sx = ctx.x;
+                for glyph in &shaped.glyphs {
+                    if is_active {
+                        Rasterizer::rasterize_glyph(&mut fg_layer, &self.font_manager, font_id, glyph, sx, ctx.y, &sy_ctx);
+                    } else {
+                        Rasterizer::rasterize_glyph(&mut bg_layer, &self.font_manager, font_id, glyph, sx, ctx.y, &sy_ctx);
+                    }
+                    sx += glyph.x_advance + ctx.spacing;
+                }
+            }
+        }
+
+        if ctx.blur > 0.0 {
+            effects::apply_gaussian_blur(&mut bg_layer, ctx.blur);
+            effects::apply_gaussian_blur(&mut fg_layer, ctx.blur);
+        }
+
+        effects::composite_over(pixmap.data_mut(), bg_layer.data(), w, h);
+        effects::composite_over(pixmap.data_mut(), fg_layer.data(), w, h);
     }
 }
 

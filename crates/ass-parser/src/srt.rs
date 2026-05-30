@@ -51,6 +51,7 @@ pub fn parse_srt(content: &str) -> Result<AssFile, ParseError> {
         script_info: ScriptInfo::default(),
         styles: vec![srt_default_style()],
         events,
+        embedded_fonts: Vec::new(),
     })
 }
 

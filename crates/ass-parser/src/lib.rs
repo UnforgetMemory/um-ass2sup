@@ -64,11 +64,18 @@ impl SubtitleFormat {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct EmbeddedFont {
+    pub font_name: String,
+    pub filename: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AssFile {
     pub format: SubtitleFormat,
     pub script_info: ScriptInfo,
     pub styles: Vec<Style>,
     pub events: Vec<Event>,
+    pub embedded_fonts: Vec<EmbeddedFont>,
 }
 
 impl AssFile {
@@ -78,6 +85,7 @@ impl AssFile {
             script_info: ScriptInfo::default(),
             styles: Vec::new(),
             events: Vec::new(),
+            embedded_fonts: Vec::new(),
         }
     }
 
@@ -98,6 +106,7 @@ impl AssFile {
                 "Script Info" => ass.parse_script_info(line)?,
                 "V4+ Styles" | "V4 Styles" => ass.parse_style_line(line)?,
                 "Events" => ass.parse_event_line(line)?,
+                "Fonts" => ass.parse_font_line(line),
                 _ => {}
             }
         }
@@ -143,6 +152,7 @@ impl AssFile {
                         errors.push(e);
                     }
                 }
+                "Fonts" => ass.parse_font_line(line),
                 _ => {}
             }
         }
@@ -202,6 +212,47 @@ impl AssFile {
 
     pub fn dialogue_events(&self) -> impl Iterator<Item = &Event> {
         self.events.iter().filter(|e| e.is_dialogue())
+    }
+
+    /// Parse a line from the [Fonts] section.
+    /// Format: `fontname: FontName, filename: file.ttf` or `fontname: FontName`
+    fn parse_font_line(&mut self, line: &str) {
+        let mut font_name = String::new();
+        let mut filename = String::new();
+        for part in line.split(',') {
+            let part = part.trim();
+            if let Some(name) = part.strip_prefix("fontname:") {
+                font_name = name.trim().to_string();
+            } else if let Some(name) = part.strip_prefix("Fontname:") {
+                font_name = name.trim().to_string();
+            } else if let Some(f) = part.strip_prefix("filename:") {
+                filename = f.trim().to_string();
+            } else if let Some(f) = part.strip_prefix("Filename:") {
+                filename = f.trim().to_string();
+            }
+        }
+        if !font_name.is_empty() {
+            self.embedded_fonts.push(EmbeddedFont {
+                font_name,
+                filename,
+            });
+        }
+    }
+
+    /// Load embedded font files from disk based on parsed filenames.
+    /// `base_dir` is the directory containing the .ass file.
+    pub fn load_embedded_fonts(&mut self, base_dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
+        let mut loaded = Vec::new();
+        for ef in &self.embedded_fonts {
+            if ef.filename.is_empty() {
+                continue;
+            }
+            let path = base_dir.join(&ef.filename);
+            if let Ok(data) = std::fs::read(&path) {
+                loaded.push((ef.font_name.clone(), data));
+            }
+        }
+        loaded
     }
 
     pub fn find_style(&self, name: &str) -> Option<&Style> {

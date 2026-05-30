@@ -298,10 +298,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Timed text
         let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
         let segments = pgs.encode_frame(&quantized, start_ms, duration_ms);
 
-        let expected_pts = 1000 * 90;
-        assert_eq!(segments[0].pts, expected_pts, "PTS should be 90kHz of start_ms");
+        let expected_pts = (1000u128 * 90000 * 1001 / 1000000) as u64;
+        assert_eq!(segments[0].pts, expected_pts, "PTS should be 90kHz NTSC of start_ms");
 
-        let expected_end_pts = (1000 + 4000) * 90;
+        let expected_end_pts = (5000u128 * 90000 * 1001 / 1000000) as u64;
         let end_segment = segments.last().unwrap();
         assert_eq!(end_segment.pts, expected_end_pts, "END PTS should be 90kHz of end time");
     }
