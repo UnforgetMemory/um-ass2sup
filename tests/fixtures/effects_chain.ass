@@ -1,0 +1,19 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+Title: Effects Chain Test
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\blur3\shad2}Blurred and shadowed text
+Dialogue: 0,0:00:02.00,0:00:06.00,Default,,0,0,0,,{\fscx150\fscy150}Scaled up text
+Dialogue: 0,0:00:03.00,0:00:07.00,Default,,0,0,0,,{\frz45}Rotated text
+Dialogue: 0,0:00:04.00,0:00:08.00,Default,,0,0,0,,{\bord4\shad3\be1}Heavy border with blur
+Dialogue: 0,0:00:05.00,0:00:09.00,Default,,0,0,0,,{\1c&H0000FF&\2c&H00FF00&\3c&HFF0000&}Multi-colored text
+Dialogue: 0,0:00:06.00,0:00:10.00,Default,,0,0,0,,{\pos(960,540)\fad(500,500)}Fade in/out text
+Dialogue: 0,0:00:07.00,0:00:12.00,Default,,0,0,0,,{\move(200,540,1720,540,0,5000)}Moving text

@@ -1,0 +1,19 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+Title: Multi-Style Test
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: Top,Arial,36,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,1,1,8,10,10,10,1
+Style: Bottom,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,40,1
+Style: Center,Arial,42,&H0000FFFF,&H000000FF,&H00000000,&H80000000,0,-1,0,0,100,100,1,0,1,2,3,5,10,10,10,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 1,0:00:01.00,0:00:04.00,Top,,0,0,0,,Top layer subtitle
+Dialogue: 0,0:00:02.00,0:00:06.00,Bottom,,0,0,0,,Bottom layer subtitle
+Dialogue: 2,0:00:03.00,0:00:05.00,Center,,0,0,0,,Center style subtitle
+Dialogue: 0,0:00:04.00,0:00:08.00,Bottom,,0,0,0,,{\pos(300,300)}Positioned subtitle
+Dialogue: 1,0:00:05.00,0:00:09.00,Top,,0,0,0,,{\pos(1600,50)}Top-right subtitle

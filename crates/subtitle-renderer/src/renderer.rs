@@ -58,6 +58,22 @@ impl Renderer {
         })
     }
 
+    pub fn render_ass_cached(
+        &self,
+        ass: &AssFile,
+        timestamp_ms: u64,
+        cache: &crate::cache::FrameCache,
+        event_index: usize,
+    ) -> Option<RenderedFrame> {
+        let key = crate::cache::make_frame_key(event_index, timestamp_ms);
+        if let Some(cached) = cache.get(&key) {
+            return Some(cached);
+        }
+        let frame = self.render_ass(ass, timestamp_ms)?;
+        cache.insert(key, frame.clone());
+        Some(frame)
+    }
+
     pub fn build_context(
         &self,
         event: &Event,
