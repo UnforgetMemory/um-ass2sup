@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use tracing::{error, info, warn};
 
 use ass_parser::{AssFile, SubtitleFormat};
-use color_quantizer::Quantizer;
+use color_quantizer::{quantize_with_palette, DitherMethod, Quantizer, Rgba};
 use pgs_encoder::PgsEncoder;
 use subtitle_renderer::{RenderConfig, Renderer};
 use subtitle_validator::{OverlapConfig, OverlapSeverity, Validator};
@@ -75,6 +75,22 @@ struct Args {
     /// Process files in parallel (batch mode)
     #[arg(short, long)]
     parallel: bool,
+
+    /// Force conversion even if validation fails
+    #[arg(long)]
+    force: bool,
+
+    /// Dry run: parse and validate only, don't write output
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Render frames in parallel using rayon (single-file mode)
+    #[arg(long)]
+    parallel_frames: bool,
+
+    /// Suppress progress bar
+    #[arg(long)]
+    quiet: bool,
 }
 
 struct Resolution {
@@ -189,9 +205,18 @@ fn convert_file(
 
         info!("{}", report.summary());
 
-        if !report.is_valid {
+        if !report.is_valid && !args.force {
             return Err("Validation failed. Use --force to override.".to_string());
         }
+    }
+
+    if args.dry_run {
+        info!("Dry run complete — skipping render/encode");
+        return Ok(ConversionStats {
+            events_processed: ass.events.len() as u64,
+            frames_encoded: 0,
+            output_size: 0,
+        });
     }
 
     let render_config = RenderConfig {
@@ -206,21 +231,22 @@ fn convert_file(
     let renderer = Renderer::new(render_config);
 
     let dither_method = match args.dither.as_str() {
-        "none" => color_quantizer::DitherMethod::None,
-        "ordered" => color_quantizer::DitherMethod::Ordered,
-        _ => color_quantizer::DitherMethod::FloydSteinberg,
+        "none" => DitherMethod::None,
+        "ordered" => DitherMethod::Ordered,
+        _ => DitherMethod::FloydSteinberg,
     };
 
+    let use_palette_reuse = args.quantizer == "median-cut";
     let quantizer = Quantizer::new(args.max_colors).with_dither(dither_method);
 
     let mut pgs_encoder = PgsEncoder::new(res.width as u16, res.height as u16, args.fps);
 
-    let dialogues: Vec<_> = ass.dialogue_events().collect();
+    let dialogues: Vec<_> = ass.dialogue_events().cloned().collect();
     let total = dialogues.len() as u64;
 
     if total == 0 {
         warn!("No dialogue events found");
-        std::fs::write(output, Vec::new())
+        std::fs::write(output, Vec::<u8>::new())
             .map_err(|e| format!("Failed to write output: {}", e))?;
         return Ok(ConversionStats {
             events_processed: 0,
@@ -229,18 +255,63 @@ fn convert_file(
         });
     }
 
-    let pb = create_progress_bar(total, "Converting");
-    let mut all_segments = Vec::new();
+    let quiet = args.quiet;
+    let pb = if quiet {
+        ProgressBar::hidden()
+    } else {
+        create_progress_bar(total, "Converting")
+    };
+
     let mut frames_encoded = 0u64;
 
-    for event in &dialogues {
-        let pts_ms = event.start.as_ms();
-        let duration_ms = event.duration_ms();
+    let frame_data: Vec<_> = if args.parallel_frames && dialogues.len() > 1 {
+        dialogues
+            .par_iter()
+            .map(|event| {
+                let pts_ms = event.start.as_ms();
+                let duration_ms = event.duration_ms();
 
-        if let Some(frame) = renderer.render_ass(&ass, pts_ms) {
-            let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
+                let frame = renderer.render_ass(&ass, pts_ms);
+                (event.clone(), frame, pts_ms, duration_ms)
+            })
+            .collect()
+    } else {
+        dialogues
+            .iter()
+            .map(|event| {
+                let pts_ms = event.start.as_ms();
+                let duration_ms = event.duration_ms();
 
-            let segments = pgs_encoder.encode_frame(&quantized, pts_ms, duration_ms);
+                let frame = renderer.render_ass(&ass, pts_ms);
+                (event.clone(), frame, pts_ms, duration_ms)
+            })
+            .collect()
+    };
+
+    let mut all_segments = Vec::new();
+    let mut prev_palette: Option<Vec<Rgba>> = None;
+
+    for (_event, frame_opt, pts_ms, duration_ms) in &frame_data {
+        if let Some(frame) = frame_opt {
+            let quantized = if use_palette_reuse {
+                let prev = prev_palette.as_ref().map(|p| p.as_slice());
+                let q = quantize_with_palette(
+                    &frame.bitmap,
+                    frame.width,
+                    frame.height,
+                    prev,
+                    args.max_colors,
+                    dither_method,
+                );
+                prev_palette = Some(q.palette.clone());
+                q
+            } else {
+                let q = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
+                prev_palette = Some(q.palette.clone());
+                q
+            };
+
+            let segments = pgs_encoder.encode_frame(&quantized, *pts_ms, *duration_ms);
             all_segments.extend(segments);
             frames_encoded += 1;
         }
@@ -275,6 +346,7 @@ fn convert_file(
     })
 }
 
+#[derive(Debug)]
 struct ConversionStats {
     events_processed: u64,
     frames_encoded: u64,
@@ -347,7 +419,11 @@ fn main() {
             })
             .collect()
     } else {
-        let pb = create_progress_bar(inputs.len() as u64, "Batch converting");
+        let pb = if args.quiet {
+            ProgressBar::hidden()
+        } else {
+            create_progress_bar(inputs.len() as u64, "Batch converting")
+        };
         let results: Vec<_> = inputs
             .iter()
             .enumerate()
