@@ -86,8 +86,16 @@ pub struct RenderContext {
     pub italic: bool,
     /// Outline width in pixels (set by `\bord`).
     pub outline_width: f32,
+    /// Horizontal outline width in pixels (set by `\xbord`). Falls back to `outline_width` if zero.
+    pub outline_x_width: f32,
+    /// Vertical outline width in pixels (set by `\ybord`). Falls back to `outline_width` if zero.
+    pub outline_y_width: f32,
     /// Shadow depth in pixels (set by `\shad`).
     pub shadow_depth: f32,
+    /// Horizontal shadow offset in pixels (set by `\xshad`). Falls back to `shadow_depth` if zero.
+    pub shadow_x: f32,
+    /// Vertical shadow offset in pixels (set by `\yshad`). Falls back to `shadow_depth` if zero.
+    pub shadow_y: f32,
     /// Gaussian blur radius (set by `\blur`, `\be`).
     pub blur: f32,
     /// Z-axis rotation in degrees (set by `\frz`, `\fr`).
@@ -134,6 +142,7 @@ pub struct RenderContext {
     pub strikeout: bool,
     /// Alpha multiplier for fade effects (1.0 = fully opaque, 0.0 = fully transparent)
     pub alpha_multiplier: f32,
+    pub charset: u8,
 }
 
 impl Default for RenderContext {
@@ -150,7 +159,11 @@ impl Default for RenderContext {
             bold: false,
             italic: false,
             outline_width: 2.0,
+            outline_x_width: 0.0,
+            outline_y_width: 0.0,
             shadow_depth: 2.0,
+            shadow_x: 0.0,
+            shadow_y: 0.0,
             blur: 0.0,
             rotation: 0.0,
             scale_x: 100.0,
@@ -174,6 +187,7 @@ impl Default for RenderContext {
             underline: false,
             strikeout: false,
             alpha_multiplier: 1.0,
+            charset: 0,
         }
     }
 }

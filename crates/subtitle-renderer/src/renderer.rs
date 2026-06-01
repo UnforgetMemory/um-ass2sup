@@ -185,12 +185,20 @@ impl Renderer {
                 OverrideTag::SecondaryAlpha { value } => ctx.secondary_color[3] = 255 - *value,
                 OverrideTag::OutlineAlpha { value } => ctx.outline_color[3] = 255 - *value,
                 OverrideTag::ShadowAlpha { value } => ctx.shadow_color[3] = 255 - *value,
-                OverrideTag::Border(w) => ctx.outline_width = *w as f32,
-                OverrideTag::BorderX(w) => ctx.outline_width = *w as f32,
-                OverrideTag::BorderY(w) => ctx.outline_width = *w as f32,
-                OverrideTag::Shadow(d) => ctx.shadow_depth = *d as f32,
-                OverrideTag::ShadowX(d) => ctx.shadow_depth = *d as f32,
-                OverrideTag::ShadowY(d) => ctx.shadow_depth = *d as f32,
+                OverrideTag::Border(w) => {
+                    ctx.outline_width = *w as f32;
+                    ctx.outline_x_width = 0.0;
+                    ctx.outline_y_width = 0.0;
+                }
+                OverrideTag::BorderX(w) => ctx.outline_x_width = *w as f32,
+                OverrideTag::BorderY(w) => ctx.outline_y_width = *w as f32,
+                OverrideTag::Shadow(d) => {
+                    ctx.shadow_depth = *d as f32;
+                    ctx.shadow_x = 0.0;
+                    ctx.shadow_y = 0.0;
+                }
+                OverrideTag::ShadowX(d) => ctx.shadow_x = *d as f32,
+                OverrideTag::ShadowY(d) => ctx.shadow_y = *d as f32,
                 OverrideTag::Blur(r) | OverrideTag::GaussianBlur(r) => ctx.blur = *r as f32,
                 OverrideTag::Spacing(s) => ctx.spacing = *s as f32,
                 OverrideTag::Scale { x, y } => {
@@ -198,9 +206,10 @@ impl Renderer {
                     ctx.scale_y = *y as f32;
                 }
                 OverrideTag::Rotation { x, y, z } => {
+                    // \frz sets Z-axis rotation; \frx/\fry set X/Y pseudo-rotation via shear
                     ctx.rotation = *z as f32;
-                    ctx.origin_x = *x as f32;
-                    ctx.origin_y = *y as f32;
+                    ctx.shear_x = *x as f32;
+                    ctx.shear_y = *y as f32;
                 }
                 OverrideTag::Origin { x, y } => {
                     ctx.origin_x = *x as f32 * scale_x;
@@ -213,6 +222,7 @@ impl Renderer {
                 OverrideTag::Alignment(a) => ctx.alignment = *a,
                 OverrideTag::AlignmentNumpad(a) => ctx.alignment = *a,
                 OverrideTag::WrapStyle(w) => ctx.wrap_style = *w,
+                OverrideTag::Charset(c) => ctx.charset = *c,
                 OverrideTag::Pos { x, y } => {
                     ctx.x = *x as f32 * scale_x;
                     ctx.y = *y as f32 * scale_y;
@@ -774,6 +784,10 @@ fn apply_transform_tag(
                 ctx.origin_x = ctx.origin_x + (*x as f32 - ctx.origin_x) * p;
                 ctx.origin_y = ctx.origin_y + (*y as f32 - ctx.origin_y) * p;
             }
+            OverrideTag::Shear { x, y } => {
+                ctx.shear_x = ctx.shear_x + (*x as f32 - ctx.shear_x) * p;
+                ctx.shear_y = ctx.shear_y + (*y as f32 - ctx.shear_y) * p;
+            }
             _ => {}
         }
     }
@@ -1021,7 +1035,16 @@ fn wrap_text(text: &str, wrap_style: u8, shaper: &Shaper, font_id: fontdb::ID, f
     let explicit_lines: Vec<&str> = text.split('\n').collect();
 
     match wrap_style {
-        1 | 2 => explicit_lines.into_iter().map(String::from).collect(),
+        1 => explicit_lines.into_iter().map(String::from).collect(),
+        3 => {
+            // Low-end wrapping: word-wrap from bottom-right (ASS q=3)
+            // Uses same smart wrapping but places lines from bottom
+            let mut result: Vec<String> = wrap_text(text, 0, shaper, font_id, font_size, spacing, available_width);
+            // q=3 places lines from bottom, achieved by reversing the line order
+            result.reverse();
+            result
+        }
+        2 => explicit_lines.into_iter().map(String::from).collect(),
         _ => {
             let mut result = Vec::new();
             for line in &explicit_lines {

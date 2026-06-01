@@ -78,7 +78,7 @@ pub struct PcsPayload {
 ///
 /// Defines a rectangular region on screen where subtitle content may appear.
 /// Blu-ray spec allows multiple windows but most implementations use 1–2.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WindowDef {
     pub window_id: u8,
     pub x: u16,
@@ -98,7 +98,7 @@ pub struct WdsPayload {
 ///
 /// Blu-ray PGS uses YCbCr (BT.601) rather than RGBA for palette entries.
 /// The alpha value controls transparency (0 = fully transparent).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaletteEntry {
     pub index: u8,
     pub y: u8,

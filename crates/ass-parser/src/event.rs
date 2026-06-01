@@ -294,8 +294,8 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
         if !parts.is_empty() {
             let tag = parts[0].trim().to_string();
             let t1 = parts.get(1).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
-            let t2 = t1;
-            let accel = parts.get(2).and_then(|v| v.trim().parse().ok()).unwrap_or(1.0);
+            let t2 = parts.get(2).and_then(|v| v.trim().parse().ok()).unwrap_or(t1);
+            let accel = parts.get(3).and_then(|v| v.trim().parse().ok()).unwrap_or(1.0);
             return Some(OverrideTag::Transform { tag, t1, t2, accel });
         }
     }

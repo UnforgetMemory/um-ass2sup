@@ -29,6 +29,8 @@ pub struct PgsEncoder {
     prev_palette_hash: Option<u64>,
     prev_object_rle_hash: Option<u64>,
     frame_count: u32,
+    /// ODS object version counter — incremented when object content changes.
+    object_version: u8,
 }
 
 impl PgsEncoder {
@@ -51,6 +53,7 @@ impl PgsEncoder {
             prev_palette_hash: None,
             prev_object_rle_hash: None,
             frame_count: 0,
+            object_version: 0,
         }
     }
 
@@ -88,6 +91,7 @@ impl PgsEncoder {
 
         self.composition_number = self.composition_number.wrapping_add(1);
         self.object_id = self.object_id.wrapping_add(1);
+        self.object_version = self.object_version.wrapping_add(1);
         self.frame_count += 1;
 
         segments
@@ -263,7 +267,7 @@ impl PgsEncoder {
                 pts, dts,
                 payload: SegmentPayload::Ods(OdsPayload {
                     object_id: self.object_id,
-                    object_version: 0,
+                    object_version: self.object_version,
                     last_in_sequence: i == chunks.len() - 1,
                     width: frame.width as u16,
                     height: frame.height as u16,
@@ -378,7 +382,7 @@ impl PgsEncoder {
                     pts, dts,
                     payload: SegmentPayload::Ods(OdsPayload {
                         object_id: *obj_id,
-                        object_version: 0,
+                        object_version: self.object_version,
                         last_in_sequence: i == chunks.len() - 1,
                         width: frame.width as u16,
                         height: if obj_idx == 0 { top_height } else { bottom_height },
