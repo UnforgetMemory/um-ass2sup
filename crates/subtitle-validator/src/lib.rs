@@ -16,7 +16,7 @@
 //! use ass_parser::AssFile;
 //! use subtitle_validator::Validator;
 //!
-//! let ass = AssFile::from_path("subtitles.ass").unwrap();
+//! let ass = AssFile::parse_file(std::path::Path::new("subtitles.ass")).unwrap();
 //! let report = Validator::new().validate(&ass);
 //! if !report.is_valid {
 //!     eprintln!("{}", report.display());
@@ -105,7 +105,7 @@ impl Validator {
     /// use ass_parser::AssFile;
     /// use subtitle_validator::Validator;
     ///
-    /// let ass = AssFile::from_path("subtitles.ass").unwrap();
+    /// let ass = AssFile::parse_file(std::path::Path::new("subtitles.ass")).unwrap();
     /// let report = Validator::new().validate(&ass);
     /// println!("{}", report.summary());
     /// ```
