@@ -1,11 +1,31 @@
+//! Glyph rasterization using tiny-skia and ttf-parser.
+//!
+//! Converts shaped glyph outlines into RGBA pixel data, applying fill color,
+//! outline, and shadow as specified by the ASS style.
+
 use tiny_skia::{Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
 use crate::shaper::ShapedGlyph;
 use crate::context::RenderContext;
 use crate::font::FontManager;
 
+/// Rasterizer for converting glyph outlines to RGBA bitmaps.
 pub struct Rasterizer;
 
 impl Rasterizer {
+    /// Rasterize a single glyph onto the target pixmap.
+    ///
+    /// Fills the glyph bounding box with the primary color, then strokes
+    /// the outline. Applies the scaling and position offset from the
+    /// render context.
+    ///
+    /// # Arguments
+    /// * `pixmap` — Target RGBA pixmap
+    /// * `font_manager` — Font database for outline extraction
+    /// * `font_id` — Font identifier
+    /// * `glyph` — Shaped glyph with position/offset info
+    /// * `x` — Base X position
+    /// * `y` — Base Y position
+    /// * `ctx` — Render context with colors, outline width, scale
     pub fn rasterize_glyph(
         pixmap: &mut Pixmap,
         font_manager: &FontManager,

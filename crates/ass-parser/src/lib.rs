@@ -1,3 +1,31 @@
+//! ASS/SSA/SRT subtitle file parser.
+//!
+//! This crate provides parsing and representation of Advanced SubStation Alpha (ASS),
+//! SubStation Alpha (SSA), and SubRip (SRT) subtitle files.
+//!
+//! # Quick Start
+//!
+//! ```rust
+//! use ass_parser::AssFile;
+//!
+//! let ass_content = r#"
+//! [Script Info]
+//! Title: Example
+//! PlayResX: 1920
+//! PlayResY: 1080
+//!
+//! [V4+ Styles]
+//! Format: Name, Fontname, Fontsize
+//! Style: Default,Arial,48
+//!
+//! [Events]
+//! Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+//! Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Hello World
+//! "#;
+//!
+//! let ass = AssFile::parse(ass_content).unwrap();
+//! assert_eq!(ass.events.len(), 1);
+//! ```
 pub mod color;
 pub mod error;
 pub mod event;
@@ -18,15 +46,27 @@ pub use override_tag::OverrideTag;
 pub use style::Style;
 pub use timestamp::Timestamp;
 
+/// Script-level metadata from the `[Script Info]` section.
+///
+/// Contains resolution, script type, and other global settings that affect
+/// how the subtitle file should be rendered.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScriptInfo {
+    /// Title of the subtitle script.
     pub title: String,
+    /// Script format version (e.g., "v4.00+").
     pub script_type: String,
+    /// Word wrap mode: 0=smart, 1=end-of-line, 2=no word wrap, 3=simple.
     pub wrap_style: u8,
+    /// Whether border and shadow widths are scaled with resolution.
     pub scaled_border_and_shadow: bool,
+    /// YCbCr color matrix specification (e.g., "None", "TV.601").
     pub ycbcr_matrix: String,
+    /// Horizontal script resolution in pixels.
     pub play_res_x: u32,
+    /// Vertical script resolution in pixels.
     pub play_res_y: u32,
+    /// Additional key-value pairs not covered by standard fields.
     pub extra: HashMap<String, String>,
 }
 

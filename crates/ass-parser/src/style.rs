@@ -1,5 +1,8 @@
 use super::color::AssColor;
 
+/// ASS/SSA style definition from the `[V4+ Styles]` section.
+///
+/// Default: Arial 20pt, white primary, black outline/shadow, alignment 2 (bottom-center).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Style {
     pub name: String,
@@ -13,18 +16,26 @@ pub struct Style {
     pub italic: bool,
     pub underline: bool,
     pub strikeout: bool,
+    /// Horizontal scale percentage (100 = normal)
     pub scale_x: f64,
+    /// Vertical scale percentage (100 = normal)
     pub scale_y: f64,
+    /// Extra letter spacing in pixels
     pub spacing: f64,
+    /// Rotation angle in degrees
     pub angle: f64,
+    /// 1 = outline + drop shadow, 3 = opaque box
     pub border_style: u8,
     pub outline_width: f64,
     pub shadow_depth: f64,
+    /// ASS numpad alignment (1-9)
     pub alignment: u8,
     pub margin_l: u32,
     pub margin_r: u32,
     pub margin_v: u32,
+    /// Font encoding (0 = ANSI, 1 = default, etc.)
     pub encoding: u8,
+    /// 0 = window, 1 = video
     pub relative_to: u8,
 }
 
@@ -60,6 +71,16 @@ impl Default for Style {
 }
 
 impl Style {
+    /// Parses a comma-separated `Style:` line into a `Style` struct.
+    ///
+    /// Expects 23-24 fields: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour,
+    /// OutlineColour, ShadowColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY,
+    /// Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV,
+    /// Encoding [, RelativeTo].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError::InvalidStyle`] if fewer than 23 fields are present.
     pub fn parse_from_line(line: &str) -> Result<Self, super::error::ParseError> {
         let fields: Vec<&str> = line.splitn(24, ',').collect();
         if fields.len() < 23 {

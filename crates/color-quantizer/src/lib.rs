@@ -1,3 +1,15 @@
+//! Color quantization for ASS/PGS subtitle rendering.
+//!
+//! Reduces 32-bit RGBA frames to indexed-palette images with at most 255
+//! opaque colors, which is required by the PGS (Presentation Graphic Stream)
+//! subtitle format used on Blu-ray discs.
+//!
+//! The main entry point is [`Quantizer`], which supports median-cut palette
+//! reduction and optional Floyd–Steinberg or ordered dithering. A convenience
+//! [`quantize`] function is provided for one-shot use, and
+//! [`quantize_with_palette`] enables palette reuse across consecutive frames
+//! to improve temporal compression in the final PGS stream.
+
 mod types;
 mod median_cut;
 mod dithering;
@@ -5,6 +17,22 @@ mod dithering;
 pub use types::{DitherMethod, QuantizedFrame, Rgba};
 pub use median_cut::find_nearest_index;
 
+/// ASS subtitle color quantizer — reduces 32-bit RGBA frames to an
+/// indexed-palette image with at most 255 opaque colors plus one
+/// transparent entry.
+///
+/// This is the primary entry point for palette reduction. The quantizer
+/// builds a palette using the median-cut algorithm and optionally applies
+/// dithering to reduce banding.
+///
+/// # Examples
+///
+/// ```ignore
+/// let q = Quantizer::new(256)
+///     .with_dither(DitherMethod::FloydSteinberg);
+/// let frame = q.quantize(&rgba_pixels, 1920, 1080);
+/// assert!(frame.palette_size() <= 256);
+/// ```
 pub struct Quantizer {
     max_colors: usize,
     dither: DitherMethod,
@@ -20,6 +48,16 @@ impl Default for Quantizer {
 }
 
 impl Quantizer {
+    /// Creates a new quantizer with the given maximum palette size.
+    ///
+    /// The value is clamped to 255 because PGS reserves one palette index
+    /// for transparency. Values above 255 are silently reduced to 255.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let q = Quantizer::new(128); // at most 128 opaque colors
+    /// ```
     pub fn new(max_colors: usize) -> Self {
         Self {
             max_colors: max_colors.min(255),
@@ -27,11 +65,33 @@ impl Quantizer {
         }
     }
 
+    /// Sets the dithering method and returns the quantizer (builder pattern).
+    ///
+    /// Dithering trades pixel-level accuracy for smoother gradients. Default
+    /// is [`DitherMethod::FloydSteinberg`].
     pub fn with_dither(mut self, dither: DitherMethod) -> Self {
         self.dither = dither;
         self
     }
 
+    /// Quantizes an RGBA frame into an indexed-palette image.
+    ///
+    /// The input is a flat byte array in row-major order, 4 bytes per pixel
+    /// (R, G, B, A). Transparent pixels (`a == 0`) are mapped to a dedicated
+    /// transparent palette index rather than being included in the color
+    /// histogram.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rgba.len() != width * height * 4`.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let frame = q.quantize(&rgba_bytes, 640, 480);
+    /// assert_eq!(frame.width, 640);
+    /// assert!(frame.palette_size() <= 256);
+    /// ```
     pub fn quantize(&self, rgba: &[u8], width: u32, height: u32) -> QuantizedFrame {
         if self.max_colors == 0 || rgba.is_empty() {
             return QuantizedFrame {
@@ -109,11 +169,31 @@ impl Quantizer {
     }
 }
 
+/// Convenience quantization using a default [`Quantizer`] (255 colors,
+/// Floyd–Steinberg dithering).
+///
+/// Equivalent to `Quantizer::default().quantize(rgba, width, height)`.
+///
+/// # Examples
+///
+/// ```ignore
+/// let frame = quantize(&rgba, 1920, 1080);
+/// ```
 pub fn quantize(rgba: &[u8], width: u32, height: u32) -> QuantizedFrame {
     Quantizer::default().quantize(rgba, width, height)
 }
 
-/// Quantize reusing a previous palette when possible (palette reuse optimization).
+/// Quantizes an RGBA frame, reusing a previous palette when all pixels
+/// can be mapped to it.
+///
+/// This is an optimization for consecutive subtitle frames that share a
+/// similar color profile (common in ASS dialogue). If every opaque pixel
+/// in the frame has a sufficiently close match in `prev_palette`, the
+/// existing palette is reused without recomputing it, which improves
+/// temporal compression in the PGS output.
+///
+/// When palette reuse is not possible (or `prev_palette` is `None`/empty),
+/// this falls back to a full quantization via [`Quantizer`].
 pub fn quantize_with_palette(
     rgba: &[u8],
     width: u32,

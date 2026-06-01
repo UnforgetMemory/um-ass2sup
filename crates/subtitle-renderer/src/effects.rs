@@ -1,5 +1,21 @@
+//! Post-processing effects for subtitle rendering.
+//!
+//! Provides blur, shadow, and alpha compositing operations used by the
+//! subtitle renderer to implement ASS override tags like `\be`, `\bord`,
+//! `\shad`, and `\fad`.
+
 use tiny_skia::Pixmap;
 
+/// Apply an approximated box blur to a pixmap in-place.
+///
+/// Uses a separable 1D horizontal pass followed by a 1D vertical pass.
+/// Larger radii produce stronger blur at higher computational cost (O(n * r)).
+///
+/// # Arguments
+/// * `pixmap` — RGBA pixmap to blur in-place
+/// * `radius` — Blur radius in pixels; values ≤ 0.0 are a no-op
+///
+/// This effect is used for the ASS `\be` (edge blur) and `\blur` tags.
 pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
     if radius <= 0.0 {
         return;
@@ -58,6 +74,23 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
     }
 }
 
+/// Render a drop shadow behind subtitle text.
+///
+/// Creates a copy of the source data, offsets it by `(offset_x, offset_y)`,
+/// applies blur, tints it with `shadow_color`, then composites it behind
+/// the original. This implements the ASS `\shad` and `\xshad`/`\yshad` tags.
+///
+/// # Arguments
+/// * `src` — Source RGBA pixel data
+/// * `width` — Pixel width
+/// * `height` — Pixel height
+/// * `offset_x` — Horizontal shadow offset (positive = right)
+/// * `offset_y` — Vertical shadow offset (positive = down)
+/// * `blur_radius` — Blur radius; 0.0 = hard shadow
+/// * `shadow_color` — Shadow tint as `[R, G, B, A]`
+///
+/// # Returns
+/// New `Vec<u8>` containing the shadow layer (original + shadow composited).
 pub fn apply_shadow(
     src: &[u8],
     width: u32,
@@ -115,6 +148,16 @@ pub fn apply_shadow(
     result
 }
 
+/// Alpha-composite `src` over `dst` in-place using Porter-Duff "over".
+///
+/// Both buffers must be the same size (`width * height * 4` bytes, RGBA).
+/// This is the fundamental blending operation for layering subtitle elements.
+///
+/// # Arguments
+/// * `dst` — Destination RGBA buffer (modified in-place)
+/// * `src` — Source RGBA buffer to composite on top
+/// * `width` — Pixel width
+/// * `height` — Pixel height
 pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
     assert_eq!(dst.len(), (width * height * 4) as usize);
     assert_eq!(src.len(), (width * height * 4) as usize);

@@ -2,17 +2,25 @@ use super::timestamp::Timestamp;
 use super::override_tag::OverrideTag;
 use super::karaoke::KaraokeSegment;
 
+/// ASS/SSA event type (first field of an event line).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EventType {
+    /// Visible subtitle dialogue
     Dialogue,
+    /// Non-rendered comment
     Comment,
+    /// Picture overlay (rare)
     Picture,
+    /// Sound effect (rare)
     Sound,
+    /// Movie overlay (rare)
     Movie,
+    /// Command (rare)
     Command,
 }
 
 impl EventType {
+    /// Parses an event type string (`"Dialogue"`, `"Comment"`, etc.).
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim() {
             "Dialogue" => Some(Self::Dialogue),
@@ -26,25 +34,65 @@ impl EventType {
     }
 }
 
+/// A parsed ASS/SSA subtitle event (dialogue or comment line).
+///
+/// Each event represents a single subtitle display with timing, styling, and text content.
+/// The [`text`] field contains the raw subtitle text with embedded override tags (e.g., `{\b1}Bold{\b0}`),
+/// while [`override_tags`] and [`karaoke_segments`] hold the parsed representations.
+///
+/// # ASS Event Line Format
+///
+/// An ASS event line has 10 comma-separated fields:
+/// ```text
+/// Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Hello World
+///           ^layer ^start     ^end      ^style  ^name ^mL ^mR ^mV ^effect ^text
+/// ```
+///
+/// [`text`]: Event::text
+/// [`override_tags`]: Event::override_tags
+/// [`karaoke_segments`]: Event::karaoke_segments
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {
+    /// Event type — `Dialogue` for visible subtitles, `Comment` for non-rendered notes.
     pub event_type: EventType,
+    /// Rendering layer (higher layers render on top).
     pub layer: u32,
+    /// Display start time.
     pub start: Timestamp,
+    /// Display end time.
     pub end: Timestamp,
+    /// Name of the style from `[V4+ Styles]` section (e.g., `"Default"`).
     pub style_name: String,
+    /// Optional actor/speaker name (rarely used).
     pub name: String,
+    /// Left margin override in pixels (0 = use style default).
     pub margin_l: u32,
+    /// Right margin override in pixels (0 = use style default).
     pub margin_r: u32,
+    /// Vertical margin override in pixels (0 = use style default).
     pub margin_v: u32,
+    /// Effect name (e.g., `"Banner;5;0;scroll"` for scrolling text).
     pub effect: String,
+    /// Raw subtitle text including override tag blocks (e.g., `"{\b1}Bold{\b0} normal"`).
     pub text: String,
+    /// Parsed override tags extracted from `{\\tag}` blocks in [`text`](Event::text).
     pub override_tags: Vec<OverrideTag>,
+    /// Parsed karaoke segments (populated when karaoke tags are present).
     pub karaoke_segments: Vec<KaraokeSegment>,
+    /// Concatenated raw content of all override blocks (for round-trip fidelity).
     pub raw_override_block: String,
 }
 
 impl Event {
+    /// Parses an event from its comma-separated data fields.
+    ///
+    /// The `data` parameter should contain the 9 fields after the event type prefix:
+    /// `Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError::InvalidEvent`] if fewer than 10 fields are present,
+    /// or [`ParseError::InvalidTimestamp`] if start/end timecodes are malformed.
     pub fn parse_from_line(event_type: EventType, data: &str) -> Result<Self, super::error::ParseError> {
         let parts: Vec<&str> = data.splitn(10, ',').collect();
         if parts.len() < 10 {
@@ -81,18 +129,22 @@ impl Event {
         })
     }
 
+    /// Returns the display duration in milliseconds (`end - start`).
     pub fn duration_ms(&self) -> u64 {
         self.start.duration_ms(self.end)
     }
 
+    /// Returns `true` if this event is a visible subtitle (not a comment).
     pub fn is_dialogue(&self) -> bool {
         self.event_type == EventType::Dialogue
     }
 
+    /// Returns `true` if the text contains any override tag blocks (`{\\tag}`).
     pub fn has_override_tags(&self) -> bool {
         !self.override_tags.is_empty()
     }
 
+    /// Returns `true` if karaoke timing tags (`\\k`, `\\kf`, `\\ko`, `\\kt`) were found.
     pub fn has_karaoke(&self) -> bool {
         !self.karaoke_segments.is_empty()
     }

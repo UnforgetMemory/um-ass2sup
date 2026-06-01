@@ -10,12 +10,38 @@ use crate::rasterizer::Rasterizer;
 use crate::shaper::Shaper;
 use crate::transform::AffineTransform;
 
+/// ASS subtitle renderer that produces RGBA bitmaps for encoding to PGS/SUP.
+///
+/// The renderer manages font loading via [`FontManager`] and renders ASS events
+/// to RGBA bitmaps at a given timestamp. It handles text shaping, glyph rasterization,
+/// effects (blur, shadow, rotation, scale, clip), time-aware animations, and karaoke.
+///
+/// # Pipeline
+///
+/// 1. [`render_ass`](Renderer::render_ass) iterates visible dialogue events at a timestamp
+/// 2. For each event, [`build_context`](Renderer::build_context) applies override tags
+///    to create a [`RenderContext`] with time-aware animation state
+/// 3. [`render_event`](Renderer::render_event) shapes text, rasterizes glyphs, applies
+///    effects, and composites onto the frame bitmap
+///
+/// # Example
+///
+/// ```
+/// use subtitle_renderer::{Renderer, RenderConfig};
+///
+/// let config = RenderConfig::default();
+/// let renderer = Renderer::new(config);
+/// // renderer.render_ass(&ass_file, timestamp_ms);
+/// ```
 pub struct Renderer {
     config: RenderConfig,
     font_manager: FontManager,
 }
 
 impl Renderer {
+    /// Creates a new renderer with the given configuration.
+    ///
+    /// Automatically loads system fonts via [`FontManager::load_system_fonts`].
     pub fn new(config: RenderConfig) -> Self {
         let mut fm = FontManager::new();
         fm.load_system_fonts();
@@ -25,14 +51,22 @@ impl Renderer {
         }
     }
 
+    /// Returns a reference to the font manager for querying/loading fonts.
     pub fn font_manager(&self) -> &FontManager {
         &self.font_manager
     }
 
+    /// Returns a mutable reference to the font manager for loading custom fonts.
     pub fn font_manager_mut(&mut self) -> &mut FontManager {
         &mut self.font_manager
     }
 
+    /// Renders all visible dialogue events at the given timestamp to an RGBA frame.
+    ///
+    /// Events outside the timestamp range are skipped via [`Event::is_visible_at`].
+    /// Each visible event is shaped, rasterized, and composited onto the frame bitmap.
+    ///
+    /// Returns `None` if the output dimensions are zero.
     pub fn render_ass(&self, ass: &AssFile, timestamp_ms: u64) -> Option<RenderedFrame> {
         let ts = Timestamp::from_ms(timestamp_ms);
         let mut pixmap = Pixmap::new(self.config.width, self.config.height)?;
@@ -59,6 +93,11 @@ impl Renderer {
         })
     }
 
+    /// Renders events with frame caching to avoid redundant work for static subtitles.
+    ///
+    /// Uses [`FrameCache`] keyed by `(event_index, timestamp_ms)`. On cache hit,
+    /// returns the cached frame directly. On miss, calls [`render_ass`](Renderer::render_ass)
+    /// and stores the result.
     pub fn render_ass_cached(
         &self,
         ass: &AssFile,
@@ -939,6 +978,11 @@ fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
     (a as f32 + (b as f32 - a as f32) * t).clamp(0.0, 255.0) as u8
 }
 
+/// Converts an ASS alignment value (1–9, numpad layout) to a normalized (x, y) position.
+///
+/// Alignment follows the numpad layout: 7=top-left, 8=top-center, 9=top-right,
+/// 4=middle-left, 5=middle-center, 6=middle-right, 1=bottom-left, 2=bottom-center,
+/// 3=bottom-right. Returns values in 0.0–1.0 range.
 pub fn alignment_to_pos(alignment: u8) -> (f32, f32) {
     match alignment {
         1 => (0.0, 1.0),
@@ -954,6 +998,7 @@ pub fn alignment_to_pos(alignment: u8) -> (f32, f32) {
     }
 }
 
+/// Removes ASS override blocks (`{...}`) from text, returning plain text for rendering.
 pub fn strip_override_blocks(text: &str) -> String {
     let mut result = String::new();
     let mut depth = 0;

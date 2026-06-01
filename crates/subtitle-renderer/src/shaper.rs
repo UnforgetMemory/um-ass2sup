@@ -1,6 +1,16 @@
+//! Text shaping using rustybuzz.
+//!
+//! Converts Unicode text runs into positioned glyph sequences with metrics
+//! required for rasterization. Handles complex scripts (Arabic, Thai, Indic)
+//! through HarfBuzz's shaping engine.
+
 use crate::font::{FontError, FontManager};
 use rustybuzz::Face;
 
+/// A single shaped glyph with position and advance metrics.
+///
+/// Produced by [`Shaper::shape`]. The `cluster` field maps back to the
+/// original text byte offset for karaoke syllable boundary detection.
 #[derive(Debug, Clone)]
 pub struct ShapedGlyph {
     pub glyph_id: u32,
@@ -11,21 +21,39 @@ pub struct ShapedGlyph {
     pub cluster: u32,
 }
 
+/// Result of shaping a text run: a sequence of positioned glyphs.
+///
+/// `total_advance` is the sum of all glyph x_advances and can be used for
+/// text width measurement and alignment calculations.
 #[derive(Debug, Clone)]
 pub struct ShapedText {
     pub glyphs: Vec<ShapedGlyph>,
     pub total_advance: f32,
 }
 
+/// Shaper that converts Unicode text into positioned glyph sequences.
+///
+/// Wraps a [`FontManager`] reference and uses rustybuzz (HarfBuzz) for
+/// OpenType text shaping. Handles complex scripts, ligatures, and kerning.
 pub struct Shaper<'a> {
     font_manager: &'a FontManager,
 }
 
 impl<'a> Shaper<'a> {
+    /// Create a new shaper bound to the given font manager.
     pub fn new(font_manager: &'a FontManager) -> Self {
         Self { font_manager }
     }
 
+    /// Shape a text run into positioned glyphs.
+    ///
+    /// `font_size` is in pixels. Returns a [`ShapedText`] with glyph
+    /// metrics scaled from font units to pixels.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontError::NotFound`] if `font_id` is not in the manager, or
+    /// [`FontError::ParseError`] if the font data is invalid.
     pub fn shape(&self, text: &str, font_id: fontdb::ID, font_size: f32) -> Result<ShapedText, FontError> {
         let data = self
             .font_manager
@@ -70,6 +98,9 @@ impl<'a> Shaper<'a> {
         })
     }
 
+    /// Get the bounding box for a specific glyph, scaled to `font_size`.
+    ///
+    /// Returns `None` if the font or glyph is not found.
     pub fn get_glyph_bbox(
         &self,
         font_id: fontdb::ID,
@@ -90,6 +121,9 @@ impl<'a> Shaper<'a> {
     }
 }
 
+/// Axis-aligned bounding box for a glyph, in pixels.
+///
+/// Used by the rasterizer to allocate the correct bitmap region for each glyph.
 #[derive(Debug, Clone, Copy)]
 pub struct GlyphBBox {
     pub x_min: f32,

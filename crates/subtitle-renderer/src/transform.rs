@@ -1,5 +1,8 @@
 /// 2D affine transform using a 2x3 matrix.
 ///
+/// Supports rotation, scaling, translation, and shear operations for subtitle
+/// rendering effects like `\frz`, `\fscx`, `\fscy`, `\fax`, `\fay`.
+///
 /// Matrix layout: `[a, b, tx; c, d, ty]`
 ///
 /// Transforms a point `(x, y)` as:
@@ -70,6 +73,14 @@ impl AffineTransform {
     /// The resulting transform applies `self` first, then `other`.
     /// If `self` is A and `other` is B, the result is B ∘ A,
     /// meaning for a point p: result(p) = B(A(p)).
+    ///
+    /// # Example
+    /// ```
+    /// use subtitle_renderer::transform::AffineTransform;
+    /// let t = AffineTransform::translate(10.0, 20.0);
+    /// let s = AffineTransform::scale(2.0, 2.0);
+    /// let composed = t.then(&s);  // translate then scale
+    /// ```
     pub fn then(&self, other: &AffineTransform) -> AffineTransform {
         let a = self.matrix;
         let b = other.matrix;
@@ -90,6 +101,12 @@ impl AffineTransform {
     }
 
     /// Apply the forward transform to a point `(x, y)`.
+    ///
+    /// Returns the transformed point `(x', y')` using the 2x3 affine matrix:
+    /// ```text
+    /// x' = a*x + b*y + tx
+    /// y' = c*x + d*y + ty
+    /// ```
     pub fn apply(&self, x: f32, y: f32) -> (f32, f32) {
         let m = &self.matrix;
         (

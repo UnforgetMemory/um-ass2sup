@@ -8,6 +8,15 @@ use std::hash::{Hash, Hasher};
 const MAX_ODS_CHUNK: usize = 0xFFE0;
 const MAX_DECODE_BUFFER: usize = 2 * 1024 * 1024; // ~2MB PGS decoder buffer limit
 
+/// PGS/SUP binary encoder for Blu-ray subtitle streams.
+///
+/// Encodes [`QuantizedFrame`]s into PGS segments (PCS/WDS/PDS/ODS/END) following
+/// the Blu-ray Disc Presentation Graphics specification. Supports:
+///
+/// - NTSC-aware PTS timing (23.976/29.97/59.94 fps)
+/// - Multi-window mode for large frames
+/// - Epoch splitting for decoder buffer safety (~2MB limit)
+/// - Palette reuse detection between frames
 pub struct PgsEncoder {
     composition_number: u16,
     object_id: u16,
@@ -23,6 +32,12 @@ pub struct PgsEncoder {
 }
 
 impl PgsEncoder {
+    /// Create a new PGS encoder with display parameters.
+    ///
+    /// # Arguments
+    /// * `display_width` - Display width in pixels (e.g. 1920)
+    /// * `display_height` - Display height in pixels (e.g. 1080)
+    /// * `fps` - Frame rate (e.g. 23.976, 25.0, 29.97)
     pub fn new(display_width: u16, display_height: u16, fps: f64) -> Self {
         Self {
             composition_number: 0,
@@ -39,6 +54,10 @@ impl PgsEncoder {
         }
     }
 
+    /// Convert milliseconds to PTS ticks at 90kHz.
+    ///
+    /// Uses NTSC-correct formula (`ms * 90000 * 1001 / 1000000`) for
+    /// 23.976/29.97/59.94 fps, simple `ms * 90` otherwise.
     pub fn ms_to_90khz(&self, ms: u64) -> u64 {
         if is_ntsc_fps(self.fps) {
             (ms as u128 * 90000 * 1001 / 1000000) as u64
@@ -47,6 +66,10 @@ impl PgsEncoder {
         }
     }
 
+    /// Encode a quantized frame into PGS segments.
+    ///
+    /// Produces a full display set (PCS+WDS+PDS+ODS+END) for the given frame.
+    /// Returns a list of segments that can be serialized with [`Segment::to_bytes`].
     pub fn encode_frame(&mut self, frame: &QuantizedFrame, pts_ms: u64, duration_ms: u64) -> Vec<Segment> {
         let pts = self.ms_to_90khz(pts_ms);
         let dts = pts;
@@ -70,6 +93,10 @@ impl PgsEncoder {
         segments
     }
 
+    /// Encode a quantized frame directly to SUP binary bytes.
+    ///
+    /// Convenience wrapper around [`encode_frame`] that serializes all segments
+    /// to bytes in one call.
     pub fn encode_frame_to_bytes(&mut self, frame: &QuantizedFrame, pts_ms: u64, duration_ms: u64) -> Vec<u8> {
         let segments = self.encode_frame(frame, pts_ms, duration_ms);
         let mut output = Vec::new();
@@ -389,10 +416,25 @@ impl PgsEncoder {
     }
 }
 
+/// Convert milliseconds to 90kHz PTS ticks (simple, non-NTSC).
+///
+/// This is the standard conversion for integer frame rates (24, 25, 30, 50, 60).
+/// For NTSC rates (23.976, 29.97, 59.94), use [`PgsEncoder::ms_to_90khz`] instead.
 pub fn ms_to_90khz(ms: u64) -> u64 {
     ms * 90
 }
 
+/// Parse an ASS-style timecode string into milliseconds.
+///
+/// Expected format: `H:MM:SS.CS` (hours:minutes:seconds.centiseconds)
+///
+/// # Examples
+/// ```
+/// use pgs_encoder::timecode_to_ms;
+/// assert_eq!(timecode_to_ms("0:00:01.00"), Some(1000));
+/// assert_eq!(timecode_to_ms("1:30:00.00"), Some(5400000));
+/// assert_eq!(timecode_to_ms("invalid"), None);
+/// ```
 pub fn timecode_to_ms(timecode: &str) -> Option<u64> {
     let parts: Vec<&str> = timecode.split(':').collect();
     if parts.len() != 3 {
@@ -409,6 +451,19 @@ pub fn timecode_to_ms(timecode: &str) -> Option<u64> {
     Some(h * 3600000 + m * 60000 + s * 1000 + cs * 10)
 }
 
+/// Map a numeric FPS value to the PGS frame rate code byte.
+///
+/// PGS supports a discrete set of frame rates via a single code byte:
+///
+/// | Code  | FPS   |
+/// |-------|-------|
+/// | 0x10  | 24p   |
+/// | 0x20  | 25p   |
+/// | 0x40  | 30p   |
+/// | 0x50  | 50p   |
+/// | 0x70  | 60p   |
+///
+/// Values above 60 default to 24p (0x10).
 pub fn frame_rate_code(fps: f64) -> u8 {
     if fps <= 24.0 {
         0x10
@@ -425,12 +480,21 @@ pub fn frame_rate_code(fps: f64) -> u8 {
     }
 }
 
+/// Check if an FPS value requires NTSC-aware PTS calculation.
+///
+/// NTSC frame rates (23.976, 29.97, 59.94) use the exact formula
+/// `ms * 90000 * 1001 / 1000000` instead of `ms * 90` to avoid
+/// long-term PTS drift (~337ms/hour).
 fn is_ntsc_fps(fps: f64) -> bool {
     (fps - 23.976).abs() < 0.01
         || (fps - 29.97).abs() < 0.01
         || (fps - 59.94).abs() < 0.01
 }
 
+/// Compute a hash of a palette for change detection.
+///
+/// Used internally to determine whether a palette update segment (PDS)
+/// is needed between consecutive frames.
 fn hash_palette(palette: &[PaletteEntry]) -> u64 {
     let mut hasher = DefaultHasher::new();
     for entry in palette {
@@ -443,6 +507,10 @@ fn hash_palette(palette: &[PaletteEntry]) -> u64 {
     hasher.finish()
 }
 
+/// Compute a hash of RLE data for object change detection.
+///
+/// Used internally to determine whether the object data has changed
+/// between consecutive frames, enabling NormalCase composition.
 fn hash_bytes(data: &[u8]) -> u64 {
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);

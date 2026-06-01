@@ -40,6 +40,9 @@ pub enum CompositionState {
 }
 
 /// Object composition entry in PCS
+///
+/// Defines how a subtitle object (from ODS) is positioned within a window
+/// (from WDS) in the presentation composition.
 #[derive(Debug, Clone)]
 pub struct ObjectComposition {
     pub object_id: u16,
@@ -55,6 +58,9 @@ pub struct ObjectComposition {
 }
 
 /// PCS — Presentation Composition Segment payload
+///
+/// Controls the display state: which objects are visible, their positions,
+/// composition number for epoch tracking, and palette update flags.
 #[derive(Debug, Clone)]
 pub struct PcsPayload {
     pub width: u16,
@@ -69,6 +75,9 @@ pub struct PcsPayload {
 }
 
 /// Window definition entry in WDS
+///
+/// Defines a rectangular region on screen where subtitle content may appear.
+/// Blu-ray spec allows multiple windows but most implementations use 1–2.
 #[derive(Debug, Clone)]
 pub struct WindowDef {
     pub window_id: u8,
@@ -86,6 +95,9 @@ pub struct WdsPayload {
 }
 
 /// Palette entry in YCbCrA color space
+///
+/// Blu-ray PGS uses YCbCr (BT.601) rather than RGBA for palette entries.
+/// The alpha value controls transparency (0 = fully transparent).
 #[derive(Debug, Clone, Copy)]
 pub struct PaletteEntry {
     pub index: u8,
@@ -96,6 +108,9 @@ pub struct PaletteEntry {
 }
 
 /// PDS — Palette Definition Segment payload
+///
+/// Contains a palette ID, version number and up to 256 YCbCrA entries.
+/// Version increments each time the palette changes.
 #[derive(Debug, Clone)]
 pub struct PdsPayload {
     pub palette_id: u8,
@@ -104,6 +119,10 @@ pub struct PdsPayload {
 }
 
 /// ODS — Object Definition Segment payload
+///
+/// Contains an RLE-compressed 8-bit indexed color bitmap. Large objects
+/// may be split across multiple ODS segments with `last_in_sequence` marking
+/// the final segment.
 #[derive(Debug, Clone)]
 pub struct OdsPayload {
     pub object_id: u16,
@@ -115,6 +134,8 @@ pub struct OdsPayload {
 }
 
 /// Segment payload variants
+///
+/// Each variant corresponds to one PGS segment type.
 #[derive(Debug, Clone)]
 pub enum SegmentPayload {
     Pcs(PcsPayload),
@@ -125,6 +146,9 @@ pub enum SegmentPayload {
 }
 
 /// A single PGS segment with header info
+///
+/// The binary format uses a 13-byte header: "PG" magic (2) + PTS (4) +
+/// DTS (4) + segment type (1) + payload size (2).
 #[derive(Debug, Clone)]
 pub struct Segment {
     pub segment_type: SegmentType,
@@ -134,23 +158,30 @@ pub struct Segment {
 }
 
 /// A complete SUP file containing all segments
+///
+/// Represents a Blu-ray subtitle stream. SUP files are typically
+/// alongside M2TS video files in the BDMV directory structure.
 #[derive(Debug, Clone)]
 pub struct SupFile {
     pub segments: Vec<Segment>,
 }
 
 impl SupFile {
+    /// Create a new empty SUP file.
     pub fn new() -> Self {
         Self {
             segments: Vec::new(),
         }
     }
 
+    /// Add a segment to the SUP file.
     pub fn add_segment(&mut self, segment: Segment) {
         self.segments.push(segment);
     }
 
-    /// Write the SUP file to bytes
+    /// Write the SUP file to bytes.
+    ///
+    /// Serializes all segments into the PGS binary format used by Blu-ray.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut output = Vec::new();
         for segment in &self.segments {
@@ -167,8 +198,9 @@ impl Default for SupFile {
 }
 
 impl Segment {
-    /// Serialize segment to PGS binary format
-    /// Header: "PG" (2) + PTS (4) + DTS (4) + type (1) + size (2) = 13 bytes
+    /// Serialize segment to PGS binary format.
+    ///
+    /// Header: "PG" (2) + PTS (4) + DTS (4) + type (1) + size (2) = 13 bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
         let payload_bytes = self.payload.to_bytes();
         let size = payload_bytes.len() as u16;
@@ -309,7 +341,17 @@ impl OdsPayload {
     }
 }
 
-/// Frame rate code mapping
+/// Map frames-per-second to PGS frame rate code
+///
+/// Blu-ray PGS uses specific codes for standard frame rates:
+/// * ≤ 24 fps → `0x10` (24p)
+/// * ≤ 25 fps → `0x20` (25p / PAL)
+/// * ≤ 30 fps → `0x40` (30p / NTSC)
+/// * ≤ 50 fps → `0x50` (50p)
+/// * ≤ 60 fps → `0x70` (60p)
+///
+/// For non-standard rates (e.g. 23.976, 29.97), PTS values should use
+/// the NTSC-aware timebase instead of changing this code.
 pub fn frame_rate_code(fps: f64) -> u8 {
     if fps <= 24.0 {
         0x10

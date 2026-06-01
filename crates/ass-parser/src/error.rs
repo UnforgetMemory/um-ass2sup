@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// Errors that can occur when parsing ASS/SSA/SRT subtitle files.
 #[derive(Error, Debug)]
 pub enum ParseError {
     #[error("invalid timestamp format: {0}")]

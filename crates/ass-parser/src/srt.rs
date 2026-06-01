@@ -5,6 +5,19 @@ use super::style::Style;
 use super::{AssFile, ScriptInfo, SubtitleFormat};
 use super::ParseError;
 
+/// Parses an SRT (SubRip) subtitle file into an [`AssFile`].
+///
+/// SRT files use a simpler format than ASS — each block has an index, timecodes, and text.
+/// HTML-style tags (`<b>`, `<i>`, `<u>`, `<s>`) are converted to ASS override blocks.
+/// A default style (Arial 48pt, white with black outline) is applied.
+///
+/// # SRT Block Format
+///
+/// ```text
+/// 1
+/// 00:00:01,000 --> 00:00:05,000
+/// Hello World
+/// ```
 pub fn parse_srt(content: &str) -> Result<AssFile, ParseError> {
     let mut events = Vec::new();
     let mut blocks = content.split("\n\n").peekable();

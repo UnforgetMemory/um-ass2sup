@@ -62,6 +62,17 @@ pub struct BdnXml {
 }
 
 impl BdnXml {
+    /// Creates a new [`BdnXml`] document with sensible defaults.
+    ///
+    /// The constructor sets the BDN version to `"0.93"`, frame rate to `"24"`,
+    /// and automatically selects `"PAL"` (height ≤ 576) or `"NTSC"` format
+    /// based on the given display height.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Title/name for the subtitle track.
+    /// * `width` - Display width in pixels.
+    /// * `height` - Display height in pixels.
     pub fn new(name: impl Into<String>, width: u32, height: u32) -> Self {
         Self {
             version: "0.93".to_string(),
@@ -75,6 +86,10 @@ impl BdnXml {
         }
     }
 
+    /// Appends a subtitle event to the BDN document.
+    ///
+    /// Each event represents a single subtitle display interval with its
+    /// associated graphic, timecodes, and position information.
     pub fn add_event(&mut self, event: BdnEvent) {
         self.events.push(event);
     }
