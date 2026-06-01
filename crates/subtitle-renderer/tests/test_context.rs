@@ -211,12 +211,15 @@ fn test_build_context_rotation_z_only() {
 fn test_build_context_rotation_with_origin() {
     let renderer = default_renderer();
     let mut event = default_event();
-    event.override_tags = vec![OverrideTag::Rotation { x: 100.0, y: 200.0, z: 90.0 }];
+    event.override_tags = vec![
+        OverrideTag::Rotation { x: 0.0, y: 0.0, z: 90.0 },
+        OverrideTag::Origin { x: 100.0, y: 200.0 },
+    ];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
     assert_eq!(ctx.rotation, 90.0);
-    assert_eq!(ctx.origin_x, 100.0);
-    assert_eq!(ctx.origin_y, 200.0);
+    assert_eq!(ctx.origin_x, 100.0, "Origin x scaled by width/script_width (1920/1920=1.0)");
+    assert_eq!(ctx.origin_y, 200.0, "Origin y scaled by height/script_height (1080/1080=1.0)");
 }
 
 #[test]
@@ -259,7 +262,9 @@ fn test_build_context_shadow_xy_tags() {
     ];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
-    assert_eq!(ctx.shadow_depth, 7.0, "ShadowY should override ShadowX");
+    assert_eq!(ctx.shadow_x, 3.0, "ShadowX sets shadow_x");
+    assert_eq!(ctx.shadow_y, 7.0, "ShadowY sets shadow_y");
+    assert_eq!(ctx.shadow_depth, 2.0, "ShadowDepth stays at style default");
 }
 
 #[test]
@@ -272,7 +277,9 @@ fn test_build_context_border_xy_tags() {
     ];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
-    assert_eq!(ctx.outline_width, 4.0, "BorderY should override BorderX");
+    assert_eq!(ctx.outline_x_width, 1.5, "BorderX sets outline_x_width");
+    assert_eq!(ctx.outline_y_width, 4.0, "BorderY sets outline_y_width");
+    assert_eq!(ctx.outline_width, 2.0, "outline_width stays at style default");
 }
 
 #[test]

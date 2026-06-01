@@ -548,6 +548,27 @@ impl Renderer {
             effects::apply_gaussian_blur(&mut fg_layer, ctx.blur);
         }
 
+        if ctx.shadow_depth > 0.0 {
+            let bg_data = bg_layer.data().to_vec();
+            let shadow_data = effects::apply_shadow(
+                &bg_data, w, h,
+                ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
+            );
+            let mut shadow_pixmap = Pixmap::new(w, h).unwrap();
+            shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
+            effects::composite_over(bg_layer.data_mut(), shadow_pixmap.data(), w, h);
+        }
+        if ctx.shadow_depth > 0.0 {
+            let fg_data = fg_layer.data().to_vec();
+            let shadow_data = effects::apply_shadow(
+                &fg_data, w, h,
+                ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
+            );
+            let mut shadow_pixmap = Pixmap::new(w, h).unwrap();
+            shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
+            effects::composite_over(fg_layer.data_mut(), shadow_pixmap.data(), w, h);
+        }
+
         effects::composite_over(pixmap.data_mut(), bg_layer.data(), w, h);
         effects::composite_over(pixmap.data_mut(), fg_layer.data(), w, h);
     }
@@ -669,7 +690,7 @@ fn apply_transform_tag(
     inner_tag: &str,
     t1: u64, t2: u64, accel: f64,
     timestamp_ms: u64, event_start_ms: u64, _event_end_ms: u64,
-    _scale_x: f32, scale_y: f32,
+    scale_x: f32, scale_y: f32,
 ) {
     let anim_start = event_start_ms + t1;
     let anim_end = if t2 > 0 { event_start_ms + t2 } else { u64::MAX };
@@ -781,12 +802,43 @@ fn apply_transform_tag(
             }
             OverrideTag::Rotation { x, y, z } => {
                 ctx.rotation = ctx.rotation + (*z as f32 - ctx.rotation) * p;
-                ctx.origin_x = ctx.origin_x + (*x as f32 - ctx.origin_x) * p;
-                ctx.origin_y = ctx.origin_y + (*y as f32 - ctx.origin_y) * p;
+                ctx.shear_x = ctx.shear_x + (*x as f32 - ctx.shear_x) * p;
+                ctx.shear_y = ctx.shear_y + (*y as f32 - ctx.shear_y) * p;
             }
             OverrideTag::Shear { x, y } => {
                 ctx.shear_x = ctx.shear_x + (*x as f32 - ctx.shear_x) * p;
                 ctx.shear_y = ctx.shear_y + (*y as f32 - ctx.shear_y) * p;
+            }
+            OverrideTag::BorderX(w) => {
+                ctx.outline_x_width = ctx.outline_x_width + (*w as f32 - ctx.outline_x_width) * p;
+            }
+            OverrideTag::BorderY(w) => {
+                ctx.outline_y_width = ctx.outline_y_width + (*w as f32 - ctx.outline_y_width) * p;
+            }
+            OverrideTag::ShadowX(d) => {
+                ctx.shadow_x = ctx.shadow_x + (*d as f32 - ctx.shadow_x) * p;
+            }
+            OverrideTag::ShadowY(d) => {
+                ctx.shadow_y = ctx.shadow_y + (*d as f32 - ctx.shadow_y) * p;
+            }
+            OverrideTag::Origin { x, y } => {
+                ctx.origin_x = ctx.origin_x + (*x as f32 * scale_x - ctx.origin_x) * p;
+                ctx.origin_y = ctx.origin_y + (*y as f32 * scale_y - ctx.origin_y) * p;
+            }
+            OverrideTag::Underline(u) => {
+                if p >= 0.5 {
+                    ctx.underline = *u;
+                }
+            }
+            OverrideTag::Strikeout(s) => {
+                if p >= 0.5 {
+                    ctx.strikeout = *s;
+                }
+            }
+            OverrideTag::BoldWeight(w) => {
+                if p >= 0.5 {
+                    ctx.bold = *w > 0;
+                }
             }
             _ => {}
         }
