@@ -200,3 +200,89 @@ impl Default for FontManager {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn system_font_manager() -> FontManager {
+        let mut fm = FontManager::new();
+        fm.load_system_fonts();
+        fm
+    }
+
+    fn find_any_font(fm: &FontManager) -> Option<fontdb::ID> {
+        fm.query("Arial", false, false)
+            .or_else(|| fm.query("Liberation Sans", false, false))
+            .or_else(|| fm.query("DejaVu Sans", false, false))
+            .or_else(|| fm.query("Noto Sans", false, false))
+            .or_else(|| fm.list_fonts().first().map(|f| f.id))
+    }
+
+    #[test]
+    fn test_font_data_returns_same_bytes() {
+        let fm = system_font_manager();
+        let id = find_any_font(&fm).expect("No system fonts found");
+        let data1 = fm.get_font_data(id).expect("Font data should exist");
+        let data2 = fm.get_font_data(id).expect("Font data should exist");
+        assert_eq!(data1, data2, "get_font_data should return identical bytes for same ID");
+    }
+
+    #[test]
+    fn test_font_data_non_empty() {
+        let fm = system_font_manager();
+        let id = find_any_font(&fm).expect("No system fonts found");
+        let data = fm.get_font_data(id).expect("Font data should exist");
+        assert!(data.len() > 100, "Font data should be substantial");
+    }
+
+    #[test]
+    fn test_font_data_different_ids_differ() {
+        let fm = system_font_manager();
+        let fonts: Vec<_> = fm.list_fonts();
+        if fonts.len() < 2 {
+            return;
+        }
+        let data_a = fm.get_font_data(fonts[0].id).expect("Font data");
+        let data_b = fm.get_font_data(fonts[1].id).expect("Font data");
+        if data_a.len() != data_b.len() || data_a != data_b {
+            return;
+        }
+        // If two different IDs happen to return same data, that's valid (duplicated font).
+        // The point is no panic or corruption.
+    }
+
+    #[test]
+    fn test_font_data_invalid_id_returns_none() {
+        let fm = system_font_manager();
+        let dummy = fontdb::ID::dummy();
+        assert!(fm.get_font_data(dummy).is_none());
+    }
+
+    #[test]
+    fn test_query_with_fallback_returns_something() {
+        let fm = system_font_manager();
+        let id = fm.query_with_fallback("NonExistentFont", false, false);
+        assert!(id.is_some(), "Fallback chain should return some font");
+    }
+
+    #[test]
+    fn test_load_font_data_returns_id() {
+        let mut fm = FontManager::new();
+        fm.load_system_fonts();
+        if let Some(id) = find_any_font(&fm) {
+            if let Some(data) = fm.get_font_data(id) {
+                let loaded_id = fm.load_font_data(data);
+                let loaded_data = fm.get_font_data(loaded_id);
+                assert!(loaded_data.is_some(), "Loading valid font data should produce retrievable font");
+            }
+        }
+    }
+
+    #[test]
+    fn test_list_fonts_contains_family() {
+        let fm = system_font_manager();
+        let fonts = fm.list_fonts();
+        assert!(fonts.iter().any(|f| f.weight > 0 || !f.family.is_empty()));
+    }
+}

@@ -118,3 +118,125 @@ fn errors_ass_skips_invalid_timestamp_event() {
     assert!(!timestamp_errors.is_empty(), "should have timestamp error from invalid time");
     assert!(ass.events.iter().all(|e| e.text != "Invalid start timestamp"), "invalid event should be skipped");
 }
+
+const VECTOR_CLIP_ASS: &str = include_str!("../../subtitle-renderer/tests/fixtures/vector_clip.ass");
+const WRITING_MODE_ASS: &str = include_str!("../../subtitle-renderer/tests/fixtures/writing_mode.ass");
+const KARAOKE_KO_DETAILED_ASS: &str = include_str!("../../subtitle-renderer/tests/fixtures/karaoke_ko_detailed.ass");
+
+#[test]
+fn vector_clip_ass_event_count() {
+    let ass = AssFile::parse(VECTOR_CLIP_ASS).expect("vector_clip.ass should parse");
+    assert_eq!(ass.events.len(), 5);
+}
+
+#[test]
+fn vector_clip_ass_rectangular_clip() {
+    let ass = AssFile::parse(VECTOR_CLIP_ASS).expect("vector_clip.ass should parse");
+    let event3 = &ass.events[3];
+    assert!(event3.override_tags.iter().any(|t| matches!(t, OverrideTag::Clip { x1, y2, .. }
+        if (*x1 - 960.0).abs() < f64::EPSILON && (*y2 - 1080.0).abs() < f64::EPSILON)),
+        "event 3 should have rectangular Clip tag");
+}
+
+#[test]
+fn vector_clip_ass_pos_tag() {
+    let ass = AssFile::parse(VECTOR_CLIP_ASS).expect("vector_clip.ass should parse");
+    let event4 = &ass.events[4];
+    assert!(event4.override_tags.iter().any(|t| matches!(t, OverrideTag::Pos { x, y }
+        if (*x - 960.0).abs() < f64::EPSILON && (*y - 540.0).abs() < f64::EPSILON)),
+        "event 4 should have Pos tag");
+}
+
+#[test]
+fn vector_clip_ass_vector_drawing_parse_override_tag() {
+    let tag = ass_parser::parse_override_tag("clip(1,m 0 0 l 100 0 l 100 100 l 0 100)").unwrap();
+    assert!(matches!(tag, OverrideTag::ClipDrawing { scale, .. } if (scale - 1.0).abs() < f32::EPSILON));
+}
+
+#[test]
+fn vector_clip_ass_vector_inverse_drawing_parse_override_tag() {
+    let tag = ass_parser::parse_override_tag("iclip(1,m 0 0 l 100 0 l 100 100 l 0 100)").unwrap();
+    assert!(matches!(tag, OverrideTag::ClipInverseDrawing { scale, .. } if (scale - 1.0).abs() < f32::EPSILON));
+}
+
+#[test]
+fn vector_clip_ass_vector_drawing_scale_two() {
+    let tag = ass_parser::parse_override_tag("clip(2,m 0 0 l 50 0 l 50 50 l 0 50)").unwrap();
+    assert!(matches!(tag, OverrideTag::ClipDrawing { scale, commands, .. }
+        if (scale - 2.0).abs() < f32::EPSILON && commands.contains("m 0 0")));
+}
+
+#[test]
+fn writing_mode_ass_event_count() {
+    let ass = AssFile::parse(WRITING_MODE_ASS).expect("writing_mode.ass should parse");
+    assert_eq!(ass.events.len(), 3);
+}
+
+#[test]
+fn writing_mode_ass_events_have_correct_text() {
+    let ass = AssFile::parse(WRITING_MODE_ASS).expect("writing_mode.ass should parse");
+    assert!(ass.events[0].text.contains("writing_mode(2)"));
+    assert!(ass.events[0].text.contains("縦書きテスト"));
+    assert!(ass.events[1].text.contains("writing_mode(3)"));
+    assert!(ass.events[1].text.contains("Vertical Mode 3"));
+    assert!(ass.events[2].text.contains("writing_mode(1)"));
+    assert!(ass.events[2].text.contains("Horizontal"));
+}
+
+#[test]
+fn writing_mode_ass_events_are_dialogue() {
+    let ass = AssFile::parse(WRITING_MODE_ASS).expect("writing_mode.ass should parse");
+    assert!(ass.events.iter().all(|e| e.is_dialogue()));
+}
+
+#[test]
+fn writing_mode_ass_style() {
+    let ass = AssFile::parse(WRITING_MODE_ASS).expect("writing_mode.ass should parse");
+    assert!(ass.events.iter().all(|e| e.style_name == "Default"));
+}
+
+#[test]
+fn karaoke_ko_detailed_ass_event_count() {
+    let ass = AssFile::parse(KARAOKE_KO_DETAILED_ASS).expect("karaoke_ko_detailed.ass should parse");
+    assert_eq!(ass.events.len(), 3);
+}
+
+#[test]
+fn karaoke_ko_detailed_ass_ko_tags() {
+    let ass = AssFile::parse(KARAOKE_KO_DETAILED_ASS).expect("karaoke_ko_detailed.ass should parse");
+    let event0 = &ass.events[0];
+    let ko_tags: Vec<_> = event0.override_tags.iter()
+        .filter(|t| matches!(t, OverrideTag::Karaoke { style: ass_parser::KaraokeStyle::Outline, .. }))
+        .collect();
+    assert_eq!(ko_tags.len(), 4, "event 0 should have 4 \\ko tags");
+}
+
+#[test]
+fn karaoke_ko_detailed_ass_k_tags() {
+    let ass = AssFile::parse(KARAOKE_KO_DETAILED_ASS).expect("karaoke_ko_detailed.ass should parse");
+    let event1 = &ass.events[1];
+    let k_tags: Vec<_> = event1.override_tags.iter()
+        .filter(|t| matches!(t, OverrideTag::Karaoke { style: ass_parser::KaraokeStyle::Instant, .. }))
+        .collect();
+    assert_eq!(k_tags.len(), 2, "event 1 should have 2 \\k tags");
+}
+
+#[test]
+fn karaoke_ko_detailed_ass_kf_tag() {
+    let ass = AssFile::parse(KARAOKE_KO_DETAILED_ASS).expect("karaoke_ko_detailed.ass should parse");
+    let event2 = &ass.events[2];
+    assert!(event2.override_tags.iter().any(|t| matches!(t,
+        OverrideTag::Karaoke { style: ass_parser::KaraokeStyle::Fill, duration: 2000 })),
+        "event 2 should have \\kf200 tag (duration 2000ms)");
+}
+
+#[test]
+fn karaoke_ko_detailed_ass_ko_durations() {
+    let ass = AssFile::parse(KARAOKE_KO_DETAILED_ASS).expect("karaoke_ko_detailed.ass should parse");
+    let event0 = &ass.events[0];
+    let durations: Vec<u64> = event0.override_tags.iter()
+        .filter_map(|t| if let OverrideTag::Karaoke { duration, .. } = t { Some(*duration) } else { None })
+        .collect();
+    assert_eq!(durations, vec![500, 1000, 1500, 2000],
+        "\\ko durations should be 50*10, 100*10, 150*10, 200*10");
+}

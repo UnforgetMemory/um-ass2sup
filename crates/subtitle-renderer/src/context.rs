@@ -134,6 +134,12 @@ pub struct RenderContext {
     pub clip_enabled: bool,
     /// If true, pixels *inside* the clip rect are cleared (set by `\iclip`).
     pub clip_inverse: bool,
+    /// Vector clip drawing commands in ASS drawing format (set by `\clip(scale, commands)`).
+    pub clip_drawing_commands: Option<String>,
+    /// Scale factor for vector clip drawing coordinates.
+    pub clip_drawing_scale: f32,
+    /// If true, the vector clip is inverted (set by `\iclip(scale, commands)`).
+    pub clip_drawing_inverse: bool,
     /// Text wrapping mode (set by `\q`). 0=smart, 1=no wrap, 2=force newline, 3=smart (same as 0).
     pub wrap_style: u8,
     /// Underline decoration (set by `\u1` / `\u0`).
@@ -187,6 +193,9 @@ impl Default for RenderContext {
             clip_y2: -1.0,
             clip_enabled: false,
             clip_inverse: false,
+            clip_drawing_commands: None,
+            clip_drawing_scale: 1.0,
+            clip_drawing_inverse: false,
             wrap_style: 0,
             underline: false,
             strikeout: false,

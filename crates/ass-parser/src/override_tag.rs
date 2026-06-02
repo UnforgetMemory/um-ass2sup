@@ -232,12 +232,28 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
         if nums.len() >= 4 {
             return Some(OverrideTag::Clip { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
         }
+        // Vector drawing form: \clip(scale, drawing_commands)
+        if let Some(comma_pos) = inner.find(',') {
+            let scale_str = inner[..comma_pos].trim();
+            let commands = inner[comma_pos + 1..].trim();
+            if let Ok(scale) = scale_str.parse::<f32>() {
+                return Some(OverrideTag::ClipDrawing { scale, commands: commands.to_string() });
+            }
+        }
     }
     if s.starts_with("iclip(") {
         let inner = s.trim_start_matches("iclip(").trim_end_matches(')');
         let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
         if nums.len() >= 4 {
             return Some(OverrideTag::ClipInverse { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
+        }
+        // Vector drawing form: \iclip(scale, drawing_commands)
+        if let Some(comma_pos) = inner.find(',') {
+            let scale_str = inner[..comma_pos].trim();
+            let commands = inner[comma_pos + 1..].trim();
+            if let Ok(scale) = scale_str.parse::<f32>() {
+                return Some(OverrideTag::ClipInverseDrawing { scale, commands: commands.to_string() });
+            }
         }
     }
     if s.starts_with("org(") {
@@ -417,5 +433,46 @@ fn parse_ass_color(s: &str) -> Result<super::color::AssColor, ()> {
         Ok(super::color::AssColor { alpha: 0, blue, green, red })
     } else {
         Err(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clip_vector_drawing() {
+        let result = parse_override_tag("clip(1,m 0 0 l 100 0 100 100 0 100)").unwrap();
+        assert_eq!(result, OverrideTag::ClipDrawing { scale: 1.0, commands: "m 0 0 l 100 0 100 100 0 100".to_string() });
+    }
+
+    #[test]
+    fn iclip_vector_drawing() {
+        let result = parse_override_tag("iclip(2,m 0 0 l 50 0 50 50 0 50)").unwrap();
+        assert_eq!(result, OverrideTag::ClipInverseDrawing { scale: 2.0, commands: "m 0 0 l 50 0 50 50 0 50".to_string() });
+    }
+
+    #[test]
+    fn clip_rectangular_unchanged() {
+        let result = parse_override_tag("clip(10,20,30,40)").unwrap();
+        assert_eq!(result, OverrideTag::Clip { x1: 10.0, y1: 20.0, x2: 30.0, y2: 40.0 });
+    }
+
+    #[test]
+    fn clip_vector_minimal_commands() {
+        let result = parse_override_tag("clip(1,m 0 0)").unwrap();
+        assert_eq!(result, OverrideTag::ClipDrawing { scale: 1.0, commands: "m 0 0".to_string() });
+    }
+
+    #[test]
+    fn clip_vector_fractional_scale() {
+        let result = parse_override_tag("clip(0.5,m 10 10 l 20 20)").unwrap();
+        assert_eq!(result, OverrideTag::ClipDrawing { scale: 0.5, commands: "m 10 10 l 20 20".to_string() });
+    }
+
+    #[test]
+    fn iclip_rectangular_unchanged() {
+        let result = parse_override_tag("iclip(10,20,30,40)").unwrap();
+        assert_eq!(result, OverrideTag::ClipInverse { x1: 10.0, y1: 20.0, x2: 30.0, y2: 40.0 });
     }
 }

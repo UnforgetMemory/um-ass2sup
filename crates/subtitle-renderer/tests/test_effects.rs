@@ -201,6 +201,79 @@ fn test_composite_over_both_transparent() {
 }
 
 #[test]
+fn test_composite_over_simd_batch_4px() {
+    // Exercise the SIMD path: exactly 4 pixels (one u32x4 batch)
+    let mut dst = vec![
+        0, 0, 0, 0,       // pixel 0: transparent black
+        0, 0, 0, 255,     // pixel 1: opaque black
+        100, 150, 200, 255, // pixel 2: opaque gray-blue
+        255, 0, 0, 128,   // pixel 3: semi-transparent red
+    ];
+    let src = vec![
+        255, 0, 0, 255,     // pixel 0: opaque red
+        255, 255, 255, 128, // pixel 1: semi-transparent white
+        0, 0, 0, 0,         // pixel 2: fully transparent
+        0, 0, 255, 255,     // pixel 3: opaque blue
+    ];
+    composite_over(&mut dst, &src, 4, 1);
+
+    // Pixel 0: opaque red over transparent → src replaces
+    assert_eq!(dst[0], 255, "pixel 0 R");
+    assert_eq!(dst[1], 0, "pixel 0 G");
+    assert_eq!(dst[2], 0, "pixel 0 B");
+    assert_eq!(dst[3], 255, "pixel 0 A");
+
+    // Pixel 1: semi-transparent white (a=128) over opaque black
+    // out_a = 128 + 255*(255-128)/255 = 128 + 127 = 255
+    // out_r = (255*128 + 0) / 255 = 128
+    assert_eq!(dst[4], 128, "pixel 1 R");
+    assert_eq!(dst[5], 128, "pixel 1 G");
+    assert_eq!(dst[6], 128, "pixel 1 B");
+    assert_eq!(dst[7], 255, "pixel 1 A");
+
+    // Pixel 2: transparent over opaque → dst unchanged
+    assert_eq!(dst[8], 100, "pixel 2 R");
+    assert_eq!(dst[9], 150, "pixel 2 G");
+    assert_eq!(dst[10], 200, "pixel 2 B");
+    assert_eq!(dst[11], 255, "pixel 2 A");
+
+    // Pixel 3: opaque blue over semi-transparent red
+    // out_a = 255 + 128*0/255 = 255
+    // out_b = (255*255 + 0) / 255 = 255
+    assert_eq!(dst[12], 0, "pixel 3 R");
+    assert_eq!(dst[13], 0, "pixel 3 G");
+    assert_eq!(dst[14], 255, "pixel 3 B");
+    assert_eq!(dst[15], 255, "pixel 3 A");
+}
+
+#[test]
+fn test_composite_over_simd_with_remainder() {
+    // 2 pixels: SIMD batch handles first 0 of 4, scalar handles remaining 2
+    let mut dst = vec![
+        0, 0, 0, 255,       // pixel 0: opaque black
+        128, 128, 128, 255, // pixel 1: opaque gray
+    ];
+    let src = vec![
+        0, 0, 0, 0,       // pixel 0: fully transparent
+        255, 0, 0, 200,   // pixel 1: semi-transparent red
+    ];
+    composite_over(&mut dst, &src, 2, 1);
+
+    // Pixel 0: transparent over opaque → dst unchanged
+    assert_eq!(dst[0], 0, "pixel 0 R unchanged");
+    assert_eq!(dst[3], 255, "pixel 0 A unchanged");
+
+    // Pixel 1: semi-transparent red (a=200) over opaque gray
+    // out_a = 200 + 255*55/255 = 200 + 55 = 255
+    // out_r = (255*200 + 128*255*55/255) / 255 = (51000 + 7040) / 255 = 227
+    // out_g = (0*200 + 128*255*55/255) / 255 = 7040 / 255 = 27
+    assert_eq!(dst[4], 227, "pixel 1 R");
+    assert_eq!(dst[5], 27, "pixel 1 G");
+    assert_eq!(dst[6], 27, "pixel 1 B");
+    assert_eq!(dst[7], 255, "pixel 1 A");
+}
+
+#[test]
 fn test_composite_over_multiple_pixels() {
     let w = 3u32;
     let h = 1u32;

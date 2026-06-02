@@ -649,3 +649,32 @@ fn test_render_with_shadow() {
     let frame = renderer.render_ass(&ass, 1000);
     assert!(frame.is_some());
 }
+
+#[test]
+fn test_render_ko_karaoke_no_panic() {
+    let content = r#"[Script Info]
+Title: KO Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko50}He{\ko100}llo{\ko150} Wo{\ko200}rld
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let mut renderer = Renderer::new(RenderConfig::default());
+
+    let frame_before = renderer.render_ass(&ass, 500);
+    assert!(frame_before.is_some());
+
+    let frame_during = renderer.render_ass(&ass, 3000);
+    assert!(frame_during.is_some());
+
+    let frame_after = renderer.render_ass(&ass, 7000);
+    assert!(frame_after.is_some());
+}

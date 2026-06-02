@@ -131,3 +131,91 @@ pub struct GlyphBBox {
     pub x_max: f32,
     pub y_max: f32,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::font::FontManager;
+
+    fn setup_shaper() -> (FontManager, fontdb::ID) {
+        let mut fm = FontManager::new();
+        fm.load_system_fonts();
+        let id = fm.query("Arial", false, false)
+            .or_else(|| fm.query("Liberation Sans", false, false))
+            .or_else(|| fm.query("DejaVu Sans", false, false))
+            .or_else(|| fm.query("Noto Sans", false, false))
+            .or_else(|| fm.list_fonts().first().map(|f| f.id))
+            .expect("No system fonts found");
+        (fm, id)
+    }
+
+    #[test]
+    fn test_shape_idempotent_same_input() {
+        let (fm, id) = setup_shaper();
+        let shaper = Shaper::new(&fm);
+        let r1 = shaper.shape("Hello World", id, 48.0).unwrap();
+        let r2 = shaper.shape("Hello World", id, 48.0).unwrap();
+        assert_eq!(r1.glyphs.len(), r2.glyphs.len());
+        assert!((r1.total_advance - r2.total_advance).abs() < 0.01);
+        for (g1, g2) in r1.glyphs.iter().zip(r2.glyphs.iter()) {
+            assert_eq!(g1.glyph_id, g2.glyph_id);
+            assert!((g1.x_advance - g2.x_advance).abs() < 0.01);
+            assert!((g1.x_offset - g2.x_offset).abs() < 0.01);
+        }
+    }
+
+    #[test]
+    fn test_shape_different_text_different_output() {
+        let (fm, id) = setup_shaper();
+        let shaper = Shaper::new(&fm);
+        let r1 = shaper.shape("A", id, 48.0).unwrap();
+        let r2 = shaper.shape("BBBBBBBB", id, 48.0).unwrap();
+        assert!(r1.glyphs.len() != r2.glyphs.len() || r1.total_advance != r2.total_advance);
+    }
+
+    #[test]
+    fn test_shape_different_sizes_different_advance() {
+        let (fm, id) = setup_shaper();
+        let shaper = Shaper::new(&fm);
+        let r1 = shaper.shape("Hello", id, 24.0).unwrap();
+        let r2 = shaper.shape("Hello", id, 48.0).unwrap();
+        assert!(r2.total_advance > r1.total_advance, "Larger font size should produce wider advance");
+    }
+
+    #[test]
+    fn test_shape_empty_string() {
+        let (fm, id) = setup_shaper();
+        let shaper = Shaper::new(&fm);
+        let r = shaper.shape("", id, 48.0).unwrap();
+        assert!(r.glyphs.is_empty());
+        assert!((r.total_advance - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_shape_single_char_has_one_glyph() {
+        let (fm, id) = setup_shaper();
+        let shaper = Shaper::new(&fm);
+        let r = shaper.shape("A", id, 48.0).unwrap();
+        assert_eq!(r.glyphs.len(), 1);
+        assert!(r.total_advance > 0.0);
+    }
+
+    #[test]
+    fn test_get_glyph_bbox_returns_some() {
+        let (fm, id) = setup_shaper();
+        let shaper = Shaper::new(&fm);
+        let bbox = shaper.get_glyph_bbox(id, 0, 48.0);
+        assert!(bbox.is_some(), "Glyph bbox should be available for valid glyph");
+    }
+
+    #[test]
+    fn test_get_glyph_bbox_scaled() {
+        let (fm, id) = setup_shaper();
+        let shaper = Shaper::new(&fm);
+        let b1 = shaper.get_glyph_bbox(id, 0, 24.0).unwrap();
+        let b2 = shaper.get_glyph_bbox(id, 0, 48.0).unwrap();
+        let w1 = b1.x_max - b1.x_min;
+        let w2 = b2.x_max - b2.x_min;
+        assert!((w2 - w1 * 2.0).abs() < 1.0, "2x font size should produce ~2x glyph width");
+    }
+}

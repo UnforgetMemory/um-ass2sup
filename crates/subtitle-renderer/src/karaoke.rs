@@ -294,4 +294,126 @@ mod tests {
         // Zero-duration: start==end, timestamp >= end → Done immediately
         assert_eq!(states[0].phase, KaraokePhase::Done);
     }
+
+    #[test]
+    fn test_outline_syllable_pending() {
+        let segs = vec![make_seg(KaraokeStyle::Outline, 1000, "Hello", 0)];
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 500, 0);
+        assert_eq!(states[0].phase, KaraokePhase::Pending);
+        assert_eq!(states[0].style, KaraokeStyle::Outline);
+    }
+
+    #[test]
+    fn test_outline_syllable_active_progress() {
+        let segs = vec![make_seg(KaraokeStyle::Outline, 1000, "Hello", 0)];
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 250);
+        match states[0].phase {
+            KaraokePhase::Active { progress } => {
+                assert!((progress - 0.25).abs() < 0.01, "Expected ~0.25 progress, got {progress}");
+            }
+            other => panic!("Expected Active phase, got {other:?}"),
+        }
+        assert_eq!(states[0].style, KaraokeStyle::Outline);
+    }
+
+    #[test]
+    fn test_outline_syllable_done() {
+        let segs = vec![make_seg(KaraokeStyle::Outline, 1000, "Hello", 0)];
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 1500);
+        assert_eq!(states[0].phase, KaraokePhase::Done);
+        assert_eq!(states[0].style, KaraokeStyle::Outline);
+    }
+
+    #[test]
+    fn test_outline_multi_syllable_timing() {
+        let segs = vec![
+            make_seg(KaraokeStyle::Outline, 500, "He", 0),
+            make_seg(KaraokeStyle::Outline, 500, "llo", 1),
+        ];
+        // At t=700: first syllable [0,500) is Done, second [500,1000) is Active
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 700);
+        assert_eq!(states[0].phase, KaraokePhase::Done);
+        assert_eq!(states[1].style, KaraokeStyle::Outline);
+        match states[1].phase {
+            KaraokePhase::Active { progress } => {
+                assert!((progress - 0.4).abs() < 0.01, "Expected ~0.4 progress, got {progress}");
+            }
+            other => panic!("Expected Active for second syllable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_outline_highlight_pending() {
+        assert!(!KaraokeRenderer::should_highlight(
+            KaraokeStyle::Outline,
+            KaraokePhase::Pending
+        ));
+    }
+
+    #[test]
+    fn test_outline_highlight_active() {
+        assert!(KaraokeRenderer::should_highlight(
+            KaraokeStyle::Outline,
+            KaraokePhase::Active { progress: 0.5 }
+        ));
+    }
+
+    #[test]
+    fn test_outline_highlight_done() {
+        assert!(!KaraokeRenderer::should_highlight(
+            KaraokeStyle::Outline,
+            KaraokePhase::Done
+        ));
+    }
+
+    #[test]
+    fn test_outline_single_syllable_lifecycle() {
+        let segs = vec![make_seg(KaraokeStyle::Outline, 1000, "Test", 0)];
+
+        // Before start → Pending
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 1000, 0);
+        assert_eq!(states[0].phase, KaraokePhase::Pending);
+
+        // At start → Active (progress 0)
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 1000, 1000);
+        match states[0].phase {
+            KaraokePhase::Active { progress } => assert!(progress < 0.01),
+            other => panic!("Expected Active at start, got {other:?}"),
+        }
+
+        // Mid-way → Active
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 1000, 1500);
+        match states[0].phase {
+            KaraokePhase::Active { progress } => {
+                assert!((progress - 0.5).abs() < 0.01);
+            }
+            other => panic!("Expected Active at midpoint, got {other:?}"),
+        }
+
+        // After end → Done
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 1000, 2000);
+        assert_eq!(states[0].phase, KaraokePhase::Done);
+    }
+
+    #[test]
+    fn test_outline_get_karaoke_phases() {
+        let segs = vec![
+            make_seg(KaraokeStyle::Outline, 400, "A", 0),
+            make_seg(KaraokeStyle::Outline, 600, "B", 1),
+        ];
+        let phases = KaraokeRenderer::get_karaoke_phases(&segs, 0, 200);
+        assert_eq!(phases.len(), 2);
+        assert_eq!(phases[0].0, KaraokeStyle::Outline);
+        assert!(matches!(phases[0].1, KaraokePhase::Active { .. }));
+        assert_eq!(phases[1].0, KaraokeStyle::Outline);
+        assert!(matches!(phases[1].1, KaraokePhase::Pending));
+    }
+
+    #[test]
+    fn test_outline_zero_duration() {
+        let segs = vec![make_seg(KaraokeStyle::Outline, 0, "A", 0)];
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 0);
+        assert_eq!(states[0].phase, KaraokePhase::Done);
+        assert_eq!(states[0].style, KaraokeStyle::Outline);
+    }
 }

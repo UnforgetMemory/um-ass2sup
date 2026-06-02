@@ -270,6 +270,19 @@ impl Renderer {
                     ctx.clip_y2 = *y2 as f32 * scale_y;
                     ctx.clip_enabled = true;
                     ctx.clip_inverse = true;
+                    ctx.clip_drawing_commands = None;
+                }
+                OverrideTag::ClipDrawing { scale, commands } => {
+                    ctx.clip_drawing_commands = Some(commands.clone());
+                    ctx.clip_drawing_scale = *scale;
+                    ctx.clip_drawing_inverse = false;
+                    ctx.clip_enabled = true;
+                }
+                OverrideTag::ClipInverseDrawing { scale, commands } => {
+                    ctx.clip_drawing_commands = Some(commands.clone());
+                    ctx.clip_drawing_scale = *scale;
+                    ctx.clip_drawing_inverse = true;
+                    ctx.clip_enabled = true;
                 }
                 OverrideTag::Transform { tag: inner_tag, t1, t2, accel } => {
                     apply_transform_tag(
@@ -415,7 +428,8 @@ impl Renderer {
             && ctx.shear_x == 0.0
             && ctx.shear_y == 0.0
             && (ctx.writing_mode == 0 || ctx.writing_mode == 1)
-            && !ctx.clip_enabled;
+            && !ctx.clip_enabled
+            && ctx.clip_drawing_commands.is_none();
         let sub_bbox = if can_sub {
             compute_tight_bbox(&shaped_lines, &shaper, font_id, ctx.font_size, ctx)
         } else {
@@ -547,7 +561,13 @@ impl Renderer {
 
             if ctx.clip_enabled {
                 let mut clipped = final_data;
-                apply_clip_mask(&mut clipped, w, h, ctx);
+                if ctx.clip_drawing_commands.is_some() {
+                    let sx = self.config.width as f32 / self.config.script_width as f32;
+                    let sy = self.config.height as f32 / self.config.script_height as f32;
+                    apply_drawing_clip_mask(&mut clipped, w, h, ctx, sx, sy);
+                } else {
+                    apply_clip_mask(&mut clipped, w, h, ctx);
+                }
                 if ctx.alpha_multiplier < 0.999 {
                     apply_alpha_multiplier(&mut clipped, ctx.alpha_multiplier);
                 }
@@ -665,7 +685,8 @@ impl Renderer {
             && ctx.shear_x == 0.0
             && ctx.shear_y == 0.0
             && (ctx.writing_mode == 0 || ctx.writing_mode == 1)
-            && !ctx.clip_enabled;
+            && !ctx.clip_enabled
+            && ctx.clip_drawing_commands.is_none();
 
         let (ox, oy, lw, lh, use_sub) = if can_sub && any_glyph {
             let border = ctx.outline_width.max(ctx.outline_x_width).max(ctx.outline_y_width);
@@ -1118,6 +1139,59 @@ fn apply_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &RenderContext) {
     }
 }
 
+/// Apply a vector drawing clip mask to pixel data.
+///
+/// Parses `.clip_drawing_commands` and builds a tiny_skia path, then clears
+/// pixels outside (or inside, for inverse clips) the filled path.
+fn apply_drawing_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &RenderContext, sx: f32, sy: f32) {
+    let commands_text = match ctx.clip_drawing_commands {
+        Some(ref c) => c,
+        None => return,
+    };
+
+    let commands = parse_drawing_commands(commands_text);
+    let scale = 1.0 / ctx.clip_drawing_scale;
+
+    let mut pb = PathBuilder::new();
+    for cmd in &commands {
+        match cmd {
+            DrawingCommand::MoveTo(x, y) => pb.move_to(x * scale * sx, y * scale * sy),
+            DrawingCommand::LineTo(x, y) => pb.line_to(x * scale * sx, y * scale * sy),
+            DrawingCommand::BezierTo(x1, y1, x2, y2, x3, y3) => {
+                pb.cubic_to(
+                    x1 * scale * sx, y1 * scale * sy,
+                    x2 * scale * sx, y2 * scale * sy,
+                    x3 * scale * sx, y3 * scale * sy,
+                );
+            }
+            DrawingCommand::Close => pb.close(),
+        }
+    }
+
+    if let Some(path) = pb.finish() {
+        let mut mask = Pixmap::new(w, h).unwrap();
+        let mut paint = Paint::default();
+        paint.set_color_rgba8(255, 255, 255, 255);
+        paint.anti_alias = true;
+        mask.fill_path(&path, &paint, FillRule::EvenOdd, SkiaTransform::identity(), None);
+
+        for py in 0..h {
+            for px in 0..w {
+                let idx = ((py * w + px) * 4 + 3) as usize;
+                let inside = mask.data()[idx] > 0;
+                let clear = if ctx.clip_drawing_inverse { inside } else { !inside };
+                if clear {
+                    let base = idx - 3;
+                    data[base] = 0;
+                    data[base + 1] = 0;
+                    data[base + 2] = 0;
+                    data[base + 3] = 0;
+                }
+            }
+        }
+    }
+}
+
 /// Composite a sub-region source buffer into a larger destination buffer.
 ///
 /// Performs Porter-Duff "over" compositing of a (`sw` × `sh`) source image
@@ -1329,7 +1403,7 @@ fn wrap_text(text: &str, wrap_style: u8, shaper: &Shaper, font_id: fontdb::ID, f
     }
 }
 
-enum DrawingCommand {
+pub(crate) enum DrawingCommand {
     MoveTo(f32, f32),
     LineTo(f32, f32),
     BezierTo(f32, f32, f32, f32, f32, f32),
@@ -1347,7 +1421,7 @@ fn parse_drawing_level(text: &str) -> u8 {
     0
 }
 
-fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
+pub(crate) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
     let mut commands = Vec::new();
     let tokens: Vec<&str> = text.split_whitespace().collect();
     let mut i = 0;
@@ -1732,6 +1806,75 @@ mod tests {
         assert_eq!(data[inside_idx + 3], 0);
         // Outside clip: pixel (0,0) should be PRESERVED
         assert_eq!(data[3], 255);
+    }
+
+    // ── apply_drawing_clip_mask ──────────────────────────────────
+
+    #[test]
+    fn test_drawing_clip_normal_triangle() {
+        let w = 10u32;
+        let h = 10u32;
+        let mut data = vec![255u8; (w * h * 4) as usize];
+
+        let mut ctx = RenderContext::default();
+        ctx.clip_drawing_commands = Some("m 5 0 l 10 10 l 0 10".to_string());
+        ctx.clip_drawing_scale = 1.0;
+        ctx.clip_drawing_inverse = false;
+
+        apply_drawing_clip_mask(&mut data, w, h, &ctx, 1.0, 1.0);
+
+        // Center of triangle (roughly) should be preserved
+        let inside_alpha = data[((5 * w + 5) * 4 + 3) as usize];
+        assert_eq!(inside_alpha, 255, "pixel inside triangle should be preserved");
+
+        // Top-left corner should be cleared (outside triangle)
+        let outside_alpha = data[3];
+        assert_eq!(outside_alpha, 0, "pixel outside triangle should be cleared");
+    }
+
+    #[test]
+    fn test_drawing_clip_inverse_triangle() {
+        let w = 10u32;
+        let h = 10u32;
+        let mut data = vec![255u8; (w * h * 4) as usize];
+
+        let mut ctx = RenderContext::default();
+        ctx.clip_drawing_commands = Some("m 5 0 l 10 10 l 0 10".to_string());
+        ctx.clip_drawing_scale = 1.0;
+        ctx.clip_drawing_inverse = true;
+
+        apply_drawing_clip_mask(&mut data, w, h, &ctx, 1.0, 1.0);
+
+        // Center of triangle should be cleared (inverse)
+        let inside_alpha = data[((5 * w + 5) * 4 + 3) as usize];
+        assert_eq!(inside_alpha, 0, "pixel inside triangle should be cleared for inverse");
+
+        // Top-left corner should be preserved (outside triangle)
+        let outside_alpha = data[3];
+        assert_eq!(outside_alpha, 255, "pixel outside triangle should be preserved for inverse");
+    }
+
+    #[test]
+    fn test_drawing_clip_scaled_coordinates() {
+        let w = 20u32;
+        let h = 20u32;
+        let mut data = vec![255u8; (w * h * 4) as usize];
+
+        let mut ctx = RenderContext::default();
+        // Scale=2 means coordinates are halved: m 5 0 l 10 10 l 0 10 becomes m 2.5 0 l 5 5 l 0 5
+        ctx.clip_drawing_commands = Some("m 5 0 l 10 10 l 0 10".to_string());
+        ctx.clip_drawing_scale = 2.0;
+        ctx.clip_drawing_inverse = false;
+
+        apply_drawing_clip_mask(&mut data, w, h, &ctx, 1.0, 1.0);
+
+        // Point (3,3) should be inside the scaled triangle
+        let inside_alpha = data[((3 * w + 3) * 4 + 3) as usize];
+        assert_eq!(inside_alpha, 255, "pixel inside scaled triangle should be preserved");
+
+        // Point (9,9) should be outside the scaled triangle
+        let outside_alpha = data[((9 * w + 9) * 4 + 3) as usize];
+        assert_eq!(outside_alpha, 0, "pixel outside scaled triangle should be cleared");
     }
 
     // ── parse_override_block ──────────────────────────────────
