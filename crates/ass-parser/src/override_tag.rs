@@ -130,6 +130,27 @@ pub enum OverrideTag {
     Unknown(String),
 }
 
+/// Splits a string by commas that are NOT inside parentheses.
+/// This is needed for `\t(\pos(100,200),0,1000,1)` where the inner tag may contain commas.
+fn split_commas_paren_aware(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0u32;
+    let mut start = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&s[start..]);
+    parts
+}
+
 pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
     let s = s.trim();
     if s.is_empty() {
@@ -217,7 +238,7 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
     }
     if s.starts_with("t(") {
         let inner = s.trim_start_matches("t(").trim_end_matches(')');
-        let parts: Vec<&str> = inner.split(',').collect();
+        let parts: Vec<&str> = split_commas_paren_aware(inner);
         if !parts.is_empty() {
             let tag = parts[0].trim().to_string();
             let t1 = parts.get(1).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
@@ -365,6 +386,12 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
             return Some(OverrideTag::BaselineOffset(v));
         }
     }
+    if s.starts_with("writing_mode(") {
+        let inner = s.trim_start_matches("writing_mode(").trim_end_matches(')');
+        if let Ok(v) = inner.parse::<u8>() {
+            return Some(OverrideTag::WritingMode(v));
+        }
+    }
     for (prefix, variant) in [("1c", "primary"), ("2c", "secondary"), ("3c", "outline"), ("4c", "shadow")] {
         if s.starts_with(prefix) {
             let color_str = &s[prefix.len()..];
@@ -439,6 +466,72 @@ fn parse_ass_color(s: &str) -> Result<super::color::AssColor, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writing_mode_tag() {
+        let result = parse_override_tag("writing_mode(2)").unwrap();
+        assert_eq!(result, OverrideTag::WritingMode(2));
+    }
+
+    #[test]
+    fn writing_mode_one() {
+        let result = parse_override_tag("writing_mode(1)").unwrap();
+        assert_eq!(result, OverrideTag::WritingMode(1));
+    }
+
+    #[test]
+    fn writing_mode_three() {
+        let result = parse_override_tag("writing_mode(3)").unwrap();
+        assert_eq!(result, OverrideTag::WritingMode(3));
+    }
+
+    #[test]
+    fn split_commas_paren_aware_basic() {
+        let parts = split_commas_paren_aware("b1,0,1000,1");
+        assert_eq!(parts, vec!["b1", "0", "1000", "1"]);
+    }
+
+    #[test]
+    fn split_commas_paren_aware_nested_parens() {
+        let parts = split_commas_paren_aware("\\pos(100,200),0,1000,1");
+        assert_eq!(parts, vec!["\\pos(100,200)", "0", "1000", "1"]);
+    }
+
+    #[test]
+    fn split_commas_paren_aware_no_commas() {
+        let parts = split_commas_paren_aware("b1");
+        assert_eq!(parts, vec!["b1"]);
+    }
+
+    #[test]
+    fn transform_with_paren_inner_tag() {
+        // \t(\pos(100,200),0,1000,1) — inner tag has commas inside parens
+        let result = parse_override_tag("t(\\pos(100,200),0,1000,1)").unwrap();
+        assert_eq!(
+            result,
+            OverrideTag::Transform {
+                tag: "\\pos(100,200)".to_string(),
+                t1: 0,
+                t2: 1000,
+                accel: 1.0,
+            }
+        );
+    }
+
+    #[test]
+    fn transform_with_paren_inner_tag_and_empty_t2() {
+        // \t(\fscx(150),0,) — inner tag with parens, default t2
+        let result = parse_override_tag("t(\\fscx(150),0,,1)").unwrap();
+        assert_eq!(
+            result,
+            OverrideTag::Transform {
+                tag: "\\fscx(150)".to_string(),
+                t1: 0,
+                t2: 0,
+                accel: 1.0,
+            }
+        );
+    }
 
     #[test]
     fn clip_vector_drawing() {

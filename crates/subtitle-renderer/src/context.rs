@@ -153,6 +153,10 @@ pub struct RenderContext {
     pub writing_mode: u8,
     /// Baseline offset in pixels for drawing mode (set by `\pbo`).
     pub baseline_offset: f64,
+    /// Drawing mode level (set by `\p`). 0 = text mode, > 0 = vector drawing.
+    pub drawing_mode: u8,
+    /// ASS border style: 1 = outline+drop shadow, 3 = opaque box.
+    pub border_style: u8,
 }
 
 impl Default for RenderContext {
@@ -203,6 +207,8 @@ impl Default for RenderContext {
             charset: 0,
             writing_mode: 0,
             baseline_offset: 0.0,
+            drawing_mode: 0,
+            border_style: 1,
         }
     }
 }

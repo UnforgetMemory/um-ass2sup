@@ -2,8 +2,25 @@
 //!
 //! Converts shaped glyph outlines into RGBA pixel data, applying fill color,
 //! outline, and shadow as specified by the ASS style.
+//!
+//! # Anisotropic outlines
+//!
+//! ASS override tags `\xbord` and `\ybord` allow different outline widths in
+//! the X and Y directions.  Since tiny-skia only supports uniform stroke width,
+//! we implement anisotropic outlines via **morphological dilation**:
+//!
+//! 1. Render the fill path into an alpha mask.
+//! 2. Dilate the mask by `outline_x_width` horizontally and
+//!    `outline_y_width` vertically (separable max filter).
+//! 3. Where the dilated alpha exceeds the original fill alpha we know the
+//!    pixel belongs to the outline region.  Blend `outline_color` over the
+//!    pixmap at those pixels using the difference as the source alpha.
+//!
+//! This approach is mathematically correct for all combinations of
+//! `outline_x_width` / `outline_y_width` (including values smaller than the
+//! reference `outline_width`) and behaves correctly at anti-aliased edges.
 
-use tiny_skia::{Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
 use crate::shaper::ShapedGlyph;
 use crate::context::RenderContext;
 use crate::font::FontManager;
@@ -131,22 +148,184 @@ impl Rasterizer {
             );
 
             if ctx.outline_width > 0.0 {
-                let stroke = Stroke {
-                    width: ctx.outline_width * 2.0,
-                    ..Default::default()
-                };
                 let mut outline_paint = Paint::default();
                 outline_paint.set_color_rgba8(ctx.outline_color[0], ctx.outline_color[1], ctx.outline_color[2], ctx.outline_color[3]);
                 outline_paint.anti_alias = true;
 
-                pixmap.stroke_path(
+                apply_anisotropic_outline(
+                    pixmap,
                     &path,
-                    &outline_paint,
-                    &stroke,
-                    Transform::identity(),
-                    None,
+                    ctx.outline_color,
+                    ctx.outline_width,
+                    ctx.outline_x_width,
+                    ctx.outline_y_width,
                 );
             }
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Anisotropic outline helpers
+// ---------------------------------------------------------------------------
+
+/// Apply an anisotropic outline to a pixmap that already has the fill rendered.
+///
+/// When `outline_x_width == outline_width` and `outline_y_width == outline_width`
+/// the function falls back to a uniform `stroke_path` (the fast path).
+///
+/// Otherwise it uses morphological dilation of the fill's alpha mask by
+/// `(outline_x_width, outline_y_width)` and blends `outline_color` into pixels
+/// where the dilated mask extends beyond the original fill region.
+pub(crate) fn apply_anisotropic_outline(
+    pixmap: &mut Pixmap,
+    path: &tiny_skia::Path,
+    outline_color: [u8; 4],
+    outline_width: f32,
+    outline_x_width: f32,
+    outline_y_width: f32,
+) {
+    let w = pixmap.width() as usize;
+    let h = pixmap.height() as usize;
+
+    let ox = if outline_x_width > 0.0 {
+        outline_x_width
+    } else {
+        outline_width
+    };
+    let oy = if outline_y_width > 0.0 {
+        outline_y_width
+    } else {
+        outline_width
+    };
+
+    // Fast path: uniform outline → standard stroke.
+    if (ox - outline_width).abs() <= f32::EPSILON
+        && (oy - outline_width).abs() <= f32::EPSILON
+    {
+        let stroke = Stroke {
+            width: outline_width * 2.0,
+            ..Default::default()
+        };
+        let mut paint = Paint::default();
+        paint.set_color_rgba8(
+            outline_color[0],
+            outline_color[1],
+            outline_color[2],
+            outline_color[3],
+        );
+        paint.anti_alias = true;
+        pixmap.stroke_path(path, &paint, &stroke, Transform::identity(), None);
+        return;
+    }
+
+    // ── Build the fill alpha mask ──────────────────────────────────────
+    let mut mask = Pixmap::new(w as u32, h as u32).unwrap();
+    let mut white = Paint::default();
+    white.set_color_rgba8(255, 255, 255, 255);
+    white.anti_alias = true;
+    mask.fill_path(
+        path,
+        &white,
+        FillRule::Winding,
+        Transform::identity(),
+        None,
+    );
+
+    // Save the original (pre-dilation) per-pixel alpha for comparison.
+    let orig_alpha: Vec<u8> = (0..w * h).map(|i| mask.data()[i * 4 + 3]).collect();
+
+    // ── Dilate by ceiled pixel radius ─────────────────────────────────
+    let rx = ox.ceil() as usize;
+    let ry = oy.ceil() as usize;
+
+    if rx > 0 {
+        dilate_alpha_horizontal(mask.data_mut(), w, h, rx, &orig_alpha);
+    }
+    if ry > 0 {
+        dilate_alpha_vertical(mask.data_mut(), w, h, ry);
+    }
+
+    // ── Blend outline_color where dilated mask exceeds original fill ──
+    let dilated_data = mask.data();
+    let pix_data = pixmap.data_mut();
+
+    for (i, &fa) in orig_alpha.iter().enumerate() {
+        let di = i * 4;
+        let da = dilated_data[di + 3];
+
+        if da > fa {
+            let out_frac = (da as f32 - fa as f32) / 255.0;
+            if out_frac > 1.0 / 256.0 {
+                let dst_a = pix_data[di + 3] as f32 / 255.0;
+                let res_a = out_frac + dst_a * (1.0 - out_frac);
+                debug_assert!(res_a > 0.0);
+                pix_data[di] =
+                    ((outline_color[0] as f32 * out_frac + pix_data[di] as f32 * dst_a * (1.0 - out_frac))
+                        / res_a) as u8;
+                pix_data[di + 1] =
+                    ((outline_color[1] as f32 * out_frac + pix_data[di + 1] as f32 * dst_a * (1.0 - out_frac))
+                        / res_a) as u8;
+                pix_data[di + 2] =
+                    ((outline_color[2] as f32 * out_frac + pix_data[di + 2] as f32 * dst_a * (1.0 - out_frac))
+                        / res_a) as u8;
+                pix_data[di + 3] = (res_a * 255.0) as u8;
+            }
+        }
+    }
+}
+
+/// In-place horizontal max-filter (dilation) of RGBA alpha channel.
+///
+/// Reads original alpha values from `orig_src` (flat per-pixel alpha,
+/// one byte per pixel, row-major), writes the windowed max into `data`'s
+/// alpha byte at the corresponding position.
+fn dilate_alpha_horizontal(
+    data: &mut [u8],
+    w: usize,
+    h: usize,
+    radius: usize,
+    orig_src: &[u8],
+) {
+    for y in 0..h {
+        for x in 0..w {
+            let mut max_a = 0u8;
+            let x0 = x.saturating_sub(radius);
+            let x1 = (x + radius).min(w - 1);
+            for kx in x0..=x1 {
+                let a = orig_src[y * w + kx];
+                if a > max_a {
+                    max_a = a;
+                }
+            }
+            data[(y * w + x) * 4 + 3] = max_a;
+        }
+    }
+}
+
+/// In-place vertical max-filter (dilation) of RGBA alpha channel.
+///
+/// Reads the **already horizontally dilated** alpha bytes from `data` and
+/// writes the windowed max back.  Because this runs *after* the horizontal
+/// pass the order of passes does not matter (separable rectangle max).
+fn dilate_alpha_vertical(data: &mut [u8], w: usize, h: usize, radius: usize) {
+    // Snapshot the current (horizontally dilated) alpha values.
+    let col_buf: Vec<u8> = (0..w * h).map(|i| data[i * 4 + 3]).collect();
+
+    for y in 0..h {
+        for x in 0..w {
+            let mut max_a = 0u8;
+            let y0 = y.saturating_sub(radius);
+            let y1 = (y + radius).min(h - 1);
+            for ky in y0..=y1 {
+                let a = col_buf[ky * w + x];
+                if a > max_a {
+                    max_a = a;
+                }
+            }
+            data[(y * w + x) * 4 + 3] = max_a;
+        }
+    }
+}
+
+

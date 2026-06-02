@@ -1,3 +1,5 @@
+use wide::f32x4;
+
 /// 2D affine transform using a 2x3 matrix.
 ///
 /// Supports rotation, scaling, translation, and shear operations for subtitle
@@ -209,13 +211,23 @@ impl AffineTransform {
                 let w11 = fx * fy;
 
                 let dst_idx = ((dy * dst_w + dx) * 4) as usize;
-                for c in 0..4 {
-                    let val = s00[c] as f32 * w00
-                        + s10[c] as f32 * w10
-                        + s01[c] as f32 * w01
-                        + s11[c] as f32 * w11;
-                    dst[dst_idx + c] = val.round().clamp(0.0, 255.0) as u8;
-                }
+
+                // SIMD: process all 4 RGBA channels in parallel with f32x4
+                let s00_v = f32x4::from([s00[0] as f32, s00[1] as f32, s00[2] as f32, s00[3] as f32]);
+                let s10_v = f32x4::from([s10[0] as f32, s10[1] as f32, s10[2] as f32, s10[3] as f32]);
+                let s01_v = f32x4::from([s01[0] as f32, s01[1] as f32, s01[2] as f32, s01[3] as f32]);
+                let s11_v = f32x4::from([s11[0] as f32, s11[1] as f32, s11[2] as f32, s11[3] as f32]);
+
+                let result = s00_v * f32x4::splat(w00)
+                    + s10_v * f32x4::splat(w10)
+                    + s01_v * f32x4::splat(w01)
+                    + s11_v * f32x4::splat(w11);
+
+                let arr = result.to_array();
+                dst[dst_idx] = arr[0].round().clamp(0.0, 255.0) as u8;
+                dst[dst_idx + 1] = arr[1].round().clamp(0.0, 255.0) as u8;
+                dst[dst_idx + 2] = arr[2].round().clamp(0.0, 255.0) as u8;
+                dst[dst_idx + 3] = arr[3].round().clamp(0.0, 255.0) as u8;
             }
         }
 
@@ -237,5 +249,217 @@ fn sample_pixel(src: &[u8], w: u32, h: u32, x: i32, y: i32) -> [u8; 4] {
 impl Default for AffineTransform {
     fn default() -> Self {
         Self::identity()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Scalar reference implementation of apply_to_pixmap for verifying
+    /// that the SIMD-optimized version produces bit-identical results.
+    fn apply_to_pixmap_scalar(
+        t: &AffineTransform,
+        src: &[u8],
+        src_w: u32,
+        src_h: u32,
+        dst_w: u32,
+        dst_h: u32,
+    ) -> Vec<u8> {
+        let inv = match t.inverse() {
+            Some(t) => t,
+            None => return vec![0u8; (dst_w * dst_h * 4) as usize],
+        };
+
+        let mut dst = vec![0u8; (dst_w * dst_h * 4) as usize];
+        let src_w_f = src_w as f32;
+        let src_h_f = src_h as f32;
+
+        for dy in 0..dst_h {
+            for dx in 0..dst_w {
+                let (sx, sy) = inv.apply(dx as f32 + 0.5, dy as f32 + 0.5);
+                let sx = sx - 0.5;
+                let sy = sy - 0.5;
+
+                if sx < -1.0 || sy < -1.0 || sx >= src_w_f || sy >= src_h_f {
+                    continue;
+                }
+
+                let x0 = sx.floor() as i32;
+                let y0 = sy.floor() as i32;
+                let x1 = x0 + 1;
+                let y1 = y0 + 1;
+
+                let fx = sx - x0 as f32;
+                let fy = sy - y0 as f32;
+
+                let s00 = sample_pixel(src, src_w, src_h, x0, y0);
+                let s10 = sample_pixel(src, src_w, src_h, x1, y0);
+                let s01 = sample_pixel(src, src_w, src_h, x0, y1);
+                let s11 = sample_pixel(src, src_w, src_h, x1, y1);
+
+                let w00 = (1.0 - fx) * (1.0 - fy);
+                let w10 = fx * (1.0 - fy);
+                let w01 = (1.0 - fx) * fy;
+                let w11 = fx * fy;
+
+                let dst_idx = ((dy * dst_w + dx) * 4) as usize;
+                for c in 0..4 {
+                    let val = s00[c] as f32 * w00
+                        + s10[c] as f32 * w10
+                        + s01[c] as f32 * w01
+                        + s11[c] as f32 * w11;
+                    dst[dst_idx + c] = val.round().clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+
+        dst
+    }
+
+    #[test]
+    fn simd_matches_scalar_identity() {
+        let w = 8u32;
+        let h = 8u32;
+        let mut src = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let idx = ((y * w + x) * 4) as usize;
+                src[idx] = ((x * 32) % 256) as u8;
+                src[idx + 1] = ((y * 32) % 256) as u8;
+                src[idx + 2] = (x * y) as u8;
+                src[idx + 3] = if (x + y) % 2 == 0 { 255 } else { 128 };
+            }
+        }
+
+        let t = AffineTransform::identity();
+        let simd_result = t.apply_to_pixmap(&src, w, h, w, h);
+        let scalar_result = apply_to_pixmap_scalar(&t, &src, w, h, w, h);
+        assert_eq!(simd_result, scalar_result, "identity transform failed");
+    }
+
+    #[test]
+    fn simd_matches_scalar_translate() {
+        let w = 8u32;
+        let h = 8u32;
+        let mut src = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let idx = ((y * w + x) * 4) as usize;
+                src[idx] = 255;
+                src[idx + 1] = 128;
+                src[idx + 2] = 64;
+                src[idx + 3] = 255;
+            }
+        }
+
+        let t = AffineTransform::translate(2.5, 1.5);
+        let simd_result = t.apply_to_pixmap(&src, w, h, w, h);
+        let scalar_result = apply_to_pixmap_scalar(&t, &src, w, h, w, h);
+        assert_eq!(simd_result, scalar_result, "translate transform failed");
+    }
+
+    #[test]
+    fn simd_matches_scalar_rotate() {
+        let w = 8u32;
+        let h = 8u32;
+        let mut src = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let idx = ((y * w + x) * 4) as usize;
+                src[idx] = 255;
+                src[idx + 1] = 255;
+                src[idx + 2] = 255;
+                src[idx + 3] = 255;
+            }
+        }
+
+        let t = AffineTransform::rotate_at(30.0, 3.5, 3.5);
+        let simd_result = t.apply_to_pixmap(&src, w, h, w, h);
+        let scalar_result = apply_to_pixmap_scalar(&t, &src, w, h, w, h);
+        assert_eq!(simd_result, scalar_result, "rotate transform failed");
+    }
+
+    #[test]
+    fn simd_matches_scalar_scale() {
+        let w = 4u32;
+        let h = 4u32;
+        let mut src = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let idx = ((y * w + x) * 4) as usize;
+                src[idx] = 255;
+                src[idx + 1] = 255;
+                src[idx + 2] = 255;
+                src[idx + 3] = 255;
+            }
+        }
+
+        let t = AffineTransform::scale(2.0, 2.0);
+        let simd_result = t.apply_to_pixmap(&src, w, h, 8, 8);
+        let scalar_result = apply_to_pixmap_scalar(&t, &src, w, h, 8, 8);
+        assert_eq!(simd_result, scalar_result, "scale transform failed");
+    }
+
+    #[test]
+    fn simd_matches_scalar_complex() {
+        let w = 6u32;
+        let h = 6u32;
+        let mut src = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let idx = ((y * w + x) * 4) as usize;
+                src[idx] = (x * 51) as u8;
+                src[idx + 1] = (y * 51) as u8;
+                src[idx + 2] = 128;
+                src[idx + 3] = if x == 0 || y == 0 { 64 } else { 255 };
+            }
+        }
+
+        let t = AffineTransform::rotate_at(45.0, 2.5, 2.5)
+            .then(&AffineTransform::scale(1.5, 1.5))
+            .then(&AffineTransform::shear(0.1, 0.0));
+        let simd_result = t.apply_to_pixmap(&src, w, h, w, h);
+        let scalar_result = apply_to_pixmap_scalar(&t, &src, w, h, w, h);
+        assert_eq!(simd_result, scalar_result, "complex transform failed");
+    }
+
+    #[test]
+    fn simd_matches_scalar_out_of_bounds() {
+        let w = 4u32;
+        let h = 4u32;
+        let src = vec![255u8; (w * h * 4) as usize];
+
+        let t = AffineTransform::translate(100.0, 100.0);
+        let simd_result = t.apply_to_pixmap(&src, w, h, w, h);
+        let scalar_result = apply_to_pixmap_scalar(&t, &src, w, h, w, h);
+        assert_eq!(simd_result, scalar_result, "out-of-bounds transform failed");
+        assert!(
+            simd_result.iter().all(|&b| b == 0),
+            "all pixels should be transparent"
+        );
+    }
+
+    #[test]
+    fn simd_matches_scalar_non_square() {
+        let src_w = 10u32;
+        let src_h = 6u32;
+        let dst_w = 12u32;
+        let dst_h = 8u32;
+        let mut src = vec![0u8; (src_w * src_h * 4) as usize];
+        for y in 0..src_h {
+            for x in 0..src_w {
+                let idx = ((y * src_w + x) * 4) as usize;
+                src[idx] = ((x * 25) % 256) as u8;
+                src[idx + 1] = ((y * 40) % 256) as u8;
+                src[idx + 2] = 100;
+                src[idx + 3] = 200;
+            }
+        }
+
+        let t = AffineTransform::rotate_at(15.0, 5.0, 3.0);
+        let simd_result = t.apply_to_pixmap(&src, src_w, src_h, dst_w, dst_h);
+        let scalar_result = apply_to_pixmap_scalar(&t, &src, src_w, src_h, dst_w, dst_h);
+        assert_eq!(simd_result, scalar_result, "non-square transform failed");
     }
 }

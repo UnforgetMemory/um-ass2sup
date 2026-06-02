@@ -1,4 +1,5 @@
 use super::timestamp::Timestamp;
+use super::effect::Effect;
 use super::event::{Event, EventType};
 use super::color::AssColor;
 use super::style::Style;
@@ -51,7 +52,7 @@ pub fn parse_srt(content: &str) -> Result<AssFile, ParseError> {
             margin_l: 0,
             margin_r: 0,
             margin_v: 0,
-            effect: String::new(),
+            effect: Effect::None,
             text: convert_srt_tags(&text),
             override_tags: Vec::new(),
             karaoke_segments: Vec::new(),

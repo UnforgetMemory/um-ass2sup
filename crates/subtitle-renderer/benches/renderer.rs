@@ -1,10 +1,15 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ass_parser::{AssFile, Event, EventType, Timestamp};
+use ass_parser::{AssFile, Effect, Event, EventType, Timestamp};
 use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
 use tiny_skia::Pixmap;
 use subtitle_renderer::{
-    apply_gaussian_blur, AffineTransform, RenderConfig, Renderer, Shaper,
+    apply_gaussian_blur, apply_shadow, composite_over,
+    AffineTransform, RenderConfig, Renderer, Shaper,
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 /// Minimal ASS file with a single "Hello World" dialogue line.
 fn simple_ass() -> AssFile {
@@ -61,7 +66,7 @@ fn karaoke_ass() -> AssFile {
         margin_l: 0,
         margin_r: 0,
         margin_v: 0,
-        effect: String::new(),
+        effect: Effect::None,
         text: "{\\kf1000}Hel{\\kf500}lo {\\kf800}Wor{\\kf600}ld".into(),
         override_tags: vec![],
         karaoke_segments: vec![
@@ -74,6 +79,49 @@ fn karaoke_ass() -> AssFile {
     });
     ass
 }
+
+/// Build an ASS file with `count` simultaneous dialogue events (same timestamp).
+fn multi_event_ass(count: usize) -> AssFile {
+    let mut content = String::from(
+        "[Script Info]\n\
+         Title: Event Scaling Bench\n\
+         PlayResX: 1920\n\
+         PlayResY: 1080\n\
+         \n\
+         [V4+ Styles]\n\
+         Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, \
+         OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, \
+         ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, \
+         Alignment, MarginL, MarginR, MarginV, Encoding\n\
+         Style: Default,Arial,40,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,\
+         0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1\n\
+         \n\
+         [Events]\n\
+         Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",
+    );
+    for i in 0..count {
+        let layer = i % 10;
+        content.push_str(&format!(
+            "Dialogue: {layer},0:00:01.00,0:00:05.00,Default,,0,0,0,,Line {}: \
+             The quick brown fox jumps over the lazy dog.\n",
+            i + 1,
+        ));
+    }
+    AssFile::parse(&content).expect("multi-event ASS parse")
+}
+
+/// Load an ASS fixture from the crate's test fixture directory.
+fn load_fixture(name: &str) -> Option<AssFile> {
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures");
+    let path = base.join(name);
+    AssFile::parse_file(&path).ok()
+}
+
+// ---------------------------------------------------------------------------
+// End-to-end pipeline benchmarks
+// ---------------------------------------------------------------------------
 
 fn bench_render_simple(c: &mut Criterion) {
     let ass = simple_ass();
@@ -112,6 +160,46 @@ fn bench_render_karaoke(c: &mut Criterion) {
     });
 }
 
+fn bench_end_to_end_fixture(c: &mut Criterion) {
+    let ass = match load_fixture("writing_mode.ass") {
+        Some(a) => a,
+        None => {
+            eprintln!("SKIP: writing_mode.ass fixture not found");
+            return;
+        }
+    };
+
+    let config = RenderConfig {
+        width: 1920,
+        height: 1080,
+        script_width: 1920,
+        script_height: 1080,
+        ..RenderConfig::default()
+    };
+    let renderer = Renderer::new(config);
+
+    // Ten timestamps covering events at 1 s, 5 s, and 9 s (with gaps for misses).
+    let timestamps: [u64; 10] = [1000, 1500, 3000, 4500, 5000, 5500, 7000, 9000, 9500, 11000];
+
+    let mut group = c.benchmark_group("end_to_end");
+    group.measurement_time(std::time::Duration::from_secs(10));
+    group.sample_size(20);
+
+    group.bench_function("render_10_frames_writing_mode", |b| {
+        b.iter(|| {
+            for &ts in &timestamps {
+                black_box(renderer.render_ass(black_box(&ass), black_box(ts)));
+            }
+        });
+    });
+
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// Per-component benchmarks
+// ---------------------------------------------------------------------------
+
 fn bench_text_shape(c: &mut Criterion) {
     let config = RenderConfig::default();
     let renderer = Renderer::new(config);
@@ -142,7 +230,7 @@ fn bench_text_shape(c: &mut Criterion) {
 }
 
 fn bench_blur(c: &mut Criterion) {
-    // Create a 320x180 pixmap with some content
+    // Create a 320×180 pixmap with some content
     let mut pixmap = Pixmap::new(320, 180).unwrap();
     let data = pixmap.data_mut();
     for y in 0..180u32 {
@@ -157,9 +245,12 @@ fn bench_blur(c: &mut Criterion) {
         }
     }
 
-    let mut group = c.benchmark_group("blur_320x180");
-    for radius in [1.0, 3.0, 5.0, 10.0] {
-        group.bench_function(format!("radius_{:.0}", radius), |b| {
+    let mut group = c.benchmark_group("apply_gaussian_blur");
+    group.measurement_time(std::time::Duration::from_secs(5));
+    group.sample_size(20);
+
+    for radius in [1.0f32, 5.0, 10.0] {
+        group.bench_function(format!("radius_{}", radius as u32), |b| {
             b.iter_batched(
                 || pixmap.clone(),
                 |mut pm| {
@@ -189,7 +280,16 @@ fn bench_transform(c: &mut Criterion) {
     }
     let src = pixmap.data().to_vec();
 
-    let mut group = c.benchmark_group("transform_320x180");
+    let mut group = c.benchmark_group("apply_to_pixmap");
+    group.measurement_time(std::time::Duration::from_secs(5));
+    group.sample_size(20);
+
+    group.bench_function("translate_10_10", |b| {
+        let t = AffineTransform::translate(10.0, 10.0);
+        b.iter(|| {
+            black_box(t.apply_to_pixmap(black_box(&src), 320, 180, 320, 180));
+        });
+    });
 
     group.bench_function("rotate_45deg", |b| {
         let t = AffineTransform::rotate_at(45.0, 160.0, 90.0);
@@ -217,13 +317,217 @@ fn bench_transform(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_shadow(c: &mut Criterion) {
+    let w = 320u32;
+    let h = 180u32;
+    let mut src = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let idx = ((y * w + x) * 4) as usize;
+            if x >= 80 && x < 240 && y >= 40 && y < 140 {
+                src[idx] = 255;
+                src[idx + 1] = 255;
+                src[idx + 2] = 255;
+                src[idx + 3] = 255;
+            }
+        }
+    }
+
+    let mut group = c.benchmark_group("apply_shadow");
+    group.measurement_time(std::time::Duration::from_secs(5));
+    group.sample_size(20);
+
+    for (ox, oy) in [(-5.0f32, -5.0), (2.0, 2.0), (8.0, 8.0)] {
+        group.bench_function(format!("offset_{}_{}", ox as i32, oy as i32), |b| {
+            b.iter(|| {
+                black_box(apply_shadow(
+                    black_box(&src),
+                    w,
+                    h,
+                    black_box(ox),
+                    black_box(oy),
+                    black_box(0.0),
+                    black_box([0, 0, 0, 128]),
+                ));
+            });
+        });
+    }
+
+    group.bench_function("blurred_shadow_radius_5", |b| {
+        b.iter(|| {
+            black_box(apply_shadow(
+                black_box(&src),
+                w,
+                h,
+                black_box(2.0),
+                black_box(2.0),
+                black_box(5.0),
+                black_box([0, 0, 0, 128]),
+            ));
+        });
+    });
+
+    group.finish();
+}
+
+fn bench_composite(c: &mut Criterion) {
+    let mut group = c.benchmark_group("composite_over");
+    group.measurement_time(std::time::Duration::from_secs(5));
+    group.sample_size(20);
+
+    for (w, h, label) in [
+        (64u32, 32u32, "64x32"),
+        (320u32, 180u32, "320x180"),
+        (640u32, 360u32, "640x360"),
+    ] {
+        // Semi-transparent source
+        let mut src = vec![0u8; (w * h * 4) as usize];
+        for i in 0..(w * h) as usize {
+            let idx = i * 4;
+            src[idx] = 255;
+            src[idx + 1] = 128;
+            src[idx + 2] = 64;
+            src[idx + 3] = 180;
+        }
+        // Opaque dark destination
+        let dst = vec![32u8; (w * h * 4) as usize];
+
+        group.bench_function(label, |b| {
+            b.iter_batched(
+                || dst.clone(),
+                |mut d| composite_over(&mut d, black_box(&src), w, h),
+                criterion::BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// Sub-region vs full-frame benchmark
+// ---------------------------------------------------------------------------
+
+fn bench_subregion_vs_fullframe(c: &mut Criterion) {
+    // Sub-region eligible: no rotation, no clip, no shear.
+    let sub_text = "Hello World This Text Uses Sub Region Optimization";
+
+    // Full-frame forced: a small rotation disables the sub-region path.
+    let full_text = "{\\frz2}Hello World This Text Uses Full Frame Rendering";
+
+    let ass_content = format!(
+        "\
+[Script Info]
+Title: SubRegion Bench
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, \
+OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, \
+ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, \
+Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,\
+0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{sub}
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{full}
+",
+        sub = sub_text,
+        full = full_text,
+    );
+    let ass = AssFile::parse(&ass_content).expect("sub-region ASS parse");
+
+    let config = RenderConfig::default();
+    let renderer = Renderer::new(config);
+
+    let mut group = c.benchmark_group("subregion_vs_fullframe");
+    group.sample_size(20);
+
+    group.bench_function("sub_region", |b| {
+        b.iter(|| {
+            black_box(renderer.render_ass(black_box(&ass), 2000));
+        });
+    });
+    group.finish();
+
+    // Build a separate ASS with only the full-frame event for a fair isolated comparison.
+    let full_content = format!(
+        "\
+[Script Info]
+Title: FullFrame Bench
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, \
+OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, \
+ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, \
+Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,\
+0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{full}
+",
+        full = full_text,
+    );
+    let full_ass = AssFile::parse(&full_content).expect("full-frame ASS parse");
+
+    let mut group = c.benchmark_group("subregion_vs_fullframe");
+    group.sample_size(20);
+
+    group.bench_function("full_frame", |b| {
+        b.iter(|| {
+            black_box(renderer.render_ass(black_box(&full_ass), 2000));
+        });
+    });
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// Event scaling benchmark
+// ---------------------------------------------------------------------------
+
+fn bench_event_scaling(c: &mut Criterion) {
+    let config = RenderConfig::default();
+    let renderer = Renderer::new(config);
+
+    let mut group = c.benchmark_group("event_scaling");
+    group.sample_size(20);
+
+    for count in [1usize, 5, 20] {
+        let ass = multi_event_ass(count);
+        group.bench_function(format!("{}_simultaneous_events", count), |b| {
+            b.iter(|| {
+                black_box(renderer.render_ass(black_box(&ass), 3000));
+            });
+        });
+    }
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// Criterion plumbing
+// ---------------------------------------------------------------------------
+
 criterion_group!(
     benches,
+    // End-to-end
     bench_render_simple,
     bench_render_complex,
     bench_render_karaoke,
+    bench_end_to_end_fixture,
+    // Per-component
     bench_text_shape,
     bench_blur,
     bench_transform,
+    bench_shadow,
+    bench_composite,
+    // Comparison
+    bench_subregion_vs_fullframe,
+    bench_event_scaling,
 );
 criterion_main!(benches);

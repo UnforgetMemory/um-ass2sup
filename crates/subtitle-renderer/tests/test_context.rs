@@ -1,5 +1,9 @@
-use ass_parser::{Event, EventType, OverrideTag, Style, Timestamp, AssColor};
+use ass_parser::{AssFile, Effect, Event, EventType, OverrideTag, Style, Timestamp, AssColor};
 use subtitle_renderer::{RenderConfig, RenderContext, Renderer, alignment_to_pos, strip_override_blocks};
+
+fn default_ass() -> AssFile {
+    AssFile::new()
+}
 
 fn default_event() -> Event {
     Event {
@@ -12,7 +16,7 @@ fn default_event() -> Event {
         margin_l: 0,
         margin_r: 0,
         margin_v: 0,
-        effect: String::new(),
+        effect: Effect::None,
         text: "Hello".to_string(),
         override_tags: Vec::new(),
         karaoke_segments: Vec::new(),
@@ -129,11 +133,11 @@ fn test_build_context_pos_tag() {
     event.override_tags = vec![OverrideTag::Pos { x: 100.0, y: 200.0 }];
     let style = Style::default();
     // \pos sets fixed position — no time interpolation
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.x, 100.0);
     assert_eq!(ctx.y, 200.0);
     // Same position at different timestamps
-    let ctx2 = renderer.build_context(&event, &style, 500, 0, 5000);
+    let ctx2 = renderer.build_context(&event, &style, &default_ass(), 500, 0, 5000);
     assert_eq!(ctx2.x, 100.0);
     assert_eq!(ctx2.y, 200.0);
 }
@@ -147,11 +151,11 @@ fn test_build_context_move_tag() {
     }];
     let style = Style::default();
     // At t=2500, move t2=1000 => animation complete => end position
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.x, 300.0);
     assert_eq!(ctx.y, 400.0);
     // At t=500 (between t1=0 and t2=1000) => interpolated position
-    let ctx_mid = renderer.build_context(&event, &style, 500, 0, 5000);
+    let ctx_mid = renderer.build_context(&event, &style, &default_ass(), 500, 0, 5000);
     assert!(ctx_mid.x > 50.0 && ctx_mid.x < 300.0);
     assert!(ctx_mid.y > 60.0 && ctx_mid.y < 400.0);
 }
@@ -162,7 +166,7 @@ fn test_build_context_clip_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Clip { x1: 10.0, y1: 20.0, x2: 100.0, y2: 200.0 }];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.clip_enabled);
     assert_eq!(ctx.clip_x1, 10.0);
     assert_eq!(ctx.clip_y1, 20.0);
@@ -176,7 +180,7 @@ fn test_build_context_clip_inverse_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::ClipInverse { x1: 5.0, y1: 15.0, x2: 95.0, y2: 195.0 }];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.clip_enabled);
     assert_eq!(ctx.clip_x1, 5.0);
     assert_eq!(ctx.clip_y1, 15.0);
@@ -190,7 +194,7 @@ fn test_build_context_scale_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Scale { x: 150.0, y: 80.0 }];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.scale_x, 150.0);
     assert_eq!(ctx.scale_y, 80.0);
 }
@@ -201,7 +205,7 @@ fn test_build_context_rotation_z_only() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Rotation { x: 0.0, y: 0.0, z: 45.0 }];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.rotation, 45.0);
     assert_eq!(ctx.origin_x, 0.0);
     assert_eq!(ctx.origin_y, 0.0);
@@ -216,7 +220,7 @@ fn test_build_context_rotation_with_origin() {
         OverrideTag::Origin { x: 100.0, y: 200.0 },
     ];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.rotation, 90.0);
     assert_eq!(ctx.origin_x, 100.0, "Origin x scaled by width/script_width (1920/1920=1.0)");
     assert_eq!(ctx.origin_y, 200.0, "Origin y scaled by height/script_height (1080/1080=1.0)");
@@ -228,7 +232,7 @@ fn test_build_context_blur_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Blur(5.0)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.blur, 5.0);
 }
 
@@ -238,7 +242,7 @@ fn test_build_context_gaussian_blur_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::GaussianBlur(3.0)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.blur, 3.0);
 }
 
@@ -248,7 +252,7 @@ fn test_build_context_shadow_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Shadow(4.0)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.shadow_depth, 4.0);
 }
 
@@ -261,7 +265,7 @@ fn test_build_context_shadow_xy_tags() {
         OverrideTag::ShadowY(7.0),
     ];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.shadow_x, 3.0, "ShadowX sets shadow_x");
     assert_eq!(ctx.shadow_y, 7.0, "ShadowY sets shadow_y");
     assert_eq!(ctx.shadow_depth, 2.0, "ShadowDepth stays at style default");
@@ -276,7 +280,7 @@ fn test_build_context_border_xy_tags() {
         OverrideTag::BorderY(4.0),
     ];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.outline_x_width, 1.5, "BorderX sets outline_x_width");
     assert_eq!(ctx.outline_y_width, 4.0, "BorderY sets outline_y_width");
     assert_eq!(ctx.outline_width, 2.0, "outline_width stays at style default");
@@ -288,7 +292,7 @@ fn test_build_context_alpha_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Alpha { value: 128 }];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     let expected = 255 - 128;
     assert_eq!(ctx.primary_color[3], expected);
     assert_eq!(ctx.secondary_color[3], expected);
@@ -302,7 +306,7 @@ fn test_build_context_primary_alpha_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::PrimaryAlpha { value: 100 }];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.primary_color[3], 255 - 100);
     assert_eq!(ctx.secondary_color[3], 255, "other colors unaffected");
 }
@@ -313,7 +317,7 @@ fn test_build_context_wrap_style_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::WrapStyle(2)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.wrap_style, 2);
 }
 
@@ -323,7 +327,7 @@ fn test_build_context_underline_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Underline(true)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.underline);
 }
 
@@ -333,7 +337,7 @@ fn test_build_context_strikeout_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Strikeout(true)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.strikeout);
 }
 
@@ -349,7 +353,7 @@ fn test_build_context_font_size_scaling() {
     let renderer = Renderer::new(config);
     let event = default_event();
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     let expected = style.font_size as f32 * 540.0 / 1080.0;
     assert!((ctx.font_size - expected).abs() < 0.01);
 }
@@ -369,7 +373,7 @@ fn test_build_context_margin_scaling() {
     event.margin_r = 40;
     event.margin_v = 30;
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!((ctx.margin_l - 10.0).abs() < 0.01);
     assert!((ctx.margin_r - 20.0).abs() < 0.01);
     assert!((ctx.margin_v - 15.0).abs() < 0.01);
@@ -381,7 +385,7 @@ fn test_build_context_alignment_sets_position() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::AlignmentNumpad(7)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.alignment, 7);
     assert!((ctx.x - ctx.margin_l).abs() < 0.01, "alignment 7 should be left-aligned");
     assert!((ctx.y - ctx.margin_v).abs() < 0.01, "alignment 7 should be top-aligned");
@@ -392,7 +396,7 @@ fn test_build_context_no_pos_alignment_computed() {
     let renderer = default_renderer();
     let event = default_event();
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.alignment, 2);
     let expected_x = ctx.margin_l + 0.5 * (1920.0 - ctx.margin_l - ctx.margin_r);
     let expected_y = ctx.margin_v + 1.0 * (1080.0 - ctx.margin_v * 2.0);
@@ -409,7 +413,7 @@ fn test_build_context_font_name_and_size_override() {
         OverrideTag::FontSize(72.0),
     ];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.font_name, "Courier");
     assert_eq!(ctx.font_size, 72.0);
 }
@@ -423,7 +427,7 @@ fn test_build_context_bold_and_italic_override() {
         OverrideTag::Italic(true),
     ];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.bold);
     assert!(ctx.italic);
 }
@@ -434,12 +438,12 @@ fn test_build_context_bold_weight_threshold() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::BoldWeight(700)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.bold, "weight 700 should be bold");
 
     let mut event2 = default_event();
     event2.override_tags = vec![OverrideTag::BoldWeight(400)];
-    let ctx2 = renderer.build_context(&event2, &style, 1000, 0, 5000);
+    let ctx2 = renderer.build_context(&event2, &style, &default_ass(), 1000, 0, 5000);
     assert!(!ctx2.bold, "weight 400 should not be bold");
 }
 
@@ -454,7 +458,7 @@ fn test_build_context_color_overrides() {
         OverrideTag::SecondaryColor(green),
     ];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.primary_color, [255, 0, 0, 255]);
     assert_eq!(ctx.secondary_color, [0, 255, 0, 255]);
 }
@@ -465,7 +469,7 @@ fn test_build_context_spacing_tag() {
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Spacing(5.0)];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.spacing, 5.0);
 }
 
@@ -485,7 +489,7 @@ fn test_build_context_multiple_tags() {
         OverrideTag::Clip { x1: 10.0, y1: 20.0, x2: 500.0, y2: 400.0 },
     ];
     let style = Style::default();
-    let ctx = renderer.build_context(&event, &style, 2500, 0, 5000);
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.font_size, 36.0);
     assert!(ctx.bold);
     assert_eq!(ctx.outline_width, 3.0);

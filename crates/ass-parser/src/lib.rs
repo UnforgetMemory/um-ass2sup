@@ -27,6 +27,7 @@
 //! assert_eq!(ass.events.len(), 1);
 //! ```
 pub mod color;
+pub mod effect;
 pub mod error;
 pub mod event;
 pub mod karaoke;
@@ -39,6 +40,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 pub use color::AssColor;
+pub use effect::Effect;
 pub use error::ParseError;
 pub use event::{Event, EventType};
 pub use karaoke::{KaraokeSegment, KaraokeStyle};

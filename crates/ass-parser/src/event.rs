@@ -1,3 +1,4 @@
+use super::effect::{parse_effect, Effect};
 use super::timestamp::Timestamp;
 use super::override_tag::OverrideTag;
 use super::karaoke::KaraokeSegment;
@@ -71,8 +72,8 @@ pub struct Event {
     pub margin_r: u32,
     /// Vertical margin override in pixels (0 = use style default).
     pub margin_v: u32,
-    /// Effect name (e.g., `"Banner;5;0;scroll"` for scrolling text).
-    pub effect: String,
+    /// Effect applied to the subtitle text (banner, scroll, karaoke, or none).
+    pub effect: Effect,
     /// Raw subtitle text including override tag blocks (e.g., `"{\b1}Bold{\b0} normal"`).
     pub text: String,
     /// Parsed override tags extracted from `{\\tag}` blocks in [`text`](Event::text).
@@ -108,7 +109,7 @@ impl Event {
         let margin_l: u32 = parts[5].trim().parse().unwrap_or(0);
         let margin_r: u32 = parts[6].trim().parse().unwrap_or(0);
         let margin_v: u32 = parts[7].trim().parse().unwrap_or(0);
-        let effect = parts[8].trim().to_string();
+        let effect = parse_effect(parts[8]);
         let text = parts[9].trim().to_string();
         let (override_tags, karaoke_segments, raw_override_block) = parse_text_with_tags(&text);
         Ok(Self {
@@ -212,6 +213,27 @@ fn parse_ass_color(s: &str) -> Result<super::color::AssColor, ()> {
     }
 }
 
+/// Splits a string by commas that are NOT inside parentheses.
+/// Needed for `\t(\pos(100,200),0,1000,1)` where the inner tag may contain commas.
+fn split_commas_paren_aware(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0u32;
+    let mut start = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&s[start..]);
+    parts
+}
+
 fn parse_single_tag(s: &str) -> Option<OverrideTag> {
     let s = s.trim();
     if s.is_empty() {
@@ -290,7 +312,7 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
     // \t(tag,duration,accel) or \t(tag,duration) or \t(tag) — transform animation
     if s.starts_with("t(") {
         let inner = s.trim_start_matches("t(").trim_end_matches(')');
-        let parts: Vec<&str> = inner.split(',').collect();
+        let parts: Vec<&str> = split_commas_paren_aware(inner);
         if !parts.is_empty() {
             let tag = parts[0].trim().to_string();
             let t1 = parts.get(1).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
@@ -425,6 +447,13 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
             return Some(OverrideTag::BaselineOffset(v));
         }
     }
+    // \writing_mode(N) — text direction (1=horizontal, 2=vertical-right, 3=vertical-left)
+    if s.starts_with("writing_mode(") {
+        let inner = s.trim_start_matches("writing_mode(").trim_end_matches(')');
+        if let Ok(v) = inner.parse::<u8>() {
+            return Some(OverrideTag::WritingMode(v));
+        }
+    }
     // \1c, \2c, \3c, \4c — color aliases
     for (prefix, variant) in [("1c", "primary"), ("2c", "secondary"), ("3c", "outline"), ("4c", "shadow")] {
         if s.starts_with(prefix) {
@@ -473,4 +502,83 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_writing_mode() {
+        let result = parse_single_tag("writing_mode(2)").unwrap();
+        assert_eq!(result, OverrideTag::WritingMode(2));
+    }
+
+    #[test]
+    fn event_writing_mode_one() {
+        let result = parse_single_tag("writing_mode(1)").unwrap();
+        assert_eq!(result, OverrideTag::WritingMode(1));
+    }
+
+    #[test]
+    fn event_transform_with_paren_inner_tag() {
+        let result = parse_single_tag("t(\\pos(100,200),0,1000,1)").unwrap();
+        assert_eq!(
+            result,
+            OverrideTag::Transform {
+                tag: "\\pos(100,200)".to_string(),
+                t1: 0,
+                t2: 1000,
+                accel: 1.0,
+            }
+        );
+    }
+
+    #[test]
+    fn event_transform_with_simple_tag() {
+        let result = parse_single_tag("t(\\b1,0,500,1)").unwrap();
+        assert_eq!(
+            result,
+            OverrideTag::Transform {
+                tag: "\\b1".to_string(),
+                t1: 0,
+                t2: 500,
+                accel: 1.0,
+            }
+        );
+    }
+
+    #[test]
+    fn event_transform_three_parts() {
+        let result = parse_single_tag("t(\\i1,0,300)").unwrap();
+        assert_eq!(
+            result,
+            OverrideTag::Transform {
+                tag: "\\i1".to_string(),
+                t1: 0,
+                t2: 300,
+                accel: 1.0,
+            }
+        );
+    }
+
+    #[test]
+    fn event_transform_two_parts() {
+        let result = parse_single_tag("t(\\fs20)").unwrap();
+        assert_eq!(
+            result,
+            OverrideTag::Transform {
+                tag: "\\fs20".to_string(),
+                t1: 0,
+                t2: 0,
+                accel: 1.0,
+            }
+        );
+    }
+
+    #[test]
+    fn event_split_commas_paren_aware_nested() {
+        let parts = split_commas_paren_aware("\\clip(10,20,30,40),100,200");
+        assert_eq!(parts, vec!["\\clip(10,20,30,40)", "100", "200"]);
+    }
 }

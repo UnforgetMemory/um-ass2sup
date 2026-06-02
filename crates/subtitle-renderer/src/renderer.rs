@@ -1,12 +1,14 @@
+use std::cell::RefCell;
+
 use ass_parser::{AssFile, Event, OverrideTag, Style, Timestamp};
-use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Stroke, Transform as SkiaTransform};
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Transform as SkiaTransform};
 
 use crate::context::{RenderConfig, RenderContext, RenderedFrame};
 use crate::effects;
 use crate::font::FontManager;
 use crate::karaoke::{KaraokePhase, KaraokeRenderer};
 use ass_parser::karaoke::KaraokeStyle;
-use crate::rasterizer::Rasterizer;
+use crate::rasterizer::{apply_anisotropic_outline, Rasterizer};
 use crate::shaper::{Shaper, ShapedText};
 use crate::transform::AffineTransform;
 
@@ -36,6 +38,36 @@ use crate::transform::AffineTransform;
 pub struct Renderer {
     config: RenderConfig,
     font_manager: FontManager,
+    pixmap_pool: RefCell<PixmapPool>,
+}
+
+/// Reusable pixmap buffer pool to reduce allocations across events.
+struct PixmapPool {
+    pool: Vec<Pixmap>,
+    max_cached: usize,
+}
+
+impl PixmapPool {
+    fn new(max_cached: usize) -> Self {
+        Self { pool: Vec::new(), max_cached }
+    }
+
+    /// Retrieves a pixmap of the given size from the pool, or allocates a new one.
+    fn get(&mut self, w: u32, h: u32) -> Option<Pixmap> {
+        if let Some(pos) = self.pool.iter().position(|p| p.width() == w && p.height() == h) {
+            let mut p = self.pool.remove(pos);
+            p.data_mut().fill(0);
+            return Some(p);
+        }
+        Pixmap::new(w, h)
+    }
+
+    /// Returns a pixmap to the pool for reuse.
+    fn put(&mut self, p: Pixmap) {
+        if self.pool.len() < self.max_cached {
+            self.pool.push(p);
+        }
+    }
 }
 
 /// Shaped-line layout result used to separate glyph layout from rasterization,
@@ -56,6 +88,7 @@ impl Renderer {
         Self {
             config,
             font_manager: fm,
+            pixmap_pool: RefCell::new(PixmapPool::new(8)),
         }
     }
 
@@ -79,15 +112,15 @@ impl Renderer {
         let ts = Timestamp::from_ms(timestamp_ms);
         let mut pixmap = Pixmap::new(self.config.width, self.config.height)?;
 
-        for event in ass.dialogue_events() {
-            if !event.is_visible_at(ts) {
-                continue;
-            }
+        let mut events: Vec<&Event> = ass.dialogue_events().collect();
+        events.retain(|e| e.is_visible_at(ts));
+        events.sort_by_key(|e| e.layer);
 
+        for event in events {
             let style = ass.find_style(&event.style_name).cloned().unwrap_or_default();
             let event_start = event.start.as_ms();
             let event_end = event.end.as_ms();
-            let ctx = self.build_context(event, &style, timestamp_ms, event_start, event_end);
+            let ctx = self.build_context(event, &style, ass, timestamp_ms, event_start, event_end);
 
             self.render_event(&mut pixmap, event, &ctx, timestamp_ms, event_start);
         }
@@ -126,6 +159,7 @@ impl Renderer {
         &self,
         event: &Event,
         style: &Style,
+        ass: &AssFile,
         timestamp_ms: u64,
         event_start_ms: u64,
         event_end_ms: u64,
@@ -145,8 +179,16 @@ impl Renderer {
             margin_l: event.margin_l as f32,
             margin_r: event.margin_r as f32,
             margin_v: event.margin_v as f32,
+            border_style: style.border_style,
             ..Default::default()
         };
+
+        ctx.scale_x = style.scale_x as f32;
+        ctx.scale_y = style.scale_y as f32;
+        ctx.spacing = style.spacing as f32;
+        ctx.underline = style.underline;
+        ctx.strikeout = style.strikeout;
+        ctx.rotation = style.angle as f32;
 
         let res_x = self.config.script_width as f32;
         let res_y = self.config.script_height as f32;
@@ -293,18 +335,30 @@ impl Renderer {
                     );
                 }
                 OverrideTag::Reset(style_name) => {
-                    if style_name.is_empty() {
-                        ctx.font_name = style.font_name.clone();
-                        ctx.font_size = style.font_size as f32 * scale_y;
-                        ctx.bold = style.bold;
-                        ctx.italic = style.italic;
-                        ctx.primary_color = style.primary_color.to_rgba();
-                        ctx.secondary_color = style.secondary_color.to_rgba();
-                        ctx.outline_color = style.outline_color.to_rgba();
-                        ctx.shadow_color = style.shadow_color.to_rgba();
-                        ctx.outline_width = style.outline_width as f32;
-                        ctx.shadow_depth = style.shadow_depth as f32;
-                        ctx.alignment = style.alignment;
+                    let reset_style = if style_name.is_empty() {
+                        Some(style)
+                    } else {
+                        ass.find_style(style_name)
+                    };
+                    if let Some(s) = reset_style {
+                        ctx.font_name = s.font_name.clone();
+                        ctx.font_size = s.font_size as f32 * scale_y;
+                        ctx.bold = s.bold;
+                        ctx.italic = s.italic;
+                        ctx.primary_color = s.primary_color.to_rgba();
+                        ctx.secondary_color = s.secondary_color.to_rgba();
+                        ctx.outline_color = s.outline_color.to_rgba();
+                        ctx.shadow_color = s.shadow_color.to_rgba();
+                        ctx.outline_width = s.outline_width as f32;
+                        ctx.shadow_depth = s.shadow_depth as f32;
+                        ctx.alignment = s.alignment;
+                        ctx.scale_x = s.scale_x as f32;
+                        ctx.scale_y = s.scale_y as f32;
+                        ctx.spacing = s.spacing as f32;
+                        ctx.underline = s.underline;
+                        ctx.strikeout = s.strikeout;
+                        ctx.rotation = s.angle as f32;
+                        ctx.border_style = s.border_style;
                     }
                 }
                 OverrideTag::ResetAll => {
@@ -327,6 +381,9 @@ impl Renderer {
                 }
                 OverrideTag::BaselineOffset(offset) => {
                     ctx.baseline_offset = *offset;
+                }
+                OverrideTag::DrawingMode(level) => {
+                    ctx.drawing_mode = *level;
                 }
                 OverrideTag::Unknown(tag) => {
                     tracing::warn!(tag = %tag, "unrecognized override tag ignored");
@@ -437,10 +494,16 @@ impl Renderer {
         };
 
         // Phase 3: Determine sub-region or full frame.
-        let (ox, oy, lw, lh, use_sub) = if let Some((min_x, min_y, max_x, max_y)) = sub_bbox {
+        // For border_style=3 (opaque box), reduce padding since we skip outline+shadow.
+        let (pad_border, pad_shadow) = if ctx.border_style == 3 {
+            (0.0, 0.0)
+        } else {
             let border = ctx.outline_width.max(ctx.outline_x_width).max(ctx.outline_y_width);
             let shadow = ctx.shadow_depth.max(ctx.shadow_x).max(ctx.shadow_y);
-            let pad = (border * 2.0 + shadow + ctx.blur).max(20.0);
+            (border * 2.0, shadow)
+        };
+        let (ox, oy, lw, lh, use_sub) = if let Some((min_x, min_y, max_x, max_y)) = sub_bbox {
+            let pad = (pad_border + pad_shadow + ctx.blur).max(20.0);
             let ox = (min_x - pad).floor().max(0.0) as u32;
             let oy = (min_y - pad).floor().max(0.0) as u32;
             let lw = ((max_x - min_x) + pad * 2.0).ceil().max(1.0) as u32;
@@ -453,9 +516,39 @@ impl Renderer {
         };
 
         // Phase 4: Allocate layer and render glyphs with sub-region offset.
-        let mut layer = Pixmap::new(lw, lh).unwrap();
+        let mut layer = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
         let oxf = ox as f32;
         let oyf = oy as f32;
+
+        // For border_style=3 (opaque box): fill background with shadow_color (fully opaque)
+        // before rendering glyphs, and suppress outline strokes in the rasterizer.
+        let render_ctx = if ctx.border_style == 3 {
+            // Fill entire layer with opaque shadow_color (BackColour)
+            let mut bg_paint = Paint::default();
+            bg_paint.set_color_rgba8(
+                ctx.shadow_color[0],
+                ctx.shadow_color[1],
+                ctx.shadow_color[2],
+                255,
+            );
+            if lw > 0 && lh > 0 {
+                if let Some(rect) = Rect::from_xywh(0.0, 0.0, lw as f32, lh as f32) {
+                    let mut pb = PathBuilder::new();
+                    pb.push_rect(rect);
+                    if let Some(path) = pb.finish() {
+                        layer.fill_path(&path, &bg_paint, FillRule::Winding, SkiaTransform::identity(), None);
+                    }
+                }
+            }
+            // Create a clone with outline_width=0 so the rasterizer doesn't stroke outlines.
+            let mut c = ctx.clone();
+            c.outline_width = 0.0;
+            c.outline_x_width = 0.0;
+            c.outline_y_width = 0.0;
+            c
+        } else {
+            ctx.clone()
+        };
 
         for sl in &shaped_lines {
             let mut x = sl.x_start;
@@ -467,7 +560,7 @@ impl Renderer {
                     glyph,
                     x - oxf,
                     sl.line_y - oyf,
-                    ctx,
+                    &render_ctx,
                 );
                 x += glyph.x_advance + ctx.spacing;
             }
@@ -512,13 +605,13 @@ impl Renderer {
             }
         }
 
-        // Phase 5: Blur (operates on sub-region).
-        if ctx.blur > 0.0 {
+        // Phase 5: Blur (operates on sub-region). Skip for opaque box.
+        if ctx.border_style != 3 && ctx.blur > 0.0 {
             effects::apply_gaussian_blur(&mut layer, ctx.blur);
         }
 
-        // Phase 6: Shadow (operates on sub-region).
-        if ctx.shadow_depth > 0.0 {
+        // Phase 6: Shadow (operates on sub-region). Skip for opaque box.
+        if ctx.border_style != 3 && ctx.shadow_depth > 0.0 {
             let layer_data = layer.data().to_vec();
             let shadow_layer = effects::apply_shadow(
                 &layer_data,
@@ -529,9 +622,10 @@ impl Renderer {
                 ctx.blur,
                 ctx.shadow_color,
             );
-            let mut shadow_pixmap = Pixmap::new(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
             effects::composite_over(layer.data_mut(), shadow_pixmap.data(), lw, lh);
+            self.pixmap_pool.borrow_mut().put(shadow_pixmap);
         }
 
         // Phase 7: Composite back.
@@ -582,6 +676,9 @@ impl Renderer {
                 }
             }
         }
+
+        // Return layer pixmap to pool.
+        self.pixmap_pool.borrow_mut().put(layer);
     }
 
     fn render_karaoke(
@@ -704,8 +801,8 @@ impl Renderer {
         };
 
         // Phase 3: Allocate layers and render with offset.
-        let mut bg_layer = Pixmap::new(lw, lh).unwrap();
-        let mut fg_layer = Pixmap::new(lw, lh).unwrap();
+        let mut bg_layer = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
+        let mut fg_layer = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
         let oxf = ox as f32;
         let oyf = oy as f32;
 
@@ -716,6 +813,13 @@ impl Renderer {
                 sy_ctx.primary_color = ctx.primary_color;
             } else {
                 sy_ctx.primary_color = ctx.secondary_color;
+            }
+
+            // B2: \ko (Outline) active syllables get 3x boosted outline width.
+            if info.is_active && info.style == KaraokeStyle::Outline {
+                sy_ctx.outline_width = ctx.outline_width * 3.0;
+                sy_ctx.outline_x_width = ctx.outline_x_width * 3.0;
+                sy_ctx.outline_y_width = ctx.outline_y_width * 3.0;
             }
 
             let target_layer = if info.is_active {
@@ -773,9 +877,10 @@ impl Renderer {
                 &bg_data, lw, lh,
                 ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
             );
-            let mut shadow_pixmap = Pixmap::new(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
             effects::composite_over(bg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
+            self.pixmap_pool.borrow_mut().put(shadow_pixmap);
         }
         if ctx.shadow_depth > 0.0 {
             let fg_data = fg_layer.data().to_vec();
@@ -783,9 +888,10 @@ impl Renderer {
                 &fg_data, lw, lh,
                 ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
             );
-            let mut shadow_pixmap = Pixmap::new(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
             effects::composite_over(fg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
+            self.pixmap_pool.borrow_mut().put(shadow_pixmap);
         }
 
         // Phase 6: Composite back.
@@ -796,6 +902,10 @@ impl Renderer {
             effects::composite_over(pixmap.data_mut(), bg_layer.data(), w, h);
             effects::composite_over(pixmap.data_mut(), fg_layer.data(), w, h);
         }
+
+        // Return karaoke layers to pool.
+        self.pixmap_pool.borrow_mut().put(bg_layer);
+        self.pixmap_pool.borrow_mut().put(fg_layer);
     }
 
     fn render_drawing(&self, pixmap: &mut Pixmap, text: &str, ctx: &RenderContext, drawing_level: u8) {
@@ -840,11 +950,17 @@ impl Renderer {
             paint.anti_alias = true;
 
             if ctx.outline_width > 0.0 {
-                let stroke = Stroke { width: ctx.outline_width * 2.0, ..Default::default() };
                 let mut outline_paint = Paint::default();
                 outline_paint.set_color_rgba8(ctx.outline_color[0], ctx.outline_color[1], ctx.outline_color[2], ctx.outline_color[3]);
                 outline_paint.anti_alias = true;
-                layer.stroke_path(&path, &outline_paint, &stroke, SkiaTransform::identity(), None);
+                apply_anisotropic_outline(
+                    &mut layer,
+                    &path,
+                    ctx.outline_color,
+                    ctx.outline_width,
+                    ctx.outline_x_width,
+                    ctx.outline_y_width,
+                );
             }
 
             layer.fill_path(&path, &paint, FillRule::Winding, SkiaTransform::identity(), None);
@@ -1365,37 +1481,55 @@ fn wrap_text(text: &str, wrap_style: u8, shaper: &Shaper, font_id: fontdb::ID, f
                     continue;
                 }
                 let words: Vec<&str> = line.split(' ').collect();
+
+                // Phase 1: Pre-shape each word individually (O(W) instead of O(W²)).
+                struct WordInfo {
+                    text: String,
+                    width: f32,
+                }
+                let word_data: Vec<WordInfo> = words.iter().filter_map(|w| {
+                    if w.is_empty() { return None; }
+                    shaper.shape(w, font_id, font_size).ok().map(|shaped| WordInfo {
+                        text: w.to_string(),
+                        width: shaped.total_advance + spacing * shaped.glyphs.len() as f32,
+                    })
+                }).collect();
+
+                if word_data.is_empty() {
+                    if !line.is_empty() {
+                        result.push(line.to_string());
+                    }
+                    continue;
+                }
+
+                // Phase 2: Shape single space to correctly measure inter-word gaps.
+                let space_width = shaper.shape(" ", font_id, font_size).ok()
+                    .map(|s| s.total_advance + spacing * s.glyphs.len() as f32)
+                    .unwrap_or(0.0);
+
+                // Phase 3: Line breaking using cumulative word widths.
                 let mut current_line = String::new();
                 let mut current_width = 0.0f32;
 
-                for (i, word) in words.iter().enumerate() {
-                    let test_str = if current_line.is_empty() {
-                        word.to_string()
+                for (i, wi) in word_data.iter().enumerate() {
+                    let gap = if current_line.is_empty() { 0.0 } else { space_width };
+                    let test_width = current_width + gap + wi.width;
+
+                    if current_width > 0.0 && test_width > available_width {
+                        result.push(current_line.clone());
+                        current_line = wi.text.clone();
+                        current_width = wi.width;
                     } else {
-                        format!("{} {}", current_line, word)
-                    };
-                    if let Ok(shaped) = shaper.shape(&test_str, font_id, font_size) {
-                        let word_width = shaped.total_advance + spacing * shaped.glyphs.len() as f32;
-                        if current_width > 0.0 && word_width > available_width {
-                            result.push(current_line.clone());
-                            // Extract word width from combined shape by cluster byte offset
-                            let word_byte_start = (current_line.len() + 1) as u32;
-                            current_line = word.to_string();
-                            current_width = shaped.glyphs.iter()
-                                .filter(|g| g.cluster >= word_byte_start)
-                                .map(|g| g.x_advance)
-                                .sum::<f32>();
-                        } else {
-                            current_line = test_str;
-                            current_width = word_width;
+                        if !current_line.is_empty() {
+                            current_line.push(' ');
                         }
+                        current_line.push_str(&wi.text);
+                        current_width = test_width;
                     }
-                    if i == words.len() - 1 && !current_line.is_empty() {
+
+                    if i == word_data.len() - 1 && !current_line.is_empty() {
                         result.push(current_line.clone());
                     }
-                }
-                if current_line.is_empty() && !line.is_empty() {
-                    result.push(line.to_string());
                 }
             }
             result
@@ -1533,6 +1667,7 @@ impl EventExt for Event {
 mod tests {
     use super::*;
     use ass_parser::AssColor;
+    use ass_parser::Effect;
 
     // ── interpolate_move ──────────────────────────────────────
 
@@ -2034,5 +2169,273 @@ mod tests {
         apply_transform_tag(&mut ctx, "\\fscx200", 0, 1000, 1.0, 500, 0, 1000, 100.0, 100.0);
         assert!(ctx.scale_x > 149.0 && ctx.scale_x < 151.0);
         assert_eq!(ctx.scale_y, 100.0); // y unchanged
+    }
+
+    // ── build_context loads style properties ──────────────────
+
+    fn make_test_event(text: &str) -> Event {
+        Event {
+            event_type: ass_parser::EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(0),
+            end: Timestamp::from_ms(1000),
+            style_name: "Default".into(),
+            name: String::new(),
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
+            effect: Effect::None,
+            text: text.into(),
+            override_tags: vec![],
+            karaoke_segments: vec![],
+            raw_override_block: String::new(),
+        }
+    }
+
+    fn make_test_renderer() -> Renderer {
+        Renderer::new(RenderConfig {
+            width: 1920,
+            height: 1080,
+            script_width: 1920,
+            script_height: 1080,
+            ..Default::default()
+        })
+    }
+
+    fn make_test_ass() -> AssFile {
+        let mut ass = AssFile::new();
+        ass.styles.push(Style {
+            name: "Default".into(),
+            ..Default::default()
+        });
+        ass
+    }
+
+    #[test]
+    fn test_build_context_loads_style_scale() {
+        let mut style = Style::default();
+        style.scale_x = 120.0;
+        style.scale_y = 80.0;
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.scale_x, 120.0);
+        assert_eq!(ctx.scale_y, 80.0);
+    }
+
+    #[test]
+    fn test_build_context_loads_style_spacing() {
+        let mut style = Style::default();
+        style.spacing = 5.0;
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.spacing, 5.0);
+    }
+
+    #[test]
+    fn test_build_context_loads_style_underline() {
+        let mut style = Style::default();
+        style.underline = true;
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert!(ctx.underline);
+    }
+
+    #[test]
+    fn test_build_context_loads_style_strikeout() {
+        let mut style = Style::default();
+        style.strikeout = true;
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert!(ctx.strikeout);
+    }
+
+    #[test]
+    fn test_build_context_loads_style_rotation() {
+        let mut style = Style::default();
+        style.angle = 45.0;
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.rotation, 45.0);
+    }
+
+    #[test]
+    fn test_build_context_style_properties_defaults() {
+        // Verify that without overrides, default style values produce default ctx values.
+        let style = Style::default();
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.scale_x, 100.0);
+        assert_eq!(ctx.scale_y, 100.0);
+        assert_eq!(ctx.spacing, 0.0);
+        assert!(!ctx.underline);
+        assert!(!ctx.strikeout);
+        assert_eq!(ctx.rotation, 0.0);
+    }
+
+    // ── DrawingMode stored in context ─────────────────────────
+
+    #[test]
+    fn test_build_context_drawing_mode_from_override() {
+        let style = Style::default();
+        let event = Event {
+            override_tags: vec![OverrideTag::DrawingMode(3)],
+            ..make_test_event("Hello")
+        };
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.drawing_mode, 3);
+    }
+
+    #[test]
+    fn test_build_context_drawing_mode_default_is_zero() {
+        let style = Style::default();
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.drawing_mode, 0);
+    }
+
+    // ── B1: border_style=3 opaque box ─────────────────────────
+
+    #[test]
+    fn test_build_context_border_style_default() {
+        let style = Style::default();
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.border_style, 1);
+    }
+
+    #[test]
+    fn test_build_context_border_style_opaque_box() {
+        let mut style = Style::default();
+        style.border_style = 3;
+        let event = make_test_event("Hello");
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.border_style, 3);
+    }
+
+    // ── B3: \\r named style reset ──────────────────────────────
+
+    #[test]
+    fn test_build_context_reset_named_style() {
+        let mut named_style = Style::default();
+        named_style.name = "Alt".into();
+        named_style.font_name = "Times New Roman".into();
+        named_style.font_size = 48.0;
+        named_style.bold = true;
+        named_style.underline = true;
+
+        let mut ass = make_test_ass();
+        ass.styles.push(named_style);
+
+        let style = Style::default();
+        let event = Event {
+            override_tags: vec![OverrideTag::Reset("Alt".into())],
+            ..make_test_event("Hello")
+        };
+        let renderer = make_test_renderer();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        assert_eq!(ctx.font_name, "Times New Roman");
+        assert!(ctx.bold);
+        assert!(ctx.underline);
+        // Default style had smaller font; named style overrides it
+        assert!(ctx.font_size > 20.0);
+    }
+
+    #[test]
+    fn test_build_context_reset_named_style_fallback_empty() {
+        // When style name is not found, fall back to event style (no crash).
+        let ass = make_test_ass();
+        let style = Style::default();
+        let event = Event {
+            override_tags: vec![OverrideTag::Reset("NonExistent".into())],
+            ..make_test_event("Hello")
+        };
+        let renderer = make_test_renderer();
+        let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
+        // Falls back to not resetting, so default style values remain.
+        assert_eq!(ctx.font_name, "Arial");
+    }
+
+    // ── Event layer sorting ──────────────────────────────────
+
+    #[test]
+    fn test_render_ass_events_sorted_by_layer() {
+        let mut ass = ass_parser::AssFile::new();
+        ass.styles.push(ass_parser::Style {
+            name: "Default".into(),
+            ..Default::default()
+        });
+
+        let event0 = Event {
+            event_type: ass_parser::EventType::Dialogue,
+            layer: 1,
+            start: Timestamp::from_ms(0),
+            end: Timestamp::from_ms(1000),
+            style_name: "Default".into(),
+            name: String::new(),
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
+            effect: Effect::None,
+            text: "Layer1".into(),
+            override_tags: vec![],
+            karaoke_segments: vec![],
+            raw_override_block: String::new(),
+        };
+        let event1 = Event {
+            event_type: ass_parser::EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(0),
+            end: Timestamp::from_ms(1000),
+            style_name: "Default".into(),
+            name: String::new(),
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
+            effect: Effect::None,
+            text: "Layer0".into(),
+            override_tags: vec![],
+            karaoke_segments: vec![],
+            raw_override_block: String::new(),
+        };
+        // Push in reverse layer order: layer 1 before layer 0.
+        ass.events.push(event0);
+        ass.events.push(event1);
+
+        let ts = Timestamp::from_ms(500);
+        let visible: Vec<u32> = ass
+            .dialogue_events()
+            .filter(|e| e.is_visible_at(ts))
+            .map(|e| e.layer)
+            .collect();
+        assert_eq!(visible, vec![1, 0]); // unsorted: layer 1 first, layer 0 second
+
+        // After sorting by layer, should be [0, 1]
+        let mut sorted: Vec<u32> = ass
+            .dialogue_events()
+            .filter(|e| e.is_visible_at(ts))
+            .map(|e| e.layer)
+            .collect();
+        sorted.sort();
+        assert_eq!(sorted, vec![0, 1]);
     }
 }

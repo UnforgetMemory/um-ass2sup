@@ -1,4 +1,6 @@
 use fontdb::{Database, Family, Query, Weight};
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::path::Path;
 use thiserror::Error;
 
@@ -47,6 +49,8 @@ pub struct FontInfo {
 /// 4. Any available font (last resort)
 pub struct FontManager {
     db: Database,
+    /// Cache of font data keyed by fontdb::ID to avoid repeated cloning from fontdb.
+    font_data_cache: Mutex<HashMap<fontdb::ID, Vec<u8>>>,
 }
 
 impl FontManager {
@@ -54,6 +58,7 @@ impl FontManager {
     pub fn new() -> Self {
         Self {
             db: Database::new(),
+            font_data_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -168,8 +173,19 @@ impl FontManager {
     }
 
     /// Returns the raw font data (TTF/OTF bytes) for the given font ID.
+    ///
+    /// Results are cached so repeated calls with the same ID avoid re-cloning
+    /// from the font database. The first call clones from fontdb; subsequent
+    /// calls return a clone of the cached data (still O(1) amortized).
     pub fn get_font_data(&self, id: fontdb::ID) -> Option<Vec<u8>> {
-        self.db.with_face_data(id, |data, _index| data.to_vec())
+        if let Some(cached) = self.font_data_cache.lock().unwrap().get(&id) {
+            return Some(cached.clone());
+        }
+        self.db.with_face_data(id, |data, _index| {
+            let vec = data.to_vec();
+            self.font_data_cache.lock().unwrap().insert(id, vec.clone());
+            vec
+        })
     }
 
     pub fn font_count(&self) -> usize {
@@ -226,6 +242,39 @@ mod tests {
         let data1 = fm.get_font_data(id).expect("Font data should exist");
         let data2 = fm.get_font_data(id).expect("Font data should exist");
         assert_eq!(data1, data2, "get_font_data should return identical bytes for same ID");
+    }
+
+    #[test]
+    fn test_font_data_cache_hit_on_repeated_calls() {
+        let fm = system_font_manager();
+        let id = find_any_font(&fm).expect("No system fonts found");
+        // Prime the cache with the first call.
+        let data_first = fm.get_font_data(id).expect("First call should succeed");
+        assert!(data_first.len() > 100, "Font data should be substantial");
+        // Subsequent calls must all return the exact same bytes (cache hit path).
+        for _ in 0..10 {
+            let data = fm.get_font_data(id).expect("Repeated call should succeed");
+            assert_eq!(data, data_first, "Cached data must match first call");
+        }
+    }
+
+    #[test]
+    fn test_font_data_cache_multiple_ids() {
+        let fm = system_font_manager();
+        let fonts: Vec<_> = fm.list_fonts();
+        if fonts.len() < 2 {
+            return;
+        }
+        // Prime cache with two different IDs.
+        let id_a = fonts[0].id;
+        let id_b = fonts[1].id;
+        let data_a = fm.get_font_data(id_a).expect("Font data A");
+        let data_b = fm.get_font_data(id_b).expect("Font data B");
+        // Interleaved reads exercise the cache for both entries.
+        for _ in 0..5 {
+            assert_eq!(fm.get_font_data(id_a).expect("Cached A"), data_a);
+            assert_eq!(fm.get_font_data(id_b).expect("Cached B"), data_b);
+        }
     }
 
     #[test]

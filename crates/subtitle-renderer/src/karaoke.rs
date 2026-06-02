@@ -83,19 +83,45 @@ impl KaraokeRenderer {
         event_start_ms: u64,
         timestamp_ms: u64,
     ) -> Vec<SyllableState> {
-        let mut states = Vec::with_capacity(segments.len());
+        // Phase 1: Compute absolute start times.
+        // \kt segments use duration_ms as absolute start offset from event_start_ms.
+        // \k/\kf/\ko segments use sequential timing from cursor.
+        let mut starts = Vec::with_capacity(segments.len());
         let mut cursor = event_start_ms;
         for seg in segments {
-            let start = cursor;
-            let end = cursor + seg.duration_ms;
+            let start = if seg.style == KaraokeStyle::Timing {
+                event_start_ms + seg.duration_ms
+            } else {
+                cursor
+            };
+            starts.push(start);
+            if seg.style == KaraokeStyle::Timing {
+                cursor = start;
+            } else {
+                cursor = start + seg.duration_ms;
+            }
+        }
+
+        // Phase 2: Compute durations and syllable states.
+        let mut states = Vec::with_capacity(segments.len());
+        for (i, seg) in segments.iter().enumerate() {
+            let start = starts[i];
+            let end = if seg.style == KaraokeStyle::Timing {
+                // For \kt, the syllable lasts until the next syllable starts.
+                starts.get(i + 1).copied().unwrap_or(start)
+            } else {
+                start + seg.duration_ms
+            };
+
             let phase = if timestamp_ms < start {
                 KaraokePhase::Pending
             } else if timestamp_ms >= end {
                 KaraokePhase::Done
             } else {
                 let elapsed = timestamp_ms - start;
-                let progress = if seg.duration_ms > 0 {
-                    elapsed as f32 / seg.duration_ms as f32
+                let duration = end.saturating_sub(start);
+                let progress = if duration > 0 {
+                    elapsed as f32 / duration as f32
                 } else {
                     1.0
                 };
@@ -109,7 +135,6 @@ impl KaraokeRenderer {
                 phase,
                 style: seg.style,
             });
-            cursor = end;
         }
         states
     }
@@ -415,5 +440,76 @@ mod tests {
         let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 0);
         assert_eq!(states[0].phase, KaraokePhase::Done);
         assert_eq!(states[0].style, KaraokeStyle::Outline);
+    }
+
+    // ── B4: \\kt absolute timing ──────────────────────────────
+
+    fn make_kt_seg(dur: u64, text: &str, idx: usize) -> KaraokeSegment {
+        KaraokeSegment::new(KaraokeStyle::Timing, dur, text.to_string(), idx)
+    }
+
+    #[test]
+    fn test_kt_single_syllable_before_start() {
+        // \kt syllable starts at event_start + 100ms = 100ms.
+        let segs = vec![make_kt_seg(100, "A", 0)];
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 50);
+        assert_eq!(states[0].phase, KaraokePhase::Pending);
+        assert_eq!(states[0].start_ms, 100);
+    }
+
+    #[test]
+    fn test_kt_single_syllable_active() {
+        let segs = vec![make_kt_seg(100, "A", 0)];
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 100);
+        match states[0].phase {
+            KaraokePhase::Active { .. } => {} // zero-duration → instant done
+            KaraokePhase::Done => {} // also acceptable for zero-duration
+            _ => panic!("Expected Active or Done"),
+        }
+        assert_eq!(states[0].start_ms, 100);
+    }
+
+    #[test]
+    fn test_kt_multi_syllable_absolute_timing() {
+        // Three \kt syllables at absolute positions: 0ms, 100ms, 250ms
+        let segs = vec![
+            make_kt_seg(0, "Hel", 0),
+            make_kt_seg(100, "lo", 1),
+            make_kt_seg(250, "!", 2),
+        ];
+        // At t=150ms: first [0,100) = Done, second [100,250) = Active at 50/150≈0.33
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 150);
+        assert_eq!(states[0].phase, KaraokePhase::Done, "first syllable should be Done");
+        match states[1].phase {
+            KaraokePhase::Active { progress } => {
+                let expected = 50.0 / 150.0;
+                assert!((progress - expected).abs() < 0.01, "Expected ~{expected}, got {progress}");
+            }
+            _ => panic!("second syllable should be Active"),
+        }
+        assert_eq!(states[2].phase, KaraokePhase::Pending, "third syllable should be Pending");
+    }
+
+    #[test]
+    fn test_kt_event_start_offset() {
+        // Event starts at 500ms, \kt(100) = start at 600ms.
+        let segs = vec![make_kt_seg(100, "A", 0)];
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 500, 550);
+        assert_eq!(states[0].phase, KaraokePhase::Pending);
+        assert_eq!(states[0].start_ms, 600);
+    }
+
+    #[test]
+    fn test_kt_mixed_with_k() {
+        // \k(100) "A" at cursor, then \kt(300) "B" at absolute 300ms.
+        let segs = vec![
+            KaraokeSegment::new(KaraokeStyle::Instant, 100, "A".into(), 0),
+            make_kt_seg(300, "B", 1),
+        ];
+        // At t=50ms: first syllable [0,100) = Active
+        let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 50);
+        assert!(matches!(states[0].phase, KaraokePhase::Active { .. }));
+        assert_eq!(states[1].phase, KaraokePhase::Pending);
+        assert_eq!(states[1].start_ms, 300);
     }
 }

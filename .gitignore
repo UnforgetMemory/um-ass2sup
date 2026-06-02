@@ -3,6 +3,17 @@ target/
 
 # OpenCode internal
 .sisyphus/
+.omo/
+
+# Agent/plan generated files
+phase*-plan.md
+phase*-spec.md
+phase*-spec.html
+ass2sup-spec.html
+
+# Environment
+.env
+.env.local
 
 # IDE
 .idea/

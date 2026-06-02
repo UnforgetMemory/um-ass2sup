@@ -55,44 +55,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
             temp[idx + 3] = (sa / count) as u8;
         }
 
-        // Interior — SIMD batch of 4, fixed count = 2*r+1
-        let mut x = r_u;
-        while x + 4 <= interior_x_end {
-            let mut srv = u32x4::splat(0);
-            let mut sgv = u32x4::splat(0);
-            let mut sbv = u32x4::splat(0);
-            let mut sav = u32x4::splat(0);
-
-            for dx in -(r as i32)..=(r as i32) {
-                let nx = (x as i32 + dx) as usize;
-                let base = (y * w + nx) * 4;
-
-                srv += u32x4::from([data[base] as u32, data[base + 4] as u32,
-                                    data[base + 8] as u32, data[base + 12] as u32]);
-                sgv += u32x4::from([data[base + 1] as u32, data[base + 5] as u32,
-                                    data[base + 9] as u32, data[base + 13] as u32]);
-                sbv += u32x4::from([data[base + 2] as u32, data[base + 6] as u32,
-                                    data[base + 10] as u32, data[base + 14] as u32]);
-                sav += u32x4::from([data[base + 3] as u32, data[base + 7] as u32,
-                                    data[base + 11] as u32, data[base + 15] as u32]);
-            }
-
-            let r_arr = srv.to_array();
-            let g_arr = sgv.to_array();
-            let b_arr = sbv.to_array();
-            let a_arr = sav.to_array();
-            for i in 0..4 {
-                let idx = (y * w + x + i) * 4;
-                temp[idx] = (r_arr[i] / count_val) as u8;
-                temp[idx + 1] = (g_arr[i] / count_val) as u8;
-                temp[idx + 2] = (b_arr[i] / count_val) as u8;
-                temp[idx + 3] = (a_arr[i] / count_val) as u8;
-            }
-            x += 4;
-        }
-
-        // Interior remainder — scalar
-        while x < interior_x_end {
+        // Interior — sliding window, O(1) per pixel
+        if r_u < interior_x_end {
+            let mut x = r_u;
+            // Initialize running sum at x = r_u (one-time O(r) cost)
             let (mut sr, mut sg, mut sb, mut sa) = (0u32, 0u32, 0u32, 0u32);
             for dx in -(r as i32)..=(r as i32) {
                 let nx = (x as i32 + dx) as usize;
@@ -102,12 +68,37 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 sb += data[idx + 2] as u32;
                 sa += data[idx + 3] as u32;
             }
-            let idx = (y * w + x) * 4;
-            temp[idx] = (sr / count_val) as u8;
-            temp[idx + 1] = (sg / count_val) as u8;
-            temp[idx + 2] = (sb / count_val) as u8;
-            temp[idx + 3] = (sa / count_val) as u8;
+            {
+                let idx = (y * w + x) * 4;
+                temp[idx] = (sr / count_val) as u8;
+                temp[idx + 1] = (sg / count_val) as u8;
+                temp[idx + 2] = (sb / count_val) as u8;
+                temp[idx + 3] = (sa / count_val) as u8;
+            }
             x += 1;
+
+            // Slide window — O(1) per pixel (subtract leaving, add entering)
+            while x < interior_x_end {
+                let leave_idx = (y * w + (x - r_u - 1)) * 4;
+                sr -= data[leave_idx] as u32;
+                sg -= data[leave_idx + 1] as u32;
+                sb -= data[leave_idx + 2] as u32;
+                sa -= data[leave_idx + 3] as u32;
+
+                let enter_idx = (y * w + (x + r_u)) * 4;
+                sr += data[enter_idx] as u32;
+                sg += data[enter_idx + 1] as u32;
+                sb += data[enter_idx + 2] as u32;
+                sa += data[enter_idx + 3] as u32;
+
+                let idx = (y * w + x) * 4;
+                temp[idx] = (sr / count_val) as u8;
+                temp[idx + 1] = (sg / count_val) as u8;
+                temp[idx + 2] = (sb / count_val) as u8;
+                temp[idx + 3] = (sa / count_val) as u8;
+
+                x += 1;
+            }
         }
 
         // Right edge — scalar (variable pixel count, includes bounds checks)
@@ -136,83 +127,101 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
 
     // ======== Vertical pass ========
     let interior_y_end = h.saturating_sub(r_u);
-    for y in 0..h {
-        if y < r_u || y >= interior_y_end {
-            // Top / bottom edge — scalar (variable pixel count)
-            for x in 0..w {
-                let (mut sr, mut sg, mut sb, mut sa, mut count) = (0u32, 0u32, 0u32, 0u32, 0u32);
-                for dy in -(r as i32)..=(r as i32) {
-                    let ny = y as i32 + dy;
-                    if ny >= 0 && ny < h as i32 {
-                        let idx = (ny as usize * w + x) * 4;
-                        sr += data[idx] as u32;
-                        sg += data[idx + 1] as u32;
-                        sb += data[idx + 2] as u32;
-                        sa += data[idx + 3] as u32;
-                        count += 1;
-                    }
-                }
-                let idx = (y * w + x) * 4;
-                data[idx] = (sr / count) as u8;
-                data[idx + 1] = (sg / count) as u8;
-                data[idx + 2] = (sb / count) as u8;
-                data[idx + 3] = (sa / count) as u8;
-            }
-        } else {
-            // Interior — SIMD batch over x, fixed count
-            let mut x = 0;
-            while x + 4 <= w {
-                let mut srv = u32x4::splat(0);
-                let mut sgv = u32x4::splat(0);
-                let mut sbv = u32x4::splat(0);
-                let mut sav = u32x4::splat(0);
 
-                for dy in -(r as i32)..=(r as i32) {
-                    let ny = (y as i32 + dy) as usize;
-                    let base = (ny * w + x) * 4;
-
-                    srv += u32x4::from([data[base] as u32, data[base + 4] as u32,
-                                        data[base + 8] as u32, data[base + 12] as u32]);
-                    sgv += u32x4::from([data[base + 1] as u32, data[base + 5] as u32,
-                                        data[base + 9] as u32, data[base + 13] as u32]);
-                    sbv += u32x4::from([data[base + 2] as u32, data[base + 6] as u32,
-                                        data[base + 10] as u32, data[base + 14] as u32]);
-                    sav += u32x4::from([data[base + 3] as u32, data[base + 7] as u32,
-                                        data[base + 11] as u32, data[base + 15] as u32]);
-                }
-
-                let r_arr = srv.to_array();
-                let g_arr = sgv.to_array();
-                let b_arr = sbv.to_array();
-                let a_arr = sav.to_array();
-                for i in 0..4 {
-                    let idx = (y * w + x + i) * 4;
-                    data[idx] = (r_arr[i] / count_val) as u8;
-                    data[idx + 1] = (g_arr[i] / count_val) as u8;
-                    data[idx + 2] = (b_arr[i] / count_val) as u8;
-                    data[idx + 3] = (a_arr[i] / count_val) as u8;
-                }
-                x += 4;
-            }
-
-            // Remainder — scalar
-            while x < w {
-                let (mut sr, mut sg, mut sb, mut sa) = (0u32, 0u32, 0u32, 0u32);
-                for dy in -(r as i32)..=(r as i32) {
-                    let ny = (y as i32 + dy) as usize;
-                    let idx = (ny * w + x) * 4;
+    // Top edge — scalar (variable pixel count, bounds checks)
+    for y in 0..r_u.min(h) {
+        for x in 0..w {
+            let (mut sr, mut sg, mut sb, mut sa, mut count) = (0u32, 0u32, 0u32, 0u32, 0u32);
+            for dy in -(r as i32)..=(r as i32) {
+                let ny = y as i32 + dy;
+                if ny >= 0 && ny < h as i32 {
+                    let idx = (ny as usize * w + x) * 4;
                     sr += data[idx] as u32;
                     sg += data[idx + 1] as u32;
                     sb += data[idx + 2] as u32;
                     sa += data[idx + 3] as u32;
+                    count += 1;
                 }
-                let idx = (y * w + x) * 4;
-                data[idx] = (sr / count_val) as u8;
-                data[idx + 1] = (sg / count_val) as u8;
-                data[idx + 2] = (sb / count_val) as u8;
-                data[idx + 3] = (sa / count_val) as u8;
-                x += 1;
             }
+            let idx = (y * w + x) * 4;
+            data[idx] = (sr / count) as u8;
+            data[idx + 1] = (sg / count) as u8;
+            data[idx + 2] = (sb / count) as u8;
+            data[idx + 3] = (sa / count) as u8;
+        }
+    }
+
+    // Interior — sliding window, O(1) per pixel
+    if r_u < interior_y_end {
+        // Initialize running column sums at y = r_u (one-time O(r·w) cost)
+        let mut col_sum_r = vec![0u32; w];
+        let mut col_sum_g = vec![0u32; w];
+        let mut col_sum_b = vec![0u32; w];
+        let mut col_sum_a = vec![0u32; w];
+        for dy in -(r as i32)..=(r as i32) {
+            let ny = (r_u as i32 + dy) as usize;
+            for x in 0..w {
+                let idx = (ny * w + x) * 4;
+                col_sum_r[x] += data[idx] as u32;
+                col_sum_g[x] += data[idx + 1] as u32;
+                col_sum_b[x] += data[idx + 2] as u32;
+                col_sum_a[x] += data[idx + 3] as u32;
+            }
+        }
+        // Store row at y = r_u
+        for x in 0..w {
+            let idx = (r_u * w + x) * 4;
+            data[idx] = (col_sum_r[x] / count_val) as u8;
+            data[idx + 1] = (col_sum_g[x] / count_val) as u8;
+            data[idx + 2] = (col_sum_b[x] / count_val) as u8;
+            data[idx + 3] = (col_sum_a[x] / count_val) as u8;
+        }
+
+        // Slide window for remaining interior rows
+        for y in (r_u + 1)..interior_y_end {
+            let top_y = y - r_u - 1;
+            let bot_y = y + r_u;
+
+            for x in 0..w {
+                let top_idx = (top_y * w + x) * 4;
+                let bot_idx = (bot_y * w + x) * 4;
+
+                col_sum_r[x] = col_sum_r[x] - data[top_idx] as u32 + data[bot_idx] as u32;
+                col_sum_g[x] = col_sum_g[x] - data[top_idx + 1] as u32 + data[bot_idx + 1] as u32;
+                col_sum_b[x] = col_sum_b[x] - data[top_idx + 2] as u32 + data[bot_idx + 2] as u32;
+                col_sum_a[x] = col_sum_a[x] - data[top_idx + 3] as u32 + data[bot_idx + 3] as u32;
+            }
+
+            for x in 0..w {
+                let idx = (y * w + x) * 4;
+                data[idx] = (col_sum_r[x] / count_val) as u8;
+                data[idx + 1] = (col_sum_g[x] / count_val) as u8;
+                data[idx + 2] = (col_sum_b[x] / count_val) as u8;
+                data[idx + 3] = (col_sum_a[x] / count_val) as u8;
+            }
+        }
+    }
+
+    // Bottom edge — scalar (variable pixel count, bounds checks)
+    for y in interior_y_end.max(r_u)..h {
+        for x in 0..w {
+            let (mut sr, mut sg, mut sb, mut sa, mut count) = (0u32, 0u32, 0u32, 0u32, 0u32);
+            for dy in -(r as i32)..=(r as i32) {
+                let ny = y as i32 + dy;
+                if ny >= 0 && ny < h as i32 {
+                    let idx = (ny as usize * w + x) * 4;
+                    sr += data[idx] as u32;
+                    sg += data[idx + 1] as u32;
+                    sb += data[idx + 2] as u32;
+                    sa += data[idx + 3] as u32;
+                    count += 1;
+                }
+            }
+            let idx = (y * w + x) * 4;
+            data[idx] = (sr / count) as u8;
+            data[idx + 1] = (sg / count) as u8;
+            data[idx + 2] = (sb / count) as u8;
+            data[idx + 3] = (sa / count) as u8;
         }
     }
 }
