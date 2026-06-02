@@ -1,7 +1,7 @@
 use super::effect::{parse_effect, Effect};
 use super::timestamp::Timestamp;
 use super::override_tag::OverrideTag;
-use super::karaoke::KaraokeSegment;
+use super::karaoke::{KaraokeSegment, KaraokeStyle};
 
 /// ASS/SSA event type (first field of an event line).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -153,12 +153,15 @@ impl Event {
 
 fn parse_text_with_tags(text: &str) -> (Vec<OverrideTag>, Vec<KaraokeSegment>, String) {
     let mut tags = Vec::new();
-    let karaoke = Vec::new();
+    let mut karaoke = Vec::new();
     let mut raw_block = String::new();
     let mut chars = text.chars().peekable();
     let mut in_override = false;
     let mut current_tag = String::new();
-    let mut current_text = String::new();
+
+    let mut pending_karaoke: Option<(KaraokeStyle, u64)> = None;
+    let mut syllable_text = String::new();
+    let mut segment_index = 0usize;
 
     while let Some(c) = chars.next() {
         if c == '{' {
@@ -171,6 +174,18 @@ fn parse_text_with_tags(text: &str) -> (Vec<OverrideTag>, Vec<KaraokeSegment>, S
             raw_block.push_str(&current_tag);
             for part in current_tag.split('\\').filter(|s| !s.is_empty()) {
                 if let Some(tag) = parse_single_tag(part) {
+                    if let OverrideTag::Karaoke { style, duration } = &tag {
+                        if let Some((prev_style, prev_dur)) = pending_karaoke.take() {
+                            karaoke.push(KaraokeSegment::new(
+                                prev_style,
+                                prev_dur,
+                                std::mem::take(&mut syllable_text),
+                                segment_index,
+                            ));
+                            segment_index += 1;
+                        }
+                        pending_karaoke = Some((*style, *duration));
+                    }
                     tags.push(tag);
                 }
             }
@@ -179,9 +194,18 @@ fn parse_text_with_tags(text: &str) -> (Vec<OverrideTag>, Vec<KaraokeSegment>, S
         }
         if in_override {
             current_tag.push(c);
-        } else {
-            current_text.push(c);
+        } else if pending_karaoke.is_some() {
+            syllable_text.push(c);
         }
+    }
+
+    if let Some((style, duration)) = pending_karaoke.take() {
+        karaoke.push(KaraokeSegment::new(
+            style,
+            duration,
+            std::mem::take(&mut syllable_text),
+            segment_index,
+        ));
     }
 
     (tags, karaoke, raw_block)
@@ -321,20 +345,36 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
             return Some(OverrideTag::Transform { tag, t1, t2, accel });
         }
     }
-    // \clip(x1,y1,x2,y2) — rectangular clip
+    // \clip(x1,y1,x2,y2) — rectangular clip, or \clip(scale,commands) — vector clip
     if s.starts_with("clip(") {
         let inner = s.trim_start_matches("clip(").trim_end_matches(')');
         let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
         if nums.len() >= 4 {
             return Some(OverrideTag::Clip { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
         }
+        // Vector drawing form: \clip(scale, drawing_commands)
+        if let Some(comma_pos) = inner.find(',') {
+            let scale_str = inner[..comma_pos].trim();
+            let commands = inner[comma_pos + 1..].trim();
+            if let Ok(scale) = scale_str.parse::<f32>() {
+                return Some(OverrideTag::ClipDrawing { scale, commands: commands.to_string() });
+            }
+        }
     }
-    // \iclip(x1,y1,x2,y2) — inverse rectangular clip
+    // \iclip(x1,y1,x2,y2) — inverse rectangular clip, or \iclip(scale,commands) — inverse vector clip
     if s.starts_with("iclip(") {
         let inner = s.trim_start_matches("iclip(").trim_end_matches(')');
         let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
         if nums.len() >= 4 {
             return Some(OverrideTag::ClipInverse { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
+        }
+        // Vector drawing form: \iclip(scale, drawing_commands)
+        if let Some(comma_pos) = inner.find(',') {
+            let scale_str = inner[..comma_pos].trim();
+            let commands = inner[comma_pos + 1..].trim();
+            if let Ok(scale) = scale_str.parse::<f32>() {
+                return Some(OverrideTag::ClipInverseDrawing { scale, commands: commands.to_string() });
+            }
         }
     }
     // \fade(a1,a2,a3,t1,t2,t3,t4) — 7-parameter complex fade
@@ -507,6 +547,7 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::karaoke::KaraokeStyle;
 
     #[test]
     fn event_writing_mode() {
@@ -580,5 +621,169 @@ mod tests {
     fn event_split_commas_paren_aware_nested() {
         let parts = split_commas_paren_aware("\\clip(10,20,30,40),100,200");
         assert_eq!(parts, vec!["\\clip(10,20,30,40)", "100", "200"]);
+    }
+
+    // ── Karaoke segment tests ─────────────────────────────────────────
+
+    #[test]
+    fn karaoke_single_k_tag() {
+        let (_tags, segments, _raw) = parse_text_with_tags("{\\k50}Hello");
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].style, KaraokeStyle::Instant);
+        assert_eq!(segments[0].duration_ms, 500); // 50 cs * 10 = 500 ms
+        assert_eq!(segments[0].text, "Hello");
+        assert_eq!(segments[0].index, 0);
+    }
+
+    #[test]
+    fn karaoke_multiple_k_tags() {
+        let (_tags, segments, _raw) = parse_text_with_tags("{\\k50}Hel{\\k100}lo World");
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].style, KaraokeStyle::Instant);
+        assert_eq!(segments[0].duration_ms, 500);
+        assert_eq!(segments[0].text, "Hel");
+        assert_eq!(segments[1].style, KaraokeStyle::Instant);
+        assert_eq!(segments[1].duration_ms, 1000);
+        assert_eq!(segments[1].text, "lo World");
+    }
+
+    #[test]
+    fn karaoke_text_before_first_tag_not_included() {
+        let (_tags, segments, _raw) = parse_text_with_tags("Plain{\\k50}Hello");
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].text, "Hello");
+    }
+
+    #[test]
+    fn karaoke_kf_variant() {
+        let (_tags, segments, _raw) = parse_text_with_tags("{\\kf30}Fill!");
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].style, KaraokeStyle::Fill);
+        assert_eq!(segments[0].duration_ms, 300);
+        assert_eq!(segments[0].text, "Fill!");
+    }
+
+    #[test]
+    fn karaoke_ko_variant() {
+        let (_tags, segments, _raw) = parse_text_with_tags("{\\ko20}Outline");
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].style, KaraokeStyle::Outline);
+        assert_eq!(segments[0].duration_ms, 200);
+        assert_eq!(segments[0].text, "Outline");
+    }
+
+    #[test]
+    fn karaoke_kt_variant() {
+        let (_tags, segments, _raw) = parse_text_with_tags("{\\kt100}Timing");
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].style, KaraokeStyle::Timing);
+        assert_eq!(segments[0].duration_ms, 1000);
+        assert_eq!(segments[0].text, "Timing");
+    }
+
+    #[test]
+    fn karaoke_non_karaoke_override_blocks_transparent() {
+        let (_tags, segments, _raw) = parse_text_with_tags("{\\k50\\b1}Hel{\\b0}lo{\\kf100} World");
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].style, KaraokeStyle::Instant);
+        assert_eq!(segments[0].duration_ms, 500);
+        assert_eq!(segments[0].text, "Hello");
+        assert_eq!(segments[1].style, KaraokeStyle::Fill);
+        assert_eq!(segments[1].duration_ms, 1000);
+        assert_eq!(segments[1].text, " World");
+    }
+
+    #[test]
+    fn karaoke_no_karaoke_tags_empty() {
+        let (_tags, segments, _raw) = parse_text_with_tags("{\\b1}Bold text{\\b0}");
+        assert!(segments.is_empty());
+    }
+
+    #[test]
+    fn karaoke_empty_text() {
+        let (_tags, segments, _raw) = parse_text_with_tags("{\\k50}{\\k100}Text");
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].text, "");
+        assert_eq!(segments[0].duration_ms, 500);
+        assert_eq!(segments[1].text, "Text");
+        assert_eq!(segments[1].duration_ms, 1000);
+    }
+
+    #[test]
+    fn karaoke_override_tags_populated() {
+        let (tags, _segments, _raw) = parse_text_with_tags("{\\k50\\b1}Hello{\\i1} World");
+        assert!(tags.iter().any(|t| matches!(t, OverrideTag::Bold(true))));
+        assert!(tags.iter().any(|t| matches!(t, OverrideTag::Karaoke { .. })));
+        assert!(tags.iter().any(|t| matches!(t, OverrideTag::Italic(true))));
+    }
+
+    #[test]
+    fn karaoke_via_event_parse() {
+        let data = "0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\\k50}Hel{\\k100}lo World";
+        let event = Event::parse_from_line(EventType::Dialogue, data).unwrap();
+        assert_eq!(event.karaoke_segments.len(), 2);
+        assert_eq!(event.karaoke_segments[0].text, "Hel");
+        assert_eq!(event.karaoke_segments[0].duration_ms, 500);
+        assert_eq!(event.karaoke_segments[1].text, "lo World");
+        assert_eq!(event.karaoke_segments[1].duration_ms, 1000);
+        assert!(event.has_karaoke());
+    }
+
+    // ── Vector clip tests ─────────────────────────────────────────────
+
+    #[test]
+    fn clip_vector_drawing() {
+        let result = parse_single_tag("clip(1,m 0 0 l 100 0 100 100 0 100)").unwrap();
+        assert_eq!(
+            result,
+            OverrideTag::ClipDrawing {
+                scale: 1.0,
+                commands: "m 0 0 l 100 0 100 100 0 100".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn iclip_vector_drawing() {
+        let result = parse_single_tag("iclip(2,m 0 0 l 50 0 50 50 0 50)").unwrap();
+        assert_eq!(
+            result,
+            OverrideTag::ClipInverseDrawing {
+                scale: 2.0,
+                commands: "m 0 0 l 50 0 50 50 0 50".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn clip_rectangular_unchanged() {
+        let result = parse_single_tag("clip(10,20,30,40)").unwrap();
+        assert_eq!(result, OverrideTag::Clip { x1: 10.0, y1: 20.0, x2: 30.0, y2: 40.0 });
+    }
+
+    #[test]
+    fn iclip_rectangular_unchanged() {
+        let result = parse_single_tag("iclip(10,20,30,40)").unwrap();
+        assert_eq!(result, OverrideTag::ClipInverse { x1: 10.0, y1: 20.0, x2: 30.0, y2: 40.0 });
+    }
+
+    #[test]
+    fn clip_vector_minimal_commands() {
+        let result = parse_single_tag("clip(1,m 0 0)").unwrap();
+        assert_eq!(result, OverrideTag::ClipDrawing { scale: 1.0, commands: "m 0 0".to_string() });
+    }
+
+    #[test]
+    fn clip_vector_fractional_scale() {
+        let result = parse_single_tag("clip(0.5,m 10 10 l 20 20)").unwrap();
+        assert_eq!(result, OverrideTag::ClipDrawing { scale: 0.5, commands: "m 10 10 l 20 20".to_string() });
+    }
+
+    #[test]
+    fn clip_vector_through_parse_text_with_tags() {
+        let (_tags, _segments, _raw) =
+            parse_text_with_tags("{\\clip(1,m 0 0 l 100 0 100 100 0 100)}Vector{\\clip(10,20,30,40)}Clip");
+        assert!(_tags.iter().any(|t| matches!(t, OverrideTag::ClipDrawing { scale: 1.0, .. })));
+        assert!(_tags.iter().any(|t| matches!(t, OverrideTag::Clip { x1: 10.0, .. })));
     }
 }

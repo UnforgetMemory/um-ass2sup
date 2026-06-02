@@ -5,7 +5,6 @@ use crate::context::RenderedFrame;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FrameCacheKey {
-    pub event_index: usize,
     pub timestamp_ms: u64,
 }
 
@@ -70,11 +69,8 @@ impl Default for FrameCache {
     }
 }
 
-pub fn make_frame_key(event_index: usize, timestamp_ms: u64) -> FrameCacheKey {
-    FrameCacheKey {
-        event_index,
-        timestamp_ms,
-    }
+pub fn make_frame_key(timestamp_ms: u64) -> FrameCacheKey {
+    FrameCacheKey { timestamp_ms }
 }
 
 #[cfg(test)]
@@ -94,10 +90,7 @@ mod tests {
     #[test]
     fn test_cache_basic_ops() {
         let cache = FrameCache::new(10);
-        let key = FrameCacheKey {
-            event_index: 0,
-            timestamp_ms: 1000,
-        };
+        let key = FrameCacheKey { timestamp_ms: 1000 };
 
         assert!(cache.is_empty());
         assert!(!cache.contains(&key));
@@ -116,10 +109,7 @@ mod tests {
         let cache = FrameCache::new(2);
 
         for i in 0..4 {
-            let key = FrameCacheKey {
-                event_index: i,
-                timestamp_ms: i as u64 * 1000,
-            };
+            let key = FrameCacheKey { timestamp_ms: i as u64 * 1000 };
             cache.insert(key, test_frame((i as u64) * 1000));
         }
 
@@ -129,10 +119,7 @@ mod tests {
     #[test]
     fn test_cache_clear() {
         let cache = FrameCache::new(10);
-        let key = FrameCacheKey {
-            event_index: 0,
-            timestamp_ms: 1000,
-        };
+        let key = FrameCacheKey { timestamp_ms: 1000 };
 
         cache.insert(key.clone(), test_frame(1000));
         assert!(!cache.is_empty());
@@ -143,18 +130,17 @@ mod tests {
 
     #[test]
     fn test_make_frame_key() {
-        let key = make_frame_key(42, 5000);
-        assert_eq!(key.event_index, 42);
+        let key = make_frame_key(5000);
         assert_eq!(key.timestamp_ms, 5000);
     }
 
     #[test]
     fn test_cache_eviction_removes_first_inserted() {
         let cache = FrameCache::new(3);
-        let k1 = FrameCacheKey { event_index: 0, timestamp_ms: 1000 };
-        let k2 = FrameCacheKey { event_index: 1, timestamp_ms: 2000 };
-        let k3 = FrameCacheKey { event_index: 2, timestamp_ms: 3000 };
-        let k4 = FrameCacheKey { event_index: 3, timestamp_ms: 4000 };
+        let k1 = FrameCacheKey { timestamp_ms: 1000 };
+        let k2 = FrameCacheKey { timestamp_ms: 2000 };
+        let k3 = FrameCacheKey { timestamp_ms: 3000 };
+        let k4 = FrameCacheKey { timestamp_ms: 4000 };
 
         cache.insert(k1.clone(), test_frame(1000));
         cache.insert(k2.clone(), test_frame(2000));
@@ -172,14 +158,14 @@ mod tests {
     #[test]
     fn test_cache_get_missing_key_returns_none() {
         let cache = FrameCache::new(10);
-        let key = FrameCacheKey { event_index: 99, timestamp_ms: 9999 };
+        let key = FrameCacheKey { timestamp_ms: 9999 };
         assert!(cache.get(&key).is_none());
     }
 
     #[test]
     fn test_cache_overwrite_existing_key() {
         let cache = FrameCache::new(10);
-        let key = FrameCacheKey { event_index: 0, timestamp_ms: 1000 };
+        let key = FrameCacheKey { timestamp_ms: 1000 };
 
         cache.insert(key.clone(), test_frame(1000));
         assert_eq!(cache.get(&key).unwrap().pts_ms, 1000);
@@ -194,13 +180,13 @@ mod tests {
     fn test_cache_insert_past_capacity_evicts_multiple() {
         let cache = FrameCache::new(2);
         for i in 0..6 {
-            let key = FrameCacheKey { event_index: i, timestamp_ms: i as u64 * 1000 };
+            let key = FrameCacheKey { timestamp_ms: i as u64 * 1000 };
             cache.insert(key, test_frame(i as u64 * 1000));
         }
         assert_eq!(cache.len(), 2, "cache should never exceed max_entries");
         let present: Vec<_> = (0..6)
             .filter(|i| {
-                let k = FrameCacheKey { event_index: *i, timestamp_ms: *i as u64 * 1000 };
+                let k = FrameCacheKey { timestamp_ms: *i as u64 * 1000 };
                 cache.contains(&k)
             })
             .collect();
@@ -221,7 +207,6 @@ mod tests {
             handles.push(thread::spawn(move || {
                 for j in 0..50 {
                     let key = FrameCacheKey {
-                        event_index: i * 50 + j,
                         timestamp_ms: (i * 50 + j) as u64 * 100,
                     };
                     c.insert(key, test_frame((i * 50 + j) as u64 * 100));
@@ -235,7 +220,6 @@ mod tests {
             handles.push(thread::spawn(move || {
                 for j in 0..50 {
                     let key = FrameCacheKey {
-                        event_index: i * 50 + j,
                         timestamp_ms: (i * 50 + j) as u64 * 100,
                     };
                     let _ = c.get(&key);
@@ -257,9 +241,9 @@ mod tests {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
-        let k1 = FrameCacheKey { event_index: 5, timestamp_ms: 3000 };
-        let k2 = FrameCacheKey { event_index: 5, timestamp_ms: 3000 };
-        let k3 = FrameCacheKey { event_index: 5, timestamp_ms: 3001 };
+        let k1 = FrameCacheKey { timestamp_ms: 3000 };
+        let k2 = FrameCacheKey { timestamp_ms: 3000 };
+        let k3 = FrameCacheKey { timestamp_ms: 3001 };
 
         let mut h1 = DefaultHasher::new();
         let mut h2 = DefaultHasher::new();
@@ -275,10 +259,10 @@ mod tests {
 
     #[test]
     fn test_make_frame_key_uniqueness() {
-        let k1 = make_frame_key(0, 1000);
-        let k2 = make_frame_key(0, 2000);
-        let k3 = make_frame_key(1, 1000);
+        let k1 = make_frame_key(1000);
+        let k2 = make_frame_key(2000);
+        let k3 = make_frame_key(1000);
         assert_ne!(k1, k2, "different timestamps should be different keys");
-        assert_ne!(k1, k3, "different event indices should be different keys");
+        assert_eq!(k1, k3, "same timestamps should be equal keys");
     }
 }

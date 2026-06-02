@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use ass_parser::{AssFile, Event, OverrideTag, Style, Timestamp};
+use ass_parser::{AssFile, Effect, Event, OverrideTag, Style, Timestamp};
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Transform as SkiaTransform};
 
 use crate::context::{RenderConfig, RenderContext, RenderedFrame};
@@ -116,6 +116,12 @@ impl Renderer {
         events.retain(|e| e.is_visible_at(ts));
         events.sort_by_key(|e| e.layer);
 
+        let duration_ms = events
+            .iter()
+            .map(|e| e.end.as_ms().saturating_sub(e.start.as_ms()))
+            .max()
+            .unwrap_or(0);
+
         for event in events {
             let style = ass.find_style(&event.style_name).cloned().unwrap_or_default();
             let event_start = event.start.as_ms();
@@ -127,7 +133,7 @@ impl Renderer {
 
         Some(RenderedFrame {
             pts_ms: timestamp_ms,
-            duration_ms: 0,
+            duration_ms,
             width: self.config.width,
             height: self.config.height,
             bitmap: pixmap.data().to_vec(),
@@ -144,9 +150,9 @@ impl Renderer {
         ass: &AssFile,
         timestamp_ms: u64,
         cache: &crate::cache::FrameCache,
-        event_index: usize,
+        _event_index: usize,
     ) -> Option<RenderedFrame> {
-        let key = crate::cache::make_frame_key(event_index, timestamp_ms);
+        let key = crate::cache::make_frame_key(timestamp_ms);
         if let Some(cached) = cache.get(&key) {
             return Some(cached);
         }
@@ -422,6 +428,31 @@ impl Renderer {
     }
 
     fn render_event(&self, pixmap: &mut Pixmap, event: &Event, ctx: &RenderContext, timestamp_ms: u64, event_start_ms: u64) {
+        // Apply Banner/Scroll effect offset before text positioning
+        let mut ctx = ctx.clone();
+        match &event.effect {
+            Effect::Banner { delay_per_pixel, left_to_right, .. } if *delay_per_pixel > 0 => {
+                let elapsed = timestamp_ms.saturating_sub(event_start_ms);
+                let x_offset = elapsed as f32 / *delay_per_pixel as f32;
+                if *left_to_right {
+                    ctx.x += x_offset;
+                } else {
+                    ctx.x -= x_offset;
+                }
+            }
+            Effect::ScrollUp { delay_per_row, bottom_offset, .. } if *delay_per_row > 0 => {
+                let elapsed = timestamp_ms.saturating_sub(event_start_ms);
+                let y_offset = elapsed as f32 / *delay_per_row as f32;
+                ctx.y = self.config.height as f32 - *bottom_offset as f32 - y_offset;
+            }
+            Effect::ScrollDown { delay_per_row, top_offset, .. } if *delay_per_row > 0 => {
+                let elapsed = timestamp_ms.saturating_sub(event_start_ms);
+                let y_offset = elapsed as f32 / *delay_per_row as f32;
+                ctx.y = *top_offset as f32 + y_offset;
+            }
+            _ => {}
+        }
+
         let plain_text = strip_override_blocks(&event.text);
         if plain_text.is_empty() {
             return;
@@ -433,14 +464,14 @@ impl Renderer {
         };
 
         if event.has_karaoke() && !event.karaoke_segments.is_empty() {
-            self.render_karaoke(pixmap, event, ctx, font_id, timestamp_ms, event_start_ms);
+            self.render_karaoke(pixmap, event, &ctx, font_id, timestamp_ms, event_start_ms);
             return;
         }
 
         let drawing_level = parse_drawing_level(&event.text);
 
         if drawing_level > 0 {
-            self.render_drawing(pixmap, &plain_text, ctx, drawing_level);
+            self.render_drawing(pixmap, &plain_text, &ctx, drawing_level);
             return;
         }
 
@@ -488,7 +519,7 @@ impl Renderer {
             && !ctx.clip_enabled
             && ctx.clip_drawing_commands.is_none();
         let sub_bbox = if can_sub {
-            compute_tight_bbox(&shaped_lines, &shaper, font_id, ctx.font_size, ctx)
+            compute_tight_bbox(&shaped_lines, &shaper, font_id, ctx.font_size, &ctx)
         } else {
             None
         };
@@ -658,9 +689,9 @@ impl Renderer {
                 if ctx.clip_drawing_commands.is_some() {
                     let sx = self.config.width as f32 / self.config.script_width as f32;
                     let sy = self.config.height as f32 / self.config.script_height as f32;
-                    apply_drawing_clip_mask(&mut clipped, w, h, ctx, sx, sy);
+                    apply_drawing_clip_mask(&mut clipped, w, h, &ctx, sx, sy);
                 } else {
-                    apply_clip_mask(&mut clipped, w, h, ctx);
+                    apply_clip_mask(&mut clipped, w, h, &ctx);
                 }
                 if ctx.alpha_multiplier < 0.999 {
                     apply_alpha_multiplier(&mut clipped, ctx.alpha_multiplier);
@@ -1180,6 +1211,12 @@ fn apply_transform_tag(
                 if p >= 0.5 {
                     ctx.bold = *w > 0;
                 }
+            }
+            OverrideTag::Pos { x, y } => {
+                let target_x = *x as f32 * scale_x;
+                let target_y = *y as f32 * scale_y;
+                ctx.x = ctx.x + (target_x - ctx.x) * p;
+                ctx.y = ctx.y + (target_y - ctx.y) * p;
             }
             _ => {}
         }
@@ -2307,6 +2344,190 @@ mod tests {
         let ass = make_test_ass();
         let ctx = renderer.build_context(&event, &style, &ass, 0, 0, 1000);
         assert_eq!(ctx.drawing_mode, 0);
+    }
+
+    fn make_test_event_with_effect(text: &str, effect: Effect) -> Event {
+        Event {
+            event_type: ass_parser::EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(0),
+            end: Timestamp::from_ms(10000),
+            style_name: "Default".into(),
+            name: String::new(),
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
+            effect,
+            text: text.into(),
+            override_tags: vec![],
+            karaoke_segments: vec![],
+            raw_override_block: String::new(),
+        }
+    }
+
+    // ── Issue 1: Banner/Scroll offset ─────────────────────────
+
+    #[test]
+    fn test_banner_effect_does_not_crash() {
+        let renderer = make_test_renderer();
+        let mut ass = make_test_ass();
+        ass.events.push(make_test_event_with_effect(
+            "BannerTest",
+            Effect::Banner { delay_per_pixel: 10, left_to_right: true, fadeaway_width: 0.0 },
+        ));
+        let frame = renderer.render_ass(&ass, 500);
+        assert!(frame.is_some());
+    }
+
+    #[test]
+    fn test_banner_effect_rtl_does_not_crash() {
+        let renderer = make_test_renderer();
+        let mut ass = make_test_ass();
+        ass.events.push(make_test_event_with_effect(
+            "BannerRTL",
+            Effect::Banner { delay_per_pixel: 10, left_to_right: false, fadeaway_width: 0.0 },
+        ));
+        let frame = renderer.render_ass(&ass, 500);
+        assert!(frame.is_some());
+    }
+
+    #[test]
+    fn test_scroll_up_effect_does_not_crash() {
+        let renderer = make_test_renderer();
+        let mut ass = make_test_ass();
+        ass.events.push(make_test_event_with_effect(
+            "ScrollUpTest",
+            Effect::ScrollUp { delay_per_row: 50, top_offset: 10.0, bottom_offset: 50.0 },
+        ));
+        let frame = renderer.render_ass(&ass, 500);
+        assert!(frame.is_some());
+    }
+
+    #[test]
+    fn test_scroll_down_effect_does_not_crash() {
+        let renderer = make_test_renderer();
+        let mut ass = make_test_ass();
+        ass.events.push(make_test_event_with_effect(
+            "ScrollDownTest",
+            Effect::ScrollDown { delay_per_row: 50, top_offset: 10.0, bottom_offset: 50.0 },
+        ));
+        let frame = renderer.render_ass(&ass, 500);
+        assert!(frame.is_some());
+    }
+
+    // ── Issue 3: \\t(\\pos) interpolation ─────────────────────
+
+    #[test]
+    fn test_apply_transform_pos_interpolation() {
+        let mut ctx = RenderContext::default();
+        ctx.x = 0.0;
+        ctx.y = 0.0;
+        // Interpolate from (0,0) to (1920,1080) at 50% progress (t=500, duration=1000)
+        apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 0, 1000, 1.0, 500, 0, 1000, 1.0, 1.0);
+        assert!((ctx.x - 960.0).abs() < 1.0, "x should be ~960, got {}", ctx.x);
+        assert!((ctx.y - 540.0).abs() < 1.0, "y should be ~540, got {}", ctx.y);
+    }
+
+    #[test]
+    fn test_apply_transform_pos_before_start() {
+        let mut ctx = RenderContext::default();
+        ctx.x = 100.0;
+        ctx.y = 200.0;
+        // Before t1=500, no interpolation should happen
+        apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 500, 1000, 1.0, 100, 0, 2000, 1.0, 1.0);
+        assert_eq!(ctx.x, 100.0);
+        assert_eq!(ctx.y, 200.0);
+    }
+
+    #[test]
+    fn test_apply_transform_pos_after_end() {
+        let mut ctx = RenderContext::default();
+        ctx.x = 100.0;
+        ctx.y = 200.0;
+        // At t2=1000 (the end of animation), should be at target
+        apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 0, 1000, 1.0, 1000, 0, 1000, 1.0, 1.0);
+        assert!((ctx.x - 1920.0).abs() < 1.0);
+        assert!((ctx.y - 1080.0).abs() < 1.0);
+    }
+
+    // ── Issue 4: duration_ms in RenderedFrame ─────────────────
+
+    #[test]
+    fn test_render_ass_duration_ms() {
+        let renderer = make_test_renderer();
+        let mut ass = make_test_ass();
+        // Event from 0ms to 5000ms
+        ass.events.push(Event {
+            event_type: ass_parser::EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(0),
+            end: Timestamp::from_ms(5000),
+            style_name: "Default".into(),
+            name: String::new(),
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
+            effect: Effect::None,
+            text: "DurationTest".into(),
+            override_tags: vec![],
+            karaoke_segments: vec![],
+            raw_override_block: String::new(),
+        });
+        let frame = renderer.render_ass(&ass, 1000);
+        assert!(frame.is_some());
+        let frame = frame.unwrap();
+        // duration_ms should be max event duration = 5000
+        assert_eq!(frame.duration_ms, 5000, "duration should be 5000ms");
+    }
+
+    #[test]
+    fn test_render_ass_duration_ms_multi_event() {
+        let renderer = make_test_renderer();
+        let mut ass = make_test_ass();
+        // Event 1: 0ms to 3000ms
+        ass.events.push(Event {
+            event_type: ass_parser::EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(0),
+            end: Timestamp::from_ms(3000),
+            ..make_test_event("Event1")
+        });
+        // Event 2: 0ms to 8000ms (longer)
+        ass.events.push(Event {
+            event_type: ass_parser::EventType::Dialogue,
+            layer: 1,
+            start: Timestamp::from_ms(0),
+            end: Timestamp::from_ms(8000),
+            ..make_test_event("Event2")
+        });
+        let frame = renderer.render_ass(&ass, 1000);
+        assert!(frame.is_some());
+        let frame = frame.unwrap();
+        // Max duration across both visible events is 8000ms
+        assert_eq!(frame.duration_ms, 8000, "duration should be 8000ms (max of all events)");
+    }
+
+    #[test]
+    fn test_render_ass_duration_ms_no_events() {
+        // When no events are visible, duration should be 0
+        let renderer = make_test_renderer();
+        let ass = make_test_ass();
+        // No events in ass
+        let frame = renderer.render_ass(&ass, 5000);
+        // Should still return a frame (empty)
+        assert!(frame.is_some());
+        assert_eq!(frame.unwrap().duration_ms, 0);
+    }
+
+    // ── Issue 2: cache key uses timestamp only ────────────────
+
+    #[test]
+    fn test_cache_key_timestamp_only() {
+        use crate::cache::FrameCacheKey;
+        // Same timestamp = same key regardless of event_index
+        let k1 = FrameCacheKey { timestamp_ms: 5000 };
+        let k2 = FrameCacheKey { timestamp_ms: 5000 };
+        assert_eq!(k1, k2);
     }
 
     // ── B1: border_style=3 opaque box ─────────────────────────

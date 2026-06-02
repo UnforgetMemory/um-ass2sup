@@ -515,7 +515,7 @@ fn test_render_ass_cache() {
     let cache = FrameCache::new(16);
     let f1 = renderer.render_ass_cached(&ass, 1000, &cache, 0);
     assert!(f1.is_some());
-    let key = make_frame_key(0, 1000);
+    let key = make_frame_key(1000);
     assert!(cache.contains(&key));
     let f2 = renderer.render_ass_cached(&ass, 1000, &cache, 0);
     assert!(f2.is_some());
