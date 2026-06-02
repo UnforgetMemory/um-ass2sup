@@ -151,6 +151,39 @@ impl Event {
     }
 }
 
+/// Split a tag string by `\` while respecting parenthesis nesting.
+/// `\t(\pos(960,540),0,3000,1)` should NOT be split at the inner `\pos`.
+fn split_tags_respecting_parens(s: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut paren_depth: usize = 0;
+
+    for ch in s.chars() {
+        match ch {
+            '(' => {
+                current.push(ch);
+                paren_depth += 1;
+            }
+            ')' if paren_depth > 0 => {
+                current.push(ch);
+                paren_depth -= 1;
+            }
+            '\\' if paren_depth == 0 => {
+                if !current.is_empty() {
+                    parts.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if !current.is_empty() {
+        parts.push(current);
+    }
+
+    parts
+}
+
 fn parse_text_with_tags(text: &str) -> (Vec<OverrideTag>, Vec<KaraokeSegment>, String) {
     let mut tags = Vec::new();
     let mut karaoke = Vec::new();
@@ -172,8 +205,8 @@ fn parse_text_with_tags(text: &str) -> (Vec<OverrideTag>, Vec<KaraokeSegment>, S
         if c == '}' {
             in_override = false;
             raw_block.push_str(&current_tag);
-            for part in current_tag.split('\\').filter(|s| !s.is_empty()) {
-                if let Some(tag) = parse_single_tag(part) {
+            for part in split_tags_respecting_parens(&current_tag) {
+                if let Some(tag) = parse_single_tag(&part) {
                     if let OverrideTag::Karaoke { style, duration } = &tag {
                         if let Some((prev_style, prev_dur)) = pending_karaoke.take() {
                             karaoke.push(KaraokeSegment::new(

@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::sync::Mutex;
 
 use ass_parser::{AssFile, Effect, Event, OverrideTag, Style, Timestamp};
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Transform as SkiaTransform};
@@ -38,7 +38,7 @@ use crate::transform::AffineTransform;
 pub struct Renderer {
     config: RenderConfig,
     font_manager: FontManager,
-    pixmap_pool: RefCell<PixmapPool>,
+    pixmap_pool: Mutex<PixmapPool>,
 }
 
 /// Reusable pixmap buffer pool to reduce allocations across events.
@@ -88,7 +88,7 @@ impl Renderer {
         Self {
             config,
             font_manager: fm,
-            pixmap_pool: RefCell::new(PixmapPool::new(8)),
+            pixmap_pool: Mutex::new(PixmapPool::new(8)),
         }
     }
 
@@ -333,6 +333,16 @@ impl Renderer {
                     ctx.clip_enabled = true;
                 }
                 OverrideTag::Transform { tag: inner_tag, t1, t2, accel } => {
+                    // If the inner tag contains \pos, initialize ctx position to
+                    // the alignment-derived values so the transform lerps FROM
+                    // the correct starting point (not from 0,0).
+                    let parsed_inner = parse_override_block(inner_tag);
+                    if parsed_inner.iter().any(|t| matches!(t, OverrideTag::Pos { .. })) {
+                        let (_ax, ay) = alignment_to_pos(ctx.alignment);
+                        ctx.x = ctx.margin_l;
+                        ctx.y = ctx.margin_v + ay * (self.config.height as f32 - ctx.margin_v * 2.0);
+                        has_pos = true;
+                    }
                     apply_transform_tag(
                         &mut ctx, inner_tag,
                         *t1, *t2, *accel,
@@ -419,8 +429,8 @@ impl Renderer {
         }
 
         if !has_pos {
-            let (ax, ay) = alignment_to_pos(ctx.alignment);
-            ctx.x = ctx.margin_l + ax * (self.config.width as f32 - ctx.margin_l - ctx.margin_r);
+            let (_ax, ay) = alignment_to_pos(ctx.alignment);
+            ctx.x = ctx.margin_l;
             ctx.y = ctx.margin_v + ay * (self.config.height as f32 - ctx.margin_v * 2.0);
         }
 
@@ -547,7 +557,7 @@ impl Renderer {
         };
 
         // Phase 4: Allocate layer and render glyphs with sub-region offset.
-        let mut layer = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
+        let mut layer = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
         let oxf = ox as f32;
         let oyf = oy as f32;
 
@@ -653,10 +663,10 @@ impl Renderer {
                 ctx.blur,
                 ctx.shadow_color,
             );
-            let mut shadow_pixmap = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
             effects::composite_over(layer.data_mut(), shadow_pixmap.data(), lw, lh);
-            self.pixmap_pool.borrow_mut().put(shadow_pixmap);
+            self.pixmap_pool.lock().unwrap().put(shadow_pixmap);
         }
 
         // Phase 7: Composite back.
@@ -709,7 +719,7 @@ impl Renderer {
         }
 
         // Return layer pixmap to pool.
-        self.pixmap_pool.borrow_mut().put(layer);
+        self.pixmap_pool.lock().unwrap().put(layer);
     }
 
     fn render_karaoke(
@@ -832,8 +842,8 @@ impl Renderer {
         };
 
         // Phase 3: Allocate layers and render with offset.
-        let mut bg_layer = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
-        let mut fg_layer = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
+        let mut bg_layer = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+        let mut fg_layer = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
         let oxf = ox as f32;
         let oyf = oy as f32;
 
@@ -908,10 +918,10 @@ impl Renderer {
                 &bg_data, lw, lh,
                 ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
             );
-            let mut shadow_pixmap = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
             effects::composite_over(bg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
-            self.pixmap_pool.borrow_mut().put(shadow_pixmap);
+            self.pixmap_pool.lock().unwrap().put(shadow_pixmap);
         }
         if ctx.shadow_depth > 0.0 {
             let fg_data = fg_layer.data().to_vec();
@@ -919,10 +929,10 @@ impl Renderer {
                 &fg_data, lw, lh,
                 ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
             );
-            let mut shadow_pixmap = self.pixmap_pool.borrow_mut().get(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
             effects::composite_over(fg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
-            self.pixmap_pool.borrow_mut().put(shadow_pixmap);
+            self.pixmap_pool.lock().unwrap().put(shadow_pixmap);
         }
 
         // Phase 6: Composite back.
@@ -935,8 +945,8 @@ impl Renderer {
         }
 
         // Return karaoke layers to pool.
-        self.pixmap_pool.borrow_mut().put(bg_layer);
-        self.pixmap_pool.borrow_mut().put(fg_layer);
+        self.pixmap_pool.lock().unwrap().put(bg_layer);
+        self.pixmap_pool.lock().unwrap().put(fg_layer);
     }
 
     fn render_drawing(&self, pixmap: &mut Pixmap, text: &str, ctx: &RenderContext, drawing_level: u8) {
@@ -1596,6 +1606,7 @@ pub(crate) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
     let mut commands = Vec::new();
     let tokens: Vec<&str> = text.split_whitespace().collect();
     let mut i = 0;
+    let mut last_cmd: Option<&str> = None;
 
     while i < tokens.len() {
         let token = tokens[i];
@@ -1605,6 +1616,7 @@ pub(crate) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                     if i + 2 < tokens.len() {
                         if let (Ok(x), Ok(y)) = (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>()) {
                             commands.push(DrawingCommand::MoveTo(x, y));
+                            last_cmd = Some("m");
                             i += 3;
                             continue;
                         }
@@ -1614,6 +1626,7 @@ pub(crate) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                     if i + 2 < tokens.len() {
                         if let (Ok(x), Ok(y)) = (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>()) {
                             commands.push(DrawingCommand::LineTo(x, y));
+                            last_cmd = Some("l");
                             i += 3;
                             continue;
                         }
@@ -1626,6 +1639,7 @@ pub(crate) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                             .collect::<Option<Vec<_>>>();
                         if let Some(n) = nums {
                             commands.push(DrawingCommand::BezierTo(n[0], n[1], n[2], n[3], n[4], n[5]));
+                            last_cmd = Some("b");
                             i += 7;
                             continue;
                         }
@@ -1635,55 +1649,82 @@ pub(crate) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                     if i + 1 < tokens.len() {
                         if tokens[i + 1] == "c" {
                             commands.push(DrawingCommand::Close);
+                            last_cmd = None;
                             i += 2;
                             continue;
                         }
                     }
                     commands.push(DrawingCommand::Close);
+                    last_cmd = None;
+                    i += 1;
+                    continue;
+                }
+                "c" => {
+                    commands.push(DrawingCommand::Close);
+                    last_cmd = None;
                     i += 1;
                     continue;
                 }
                 _ => {}
             }
-        } else {
-            if let Ok(repeat) = token.parse::<usize>() {
+        }
+
+        if token.len() > 1 {
+            if let Ok(_repeat) = token.parse::<usize>() {
                 if i + 1 < tokens.len() {
                     let cmd_char = tokens[i + 1];
-                    let args_needed = match cmd_char {
-                        "m" | "l" => 2,
-                        "b" => 6,
-                        _ => 0,
-                    };
-                    for _ in 0..repeat {
-                        if i + 1 + args_needed < tokens.len() {
-                            match cmd_char {
-                                "m" => {
-                                    let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
-                                    let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
-                                    commands.push(DrawingCommand::MoveTo(x, y));
-                                }
-                                "l" => {
-                                    let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
-                                    let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
-                                    commands.push(DrawingCommand::LineTo(x, y));
-                                }
-                                "b" => {
-                                    let nums: Vec<f32> = (2..=7)
-                                        .filter_map(|j| tokens.get(i + j)?.parse().ok())
-                                        .collect();
-                                    if nums.len() == 6 {
-                                        commands.push(DrawingCommand::BezierTo(nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]));
+                    if matches!(cmd_char, "m" | "l" | "b") {
+                        let args_needed = match cmd_char {
+                            "m" | "l" => 2,
+                            "b" => 6,
+                            _ => 0,
+                        };
+                        for _ in 0.._repeat {
+                            if i + 1 + args_needed < tokens.len() {
+                                match cmd_char {
+                                    "m" => {
+                                        let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
+                                        let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
+                                        commands.push(DrawingCommand::MoveTo(x, y));
                                     }
+                                    "l" => {
+                                        let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
+                                        let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
+                                        commands.push(DrawingCommand::LineTo(x, y));
+                                    }
+                                    "b" => {
+                                        let nums: Vec<f32> = (2..=7)
+                                            .filter_map(|j| tokens.get(i + j)?.parse().ok())
+                                            .collect();
+                                        if nums.len() == 6 {
+                                            commands.push(DrawingCommand::BezierTo(nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]));
+                                        }
+                                    }
+                                    _ => {}
                                 }
-                                _ => {}
                             }
                         }
+                        i += 2 + args_needed;
+                        continue;
                     }
-                    i += 2 + args_needed;
+                }
+            }
+        }
+
+        if let (Ok(x), Some("m" | "l")) = (token.parse::<f32>(), last_cmd) {
+            if i + 1 < tokens.len() {
+                if let Ok(y) = tokens[i + 1].parse::<f32>() {
+                    if last_cmd == Some("m") {
+                        commands.push(DrawingCommand::MoveTo(x, y));
+                    } else {
+                        commands.push(DrawingCommand::LineTo(x, y));
+                    }
+                    i += 2;
                     continue;
                 }
             }
         }
+
         i += 1;
     }
 

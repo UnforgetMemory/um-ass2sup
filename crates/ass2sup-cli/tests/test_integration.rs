@@ -344,3 +344,188 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test
         assert_eq!(sup_data[1], b'G');
     }
 }
+
+/// Helper: run pipeline at a specific timestamp for the first dialogue event,
+/// return the SUP output bytes.
+fn run_pipeline_at(ass_content: &str, timestamp_ms: u64) -> Vec<u8> {
+    let ass = AssFile::parse(ass_content).expect("ASS parse failed");
+    let renderer = Renderer::new(RenderConfig::default());
+    let quantizer = Quantizer::new(255);
+    let mut pgs = PgsEncoder::new(1920, 1080, 23.976);
+
+    let event = ass.dialogue_events().next().expect("At least one dialogue event");
+    let duration_ms = event.duration_ms();
+    if let Some(frame) = renderer.render_ass(&ass, timestamp_ms) {
+        let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
+        return pgs.encode_frame_to_bytes(&quantized, timestamp_ms, duration_ms);
+    }
+    Vec::new()
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 14 Full Pipeline Integration Tests
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_banner_effect_full_pipeline() {
+    let ass_content = r#"[Script Info]
+Title: BannerPipeline
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,Banner;10;1;0,Banner Text
+"#;
+
+    let sup_early = run_pipeline_at(ass_content, 100);
+    let sup_late = run_pipeline_at(ass_content, 2000);
+
+    assert!(!sup_early.is_empty(), "Banner early should produce SUP");
+    assert!(!sup_late.is_empty(), "Banner late should produce SUP");
+    assert_eq!(sup_early[0], b'P', "Banner early SUP should start with PG magic");
+    assert_eq!(sup_early[1], b'G', "Banner early SUP should start with PG magic");
+    assert_eq!(sup_late[0], b'P', "Banner late SUP should start with PG magic");
+    assert_eq!(sup_late[1], b'G', "Banner late SUP should start with PG magic");
+}
+
+#[test]
+fn test_scroll_effect_full_pipeline() {
+    let ass_content = r#"[Script Info]
+Title: ScrollPipeline
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,Scroll up;10;50;50,Scrolling Up Text
+Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,Scroll down;10;200;50,Scrolling Down Text
+"#;
+
+    let sup_outputs = run_full_pipeline(ass_content);
+    assert_eq!(sup_outputs.len(), 2, "Scroll pipeline should produce 2 SUP outputs");
+
+    for (i, sup_data) in sup_outputs.iter().enumerate() {
+        assert!(sup_data.len() >= 2, "Scroll SUP output {} should have magic bytes", i);
+        assert_eq!(sup_data[0], b'P', "Scroll SUP output {} should start with PG", i);
+        assert_eq!(sup_data[1], b'G', "Scroll SUP output {} should start with PG", i);
+    }
+}
+
+#[test]
+fn test_karaoke_full_pipeline() {
+    let ass_content = r#"[Script Info]
+Title: KaraokePipeline
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\k50}Hel{\kf75}lo {\ko100}Wor{\kt200}ld
+"#;
+
+    let ass = AssFile::parse(ass_content).expect("ASS parse failed");
+    assert!(
+        ass.events[0].override_tags.iter().any(|t| matches!(t, ass_parser::OverrideTag::Karaoke { .. })),
+        "Should detect karaoke override tags"
+    );
+    assert!(!ass.events[0].karaoke_segments.is_empty(), "Karaoke segments should be populated");
+
+    // Run full pipeline — should produce valid SUP
+    let sup_outputs = run_full_pipeline(ass_content);
+    assert!(!sup_outputs.is_empty(), "Karaoke ASS should produce SUP output");
+
+    // Verify SUP magic bytes
+    assert_eq!(sup_outputs[0][0], b'P', "Karaoke SUP should start with P");
+    assert_eq!(sup_outputs[0][1], b'G', "Karaoke SUP should start with G");
+
+    // Also verify pipeline works at a mid-karaoke timestamp
+    let mid_sup = run_pipeline_at(ass_content, 3000);
+    assert!(!mid_sup.is_empty(), "Mid-karaoke pipeline should produce SUP");
+    assert_eq!(mid_sup[0], b'P');
+    assert_eq!(mid_sup[1], b'G');
+}
+
+#[test]
+fn test_t_transform_full_pipeline() {
+    let ass_content = r#"[Script Info]
+Title: TransformPipeline
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,2000,1)}Transform Text
+"#;
+
+    // Parse and verify transform tag
+    let ass = AssFile::parse(ass_content).expect("ASS parse failed");
+    assert!(
+        ass.events[0].override_tags.iter().any(|t| matches!(t, ass_parser::OverrideTag::Transform { .. })),
+        "Should parse Transform tag"
+    );
+
+    // Run pipeline at multiple timestamps to exercise interpolation
+    let sup_start = run_pipeline_at(ass_content, 1000);
+    assert!(!sup_start.is_empty(), "Transform start should produce SUP");
+    assert_eq!(sup_start[0], b'P');
+
+    let sup_mid = run_pipeline_at(ass_content, 3000);
+    assert!(!sup_mid.is_empty(), "Transform mid should produce SUP");
+    assert_eq!(sup_mid[0], b'P');
+
+    let sup_end = run_pipeline_at(ass_content, 5000);
+    assert!(!sup_end.is_empty(), "Transform end should produce SUP");
+    assert_eq!(sup_end[0], b'P');
+}
+
+#[test]
+fn test_vector_clip_full_pipeline() {
+    let ass_content = r#"[Script Info]
+Title: VectorClipPipeline
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(1,m 0 0 l 100 0 100 100 0 100)}Vector Clip Text
+"#;
+
+    let ass = AssFile::parse(ass_content).expect("ASS parse failed");
+    assert!(
+        ass.events[0].override_tags.iter().any(|t| matches!(t, ass_parser::OverrideTag::ClipDrawing { .. })),
+        "Vector clip should parse as ClipDrawing"
+    );
+
+    let sup_outputs = run_full_pipeline(ass_content);
+    assert!(!sup_outputs.is_empty(), "Vector clip ASS should produce SUP output");
+    let sup_data = &sup_outputs[0];
+    assert!(sup_data.len() >= 2, "SUP data should have magic bytes");
+    assert_eq!(sup_data[0], b'P', "SUP should start with P");
+    assert_eq!(sup_data[1], b'G', "SUP should start with G");
+}

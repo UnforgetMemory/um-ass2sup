@@ -1097,3 +1097,445 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Combined,,0,0,0,,Combined Features
     let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
     assert!(non_zero > 0, "Combined features should produce visible output");
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 14 Integration Tests
+// ═══════════════════════════════════════════════════════════════════
+
+// ── C0: Banner effect position change ──────────────────────────
+
+#[test]
+fn test_banner_effect_ltr_changes_x_position() {
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let mut ass = AssFile::new();
+    ass.styles.push(ass_parser::Style { name: "Default".to_string(), font_name: "DejaVu Sans".to_string(), ..ass_parser::Style::default() });
+    ass.events.push(Event {
+        event_type: EventType::Dialogue,
+        layer: 0,
+        start: Timestamp::from_ms(0),
+        end: Timestamp::from_ms(10000),
+        style_name: "Default".to_string(),
+        name: String::new(),
+        margin_l: 0,
+        margin_r: 0,
+        margin_v: 0,
+        effect: Effect::Banner { delay_per_pixel: 10, left_to_right: true, fadeaway_width: 0.0 },
+        text: "BannerLTR Text".to_string(),
+        override_tags: vec![],
+        karaoke_segments: vec![],
+        raw_override_block: String::new(),
+    });
+    // t=100: x_offset = 100/10 = 10px
+    let early = renderer.render_ass(&ass, 100).unwrap();
+    // t=2000: x_offset = 2000/10 = 200px — text shifted right by 190px
+    let late = renderer.render_ass(&ass, 2000).unwrap();
+    assert!(early.bitmap.iter().any(|&b| b != 0), "Banner LTR early should have content");
+    assert!(late.bitmap.iter().any(|&b| b != 0), "Banner LTR late should have content");
+    assert_ne!(early.bitmap, late.bitmap, "Banner LTR should shift text horizontally");
+}
+
+#[test]
+fn test_banner_effect_rtl_changes_x_position() {
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let mut ass = AssFile::new();
+    ass.events.push(Event {
+        event_type: EventType::Dialogue,
+        layer: 0,
+        start: Timestamp::from_ms(0),
+        end: Timestamp::from_ms(10000),
+        style_name: "Default".to_string(),
+        name: String::new(),
+        margin_l: 0,
+        margin_r: 0,
+        margin_v: 0,
+        effect: Effect::Banner { delay_per_pixel: 10, left_to_right: false, fadeaway_width: 0.0 },
+        text: "BannerRTL Text".to_string(),
+        override_tags: vec![],
+        karaoke_segments: vec![],
+        raw_override_block: String::new(),
+    });
+    // t=100: x_offset = -10px (moving left)
+    let early = renderer.render_ass(&ass, 100).unwrap();
+    // t=2000: x_offset = -200px
+    let late = renderer.render_ass(&ass, 2000).unwrap();
+    assert!(early.bitmap.iter().any(|&b| b != 0), "Banner RTL early should have content");
+    assert!(late.bitmap.iter().any(|&b| b != 0), "Banner RTL late should have content");
+    assert_ne!(early.bitmap, late.bitmap, "Banner RTL should shift text horizontally");
+}
+
+// ── C1: Scroll effect position change ─────────────────────────
+
+#[test]
+fn test_scroll_up_effect_changes_y_position() {
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let mut ass = AssFile::new();
+    ass.events.push(Event {
+        event_type: EventType::Dialogue,
+        layer: 0,
+        start: Timestamp::from_ms(0),
+        end: Timestamp::from_ms(10000),
+        style_name: "Default".to_string(),
+        name: String::new(),
+        margin_l: 0,
+        margin_r: 0,
+        margin_v: 0,
+        effect: Effect::ScrollUp { delay_per_row: 10, top_offset: 10.0, bottom_offset: 50.0 },
+        text: "ScrollUp Text".to_string(),
+        override_tags: vec![],
+        karaoke_segments: vec![],
+        raw_override_block: String::new(),
+    });
+    // t=100: y = height - bottom_offset - y_offset = 1080 - 50 - 10 = 1020
+    let early = renderer.render_ass(&ass, 100).unwrap();
+    // t=2000: y = 1080 - 50 - 200 = 830
+    let late = renderer.render_ass(&ass, 2000).unwrap();
+    assert!(early.bitmap.iter().any(|&b| b != 0), "ScrollUp early should have content");
+    assert!(late.bitmap.iter().any(|&b| b != 0), "ScrollUp late should have content");
+    assert_ne!(early.bitmap, late.bitmap, "ScrollUp should shift text vertically");
+}
+
+#[test]
+fn test_scroll_down_effect_changes_y_position() {
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let mut ass = AssFile::new();
+    ass.events.push(Event {
+        event_type: EventType::Dialogue,
+        layer: 0,
+        start: Timestamp::from_ms(0),
+        end: Timestamp::from_ms(10000),
+        style_name: "Default".to_string(),
+        name: String::new(),
+        margin_l: 0,
+        margin_r: 0,
+        margin_v: 0,
+        effect: Effect::ScrollDown { delay_per_row: 10, top_offset: 200.0, bottom_offset: 50.0 },
+        text: "ScrollDown Text".to_string(),
+        override_tags: vec![],
+        karaoke_segments: vec![],
+        raw_override_block: String::new(),
+    });
+    // t=100: y = top_offset + y_offset = 200 + 10 = 210
+    let early = renderer.render_ass(&ass, 100).unwrap();
+    // t=2000: y = 200 + 200 = 400
+    let late = renderer.render_ass(&ass, 2000).unwrap();
+    assert!(early.bitmap.iter().any(|&b| b != 0), "ScrollDown early should have content");
+    assert!(late.bitmap.iter().any(|&b| b != 0), "ScrollDown late should have content");
+    assert_ne!(early.bitmap, late.bitmap, "ScrollDown should shift text vertically");
+}
+
+// ── C2: Karaoke segments parsing ──────────────────────────────
+
+#[test]
+fn test_karaoke_segments_populated_with_all_tags() {
+    let content = r#"[Script Info]
+Title: KaraokeAll
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\k50}Hel{\kf75}lo {\ko100}Wor{\kt200}ld
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let event = &ass.events[0];
+    assert!(!event.karaoke_segments.is_empty(), "Karaoke segments should be populated");
+
+    // Verify all four tag types are present
+    let styles: Vec<_> = event.karaoke_segments.iter().map(|s| s.style).collect();
+    assert!(styles.contains(&ass_parser::karaoke::KaraokeStyle::Instant), "Should have \\k style");
+    assert!(styles.contains(&ass_parser::karaoke::KaraokeStyle::Fill), "Should have \\kf style");
+    assert!(styles.contains(&ass_parser::karaoke::KaraokeStyle::Outline), "Should have \\ko style");
+    assert!(styles.contains(&ass_parser::karaoke::KaraokeStyle::Timing), "Should have \\kt style");
+
+    // Verify segments have text content
+    for seg in &event.karaoke_segments {
+        assert!(!seg.text.is_empty(), "Each karaoke segment should have text");
+        assert!(seg.duration_ms > 0, "Each karaoke segment should have positive duration");
+    }
+}
+
+#[test]
+fn test_karaoke_syllable_states_at_different_timestamps() {
+    use subtitle_renderer::karaoke::{KaraokeRenderer, KaraokePhase};
+
+    let segs = vec![
+        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Instant, 500, "Hel".into(), 0),
+        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Fill, 500, "lo ".into(), 1),
+        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Outline, 500, "Wor".into(), 2),
+        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Timing, 0, "ld".into(), 3),
+    ];
+
+    // At t=0: all pending
+    let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 0);
+    assert_eq!(states.len(), 4);
+    assert!(matches!(states[0].phase, KaraokePhase::Active { progress } if progress == 0.0), "First syllable should be Active at t=0");
+    assert!(matches!(states[1].phase, KaraokePhase::Pending));
+    assert!(matches!(states[2].phase, KaraokePhase::Pending));
+    assert!(matches!(states[3].phase, KaraokePhase::Done));
+
+    // At t=750: syllable 0 done, syllable 1 active (~50%), 2+3 pending
+    let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 750);
+    assert!(matches!(states[0].phase, KaraokePhase::Done), "First syllable should be Done at t=750");
+    assert!(matches!(states[1].phase, KaraokePhase::Active { .. }), "Second syllable should be Active at t=750");
+    assert!(matches!(states[2].phase, KaraokePhase::Pending), "Third syllable should be Pending at t=750");
+    assert!(matches!(states[3].phase, KaraokePhase::Done), "Timing syllable with dur=0 should be Done at t=750");
+
+    // At t=2000: all done
+    let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 2000);
+    for (i, s) in states.iter().enumerate() {
+        assert!(matches!(s.phase, KaraokePhase::Done), "Syllable {i} should be Done at t=2000");
+    }
+}
+
+#[test]
+fn test_karaoke_fill_progress_increases_over_time() {
+    use subtitle_renderer::karaoke::{KaraokeRenderer, KaraokePhase};
+
+    let segs = vec![
+        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Fill, 1000, "Fill".into(), 0),
+    ];
+
+    // At t=0: active with progress 0 (start == event_start)
+    let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 0);
+    assert!(matches!(states[0].phase, KaraokePhase::Active { progress } if progress == 0.0), "At t=0 fill should be Active with progress 0");
+
+    // At t=250: active, progress ~0.25
+    let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 250);
+    assert!(matches!(states[0].phase, KaraokePhase::Active { progress } if (progress - 0.25).abs() < 0.05));
+
+    // At t=500: active, progress ~0.5
+    let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 500);
+    assert!(matches!(states[0].phase, KaraokePhase::Active { progress } if (progress - 0.50).abs() < 0.05));
+
+    // At t=1000: done
+    let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 1000);
+    assert!(matches!(states[0].phase, KaraokePhase::Done));
+}
+
+#[test]
+fn test_karaoke_render_all_styles_no_panic() {
+    let content = r#"[Script Info]
+Title: KaraokeRender
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\k50}Hel{\kf75}lo {\ko100}Wor{\kt200}ld
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let mut renderer = Renderer::new(RenderConfig::default());
+
+    // Render before, during, and after karaoke event — all should produce frames
+    let before = renderer.render_ass(&ass, 500);
+    assert!(before.is_some(), "Karaoke render before event should produce frame");
+
+    let during = renderer.render_ass(&ass, 3000);
+    assert!(during.is_some(), "Karaoke render during event should produce frame");
+    let f = during.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b != 0), "Karaoke during event should have visible pixels");
+
+    let after = renderer.render_ass(&ass, 7000);
+    assert!(after.is_some(), "Karaoke render after event should produce frame");
+}
+
+// ── C3: \t(\pos) transform ────────────────────────────────────
+
+#[test]
+fn test_t_pos_transform_changes_bitmap_over_time() {
+    let content = r#"[Script Info]
+Title: TransformTest
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,3000,1)}Transform Me
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let mut renderer = Renderer::new(RenderConfig::default());
+
+    // Render at t=0ms (start of transform, p=0)
+    // Render at t=1500ms (mid-transform, p=0.5)
+    // Render at t=3000ms (end of transform, p=1)
+    let start_frame = renderer.render_ass(&ass, 0).unwrap();
+    let mid_frame = renderer.render_ass(&ass, 1500).unwrap();
+    let end_frame = renderer.render_ass(&ass, 3000).unwrap();
+
+    assert!(start_frame.bitmap.iter().any(|&b| b != 0), "Transform start should have content");
+    assert!(mid_frame.bitmap.iter().any(|&b| b != 0), "Transform mid should have content");
+    assert!(end_frame.bitmap.iter().any(|&b| b != 0), "Transform end should have content");
+
+    // At different interpolation points, position differs → different bitmap
+    assert_ne!(start_frame.bitmap, mid_frame.bitmap,
+        "Mid-transform bitmap should differ from start");
+    assert_ne!(mid_frame.bitmap, end_frame.bitmap,
+        "Mid-transform bitmap should differ from end");
+}
+
+#[test]
+fn test_t_pos_transform_with_accel_renders() {
+    let content = r#"[Script Info]
+Title: Accelerated
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,3000,2)}Accelerated
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let mut renderer = Renderer::new(RenderConfig::default());
+
+    let frame0 = renderer.render_ass(&ass, 0).unwrap();
+    let frame1 = renderer.render_ass(&ass, 1500).unwrap();
+    let frame3 = renderer.render_ass(&ass, 3000).unwrap();
+
+    assert!(frame0.bitmap.iter().any(|&b| b != 0), "Accelerated start should render");
+    assert!(frame1.bitmap.iter().any(|&b| b != 0), "Accelerated mid should render");
+    assert!(frame3.bitmap.iter().any(|&b| b != 0), "Accelerated end should render");
+
+    // With accel=2, positions differ from linear, so bitmaps at mid vs end differ
+    assert_ne!(frame0.bitmap, frame1.bitmap, "Start and mid bitmaps should differ");
+    assert_ne!(frame1.bitmap, frame3.bitmap, "Mid and end bitmaps should differ");
+}
+
+#[test]
+fn test_t_pos_transform_before_after_animation_window() {
+    let content = r#"[Script Info]
+Title: TransformWindow
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),1000,3000,1)}Windowed
+"#;
+    // Effect event from 1s to 5s, \t animates from 2s (1000+1000) to 4s (1000+3000)
+    let ass = AssFile::parse(content).unwrap();
+    let mut renderer = Renderer::new(RenderConfig::default());
+
+    let before_anim = renderer.render_ass(&ass, 1500).unwrap();
+    let during_anim = renderer.render_ass(&ass, 3000).unwrap();
+    let after_anim = renderer.render_ass(&ass, 4500).unwrap();
+
+    assert!(before_anim.bitmap.iter().any(|&b| b != 0), "Before animation should render");
+    assert!(during_anim.bitmap.iter().any(|&b| b != 0), "During animation should render");
+    assert!(after_anim.bitmap.iter().any(|&b| b != 0), "After animation should render");
+}
+
+// ── C4: Vector clip ───────────────────────────────────────────
+
+#[test]
+fn test_vector_clip_through_full_renderer() {
+    let content = r#"[Script Info]
+Title: VectorClip
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(1,m 0 0 l 1920 0 1920 1080 0 1080 c)}Vector Clip
+"#;
+    let ass = AssFile::parse(content).unwrap();
+
+    // Verify ClipDrawing tag was parsed
+    let has_clip_drawing = ass.events[0].override_tags.iter().any(|t| {
+        matches!(t, ass_parser::OverrideTag::ClipDrawing { .. })
+    });
+    assert!(has_clip_drawing, "Vector clip should parse as ClipDrawing tag");
+
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 3000);
+    assert!(frame.is_some(), "Vector clip should render without panic");
+    let f = frame.unwrap();
+    let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
+    assert!(non_zero > 0, "Vector clip rendering should produce visible output");
+}
+
+#[test]
+fn test_vector_clip_inverse_renders() {
+    let content = r#"[Script Info]
+Title: InverseVectorClip
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\iclip(1,m 0 0 l 1920 0 1920 1080 0 1080 c)}Inverse Clip
+"#;
+    let ass = AssFile::parse(content).unwrap();
+
+    // Verify ClipInverseDrawing tag was parsed
+    let has_iclip_drawing = ass.events[0].override_tags.iter().any(|t| {
+        matches!(t, ass_parser::OverrideTag::ClipInverseDrawing { .. })
+    });
+    assert!(has_iclip_drawing, "Inverse vector clip should parse as ClipInverseDrawing tag");
+
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 3000);
+    assert!(frame.is_some(), "Inverse vector clip should render without panic");
+}
+
+#[test]
+fn test_vector_clip_with_scale_parsed_correctly() {
+    let content = r#"[Script Info]
+Title: ScaledClip
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(0.5,m 10 10 l 200 0 200 200 0 200 c)}Scaled Vector
+"#;
+    let ass = AssFile::parse(content).unwrap();
+
+    let has_scaled = ass.events[0].override_tags.iter().any(|t| {
+        matches!(t, ass_parser::OverrideTag::ClipDrawing { scale, .. } if (*scale - 0.5).abs() < 0.01)
+    });
+    assert!(has_scaled, "Vector clip with scale=0.5 should parse correctly");
+
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 3000);
+    assert!(frame.is_some(), "Scaled vector clip should render without panic");
+}
