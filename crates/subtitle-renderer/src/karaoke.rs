@@ -174,13 +174,16 @@ impl KaraokeRenderer {
 
     /// Returns `true` if the syllable should be highlighted in the foreground (primary) color.
     ///
-    /// Active syllables are always highlighted. Done syllables are only highlighted for
-    /// Instant and Fill styles (not Outline, which reverts to secondary color).
+    /// Active syllables are always highlighted. Done syllables are highlighted for
+    /// Instant, Fill, and Outline styles (Outline Done shows full primary glyph).
     pub fn should_highlight(style: KaraokeStyle, phase: KaraokePhase) -> bool {
         match phase {
             KaraokePhase::Pending => false,
             KaraokePhase::Active { .. } => true,
-            KaraokePhase::Done => matches!(style, KaraokeStyle::Instant | KaraokeStyle::Fill),
+            KaraokePhase::Done => matches!(
+                style,
+                KaraokeStyle::Instant | KaraokeStyle::Fill | KaraokeStyle::Outline
+            ),
         }
     }
 
@@ -269,7 +272,7 @@ mod tests {
 
     #[test]
     fn test_should_highlight_outline_done() {
-        assert!(!KaraokeRenderer::should_highlight(
+        assert!(KaraokeRenderer::should_highlight(
             KaraokeStyle::Outline,
             KaraokePhase::Done
         ));
@@ -385,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_outline_highlight_done() {
-        assert!(!KaraokeRenderer::should_highlight(
+        assert!(KaraokeRenderer::should_highlight(
             KaraokeStyle::Outline,
             KaraokePhase::Done
         ));

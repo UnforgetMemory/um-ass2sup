@@ -658,8 +658,8 @@ impl Renderer {
                 &layer_data,
                 lw,
                 lh,
-                ctx.shadow_depth,
-                ctx.shadow_depth,
+                if ctx.shadow_x != 0.0 { ctx.shadow_x } else { ctx.shadow_depth },
+                if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
                 ctx.blur,
                 ctx.shadow_color,
             );
@@ -850,17 +850,33 @@ impl Renderer {
         for (i, info) in syllable_infos.iter().enumerate() {
             let syllable = &syllables[i];
             let mut sy_ctx = ctx.clone();
-            if matches!(syllable.phase, KaraokePhase::Done | KaraokePhase::Active { .. }) {
+            // B2: \ko (Outline) karaoke — hide fill during active, show outline sweep.
+            if info.style == KaraokeStyle::Outline {
+                match syllable.phase {
+                    KaraokePhase::Pending => {
+                        // No outline, fill stays secondary.
+                        sy_ctx.primary_color = ctx.secondary_color;
+                        sy_ctx.outline_width = 0.0;
+                        sy_ctx.outline_x_width = 0.0;
+                        sy_ctx.outline_y_width = 0.0;
+                    }
+                    KaraokePhase::Active { .. } => {
+                        // Fill stays secondary, outline uses primary with boosted width.
+                        sy_ctx.primary_color = ctx.secondary_color;
+                        sy_ctx.outline_color = ctx.primary_color;
+                        sy_ctx.outline_width = ctx.outline_width * 3.0;
+                        sy_ctx.outline_x_width = ctx.outline_x_width * 3.0;
+                        sy_ctx.outline_y_width = ctx.outline_y_width * 3.0;
+                    }
+                    KaraokePhase::Done => {
+                        // Full glyph in primary.
+                        sy_ctx.primary_color = ctx.primary_color;
+                    }
+                }
+            } else if matches!(syllable.phase, KaraokePhase::Done | KaraokePhase::Active { .. }) {
                 sy_ctx.primary_color = ctx.primary_color;
             } else {
                 sy_ctx.primary_color = ctx.secondary_color;
-            }
-
-            // B2: \ko (Outline) active syllables get 3x boosted outline width.
-            if info.is_active && info.style == KaraokeStyle::Outline {
-                sy_ctx.outline_width = ctx.outline_width * 3.0;
-                sy_ctx.outline_x_width = ctx.outline_x_width * 3.0;
-                sy_ctx.outline_y_width = ctx.outline_y_width * 3.0;
             }
 
             let target_layer = if info.is_active {
@@ -916,7 +932,9 @@ impl Renderer {
             let bg_data = bg_layer.data().to_vec();
             let shadow_data = effects::apply_shadow(
                 &bg_data, lw, lh,
-                ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
+                if ctx.shadow_x != 0.0 { ctx.shadow_x } else { ctx.shadow_depth },
+                if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
+                ctx.blur, ctx.shadow_color,
             );
             let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
@@ -927,7 +945,9 @@ impl Renderer {
             let fg_data = fg_layer.data().to_vec();
             let shadow_data = effects::apply_shadow(
                 &fg_data, lw, lh,
-                ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
+                if ctx.shadow_x != 0.0 { ctx.shadow_x } else { ctx.shadow_depth },
+                if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
+                ctx.blur, ctx.shadow_color,
             );
             let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
