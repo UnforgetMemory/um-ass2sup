@@ -100,6 +100,10 @@ pub struct RenderContext {
     pub blur: f32,
     /// Z-axis rotation in degrees (set by `\frz`, `\fr`).
     pub rotation: f32,
+    /// X-axis rotation in degrees for perspective projection (set by `\frx`).
+    pub perspective_x: f32,
+    /// Y-axis rotation in degrees for perspective projection (set by `\fry`).
+    pub perspective_y: f32,
     /// Horizontal scale percentage (set by `\fscx`). 100.0 = normal.
     pub scale_x: f32,
     /// Vertical scale percentage (set by `\fscy`). 100.0 = normal.
@@ -180,6 +184,8 @@ impl Default for RenderContext {
             shadow_y: 0.0,
             blur: 0.0,
             rotation: 0.0,
+            perspective_x: 0.0,
+            perspective_y: 0.0,
             scale_x: 100.0,
             scale_y: 100.0,
             spacing: 0.0,

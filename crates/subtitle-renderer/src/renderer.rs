@@ -262,10 +262,9 @@ impl Renderer {
                     ctx.scale_y = *y as f32;
                 }
                 OverrideTag::Rotation { x, y, z } => {
-                    // \frz sets Z-axis rotation; \frx/\fry set X/Y pseudo-rotation via shear
                     ctx.rotation = *z as f32;
-                    ctx.shear_x = *x as f32;
-                    ctx.shear_y = *y as f32;
+                    ctx.perspective_x = *x as f32;
+                    ctx.perspective_y = *y as f32;
                 }
                 OverrideTag::Origin { x, y } => {
                     ctx.origin_x = *x as f32 * scale_x;
@@ -375,6 +374,8 @@ impl Renderer {
                         ctx.strikeout = s.strikeout;
                         ctx.rotation = s.angle as f32;
                         ctx.border_style = s.border_style;
+                        ctx.perspective_x = 0.0;
+                        ctx.perspective_y = 0.0;
                     }
                 }
                 OverrideTag::ResetAll => {
@@ -391,6 +392,8 @@ impl Renderer {
                     ctx.alignment = style.alignment;
                     ctx.writing_mode = 0;
                     ctx.baseline_offset = 0.0;
+                    ctx.perspective_x = 0.0;
+                    ctx.perspective_y = 0.0;
                 }
                 OverrideTag::WritingMode(mode) => {
                     ctx.writing_mode = *mode;
@@ -525,6 +528,8 @@ impl Renderer {
         let can_sub = ctx.rotation == 0.0
             && ctx.shear_x == 0.0
             && ctx.shear_y == 0.0
+            && ctx.perspective_x == 0.0
+            && ctx.perspective_y == 0.0
             && (ctx.writing_mode == 0 || ctx.writing_mode == 1)
             && !ctx.clip_enabled
             && ctx.clip_drawing_commands.is_none();
@@ -688,8 +693,14 @@ impl Renderer {
                 transform = transform.then(&AffineTransform::rotate_at(90.0, ctx.x, ctx.y));
             }
 
-            let final_data = if transform.is_identity() {
+            let final_data = if transform.is_identity() && ctx.perspective_x == 0.0 && ctx.perspective_y == 0.0 {
                 layer.data().to_vec()
+            } else if ctx.perspective_x != 0.0 || ctx.perspective_y != 0.0 {
+                transform.apply_with_perspective(
+                    layer.data(), w, h, w, h,
+                    ctx.perspective_x, ctx.perspective_y,
+                    ctx.origin_x, ctx.origin_y,
+                )
             } else {
                 transform.apply_to_pixmap(layer.data(), w, h, w, h)
             };
@@ -822,6 +833,8 @@ impl Renderer {
         let can_sub = ctx.rotation == 0.0
             && ctx.shear_x == 0.0
             && ctx.shear_y == 0.0
+            && ctx.perspective_x == 0.0
+            && ctx.perspective_y == 0.0
             && (ctx.writing_mode == 0 || ctx.writing_mode == 1)
             && !ctx.clip_enabled
             && ctx.clip_drawing_commands.is_none();
@@ -1204,8 +1217,8 @@ fn apply_transform_tag(
             }
             OverrideTag::Rotation { x, y, z } => {
                 ctx.rotation = ctx.rotation + (*z as f32 - ctx.rotation) * p;
-                ctx.shear_x = ctx.shear_x + (*x as f32 - ctx.shear_x) * p;
-                ctx.shear_y = ctx.shear_y + (*y as f32 - ctx.shear_y) * p;
+                ctx.perspective_x = ctx.perspective_x + (*x as f32 - ctx.perspective_x) * p;
+                ctx.perspective_y = ctx.perspective_y + (*y as f32 - ctx.perspective_y) * p;
             }
             OverrideTag::Shear { x, y } => {
                 ctx.shear_x = ctx.shear_x + (*x as f32 - ctx.shear_x) * p;

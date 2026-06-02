@@ -2619,3 +2619,239 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fad(500,500)\t(\fscx150,0,20
     let frame_start = renderer.render_ass(&parsed, 1000);
     assert!(frame_start.is_some(), "Fade+transform should render at 1000ms");
 }
+
+#[test]
+fn test_perspective_frx_renders() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\frx45}PerspectiveX
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "\\frx45 perspective should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "\\frx45 perspective text should have visible pixels");
+}
+
+#[test]
+fn test_perspective_fry_renders() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fry30}PerspectiveY
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "\\fry30 perspective should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "\\fry30 perspective text should have visible pixels");
+}
+
+#[test]
+fn test_perspective_both_renders() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\frx20\fry15}PerspectiveBoth
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "\\frx20\\fry15 should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "\\frx20\\fry15 text should have visible pixels");
+}
+
+#[test]
+fn test_perspective_differs_from_plain() {
+    let plain_ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,PlainText
+"#;
+    let persp_ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\frx45}PlainText
+"#;
+    let plain_parsed = AssFile::parse(plain_ass).unwrap();
+    let persp_parsed = AssFile::parse(persp_ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let plain_frame = renderer.render_ass(&plain_parsed, 2000).unwrap();
+    let persp_frame = renderer.render_ass(&persp_parsed, 2000).unwrap();
+    assert_ne!(
+        plain_frame.bitmap, persp_frame.bitmap,
+        "\\frx45 should produce different bitmap than plain text"
+    );
+}
+
+#[test]
+fn test_perspective_with_org() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\org(960,540)\frx45}PerspOrg
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "\\frx45 with \\org should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "\\frx45 with \\org text should have visible pixels");
+}
+
+#[test]
+fn test_embedded_font_data_loadable() {
+    let font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+    let font_data = std::fs::read(font_path).expect("DejaVu Sans TTF should exist");
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let id = renderer.font_manager_mut().load_font_data(font_data);
+    assert_ne!(id, fontdb::ID::dummy(), "load_font_data should return a valid font ID");
+}
+
+#[test]
+fn test_embedded_font_override_renders() {
+    let font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+    let font_data = std::fs::read(font_path).expect("DejaVu Sans TTF should exist");
+    let mut renderer = Renderer::new(RenderConfig::default());
+    renderer.font_manager_mut().load_font_data(font_data);
+
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,EmbeddedFontOverride
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "Render with loaded font data should not panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "Text with loaded font data should have visible pixels");
+}
+
+#[test]
+fn test_embedded_font_parse_has_embedded() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Fonts]
+fontname: TestFont, filename: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,EmbeddedTest
+"#;
+    let mut parsed = AssFile::parse(ass).unwrap();
+    let loaded = parsed.load_embedded_fonts(std::path::Path::new("/usr/share/fonts/truetype/dejavu/"));
+    assert!(!loaded.is_empty(), "load_embedded_fonts should return non-empty vec for existing file");
+}
+
+#[test]
+fn test_embedded_font_missing_file() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Fonts]
+fontname: MissingFont, filename: /tmp/nonexistent_font_12345.ttf
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,MissingTest
+"#;
+    let mut parsed = AssFile::parse(ass).unwrap();
+    let loaded = parsed.load_embedded_fonts(std::path::Path::new("/tmp/"));
+    assert!(loaded.is_empty(), "load_embedded_fonts should return empty vec for missing file");
+}
+
+#[test]
+fn test_embedded_font_empty_filename() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Fonts]
+fontname: EmptyFont
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,EmptyTest
+"#;
+    let mut parsed = AssFile::parse(ass).unwrap();
+    let loaded = parsed.load_embedded_fonts(std::path::Path::new("/tmp/"));
+    assert!(loaded.is_empty(), "load_embedded_fonts should return empty vec for empty filename");
+}

@@ -233,6 +233,126 @@ impl AffineTransform {
 
         dst
     }
+
+    #[allow(clippy::too_many_arguments)]
+    /// Transform an RGBA pixmap with 3D perspective projection.
+    ///
+    /// Like [`apply_to_pixmap`] but adds a perspective w-divide step before the
+    /// affine inverse mapping, implementing ASS `\frx` / `\fry` rotation effects.
+    ///
+    /// `perspective_x` and `perspective_y` are the ASS `\frx` / `\fry` angles in
+    /// degrees. `origin_x` / `origin_y` define the rotation center; when set to
+    /// `0.0` they default to the center of the destination image.
+    pub fn apply_with_perspective(
+        &self,
+        src: &[u8],
+        src_w: u32,
+        src_h: u32,
+        dst_w: u32,
+        dst_h: u32,
+        perspective_x: f32,
+        perspective_y: f32,
+        origin_x: f32,
+        origin_y: f32,
+    ) -> Vec<u8> {
+        let inv = match self.inverse() {
+            Some(t) => t,
+            None => return vec![0u8; (dst_w * dst_h * 4) as usize],
+        };
+
+        let mut dst = vec![0u8; (dst_w * dst_h * 4) as usize];
+        let src_w_f = src_w as f32;
+        let src_h_f = src_h as f32;
+
+        // Perspective centre: default to image centre when origin is 0
+        let cx = if origin_x != 0.0 {
+            origin_x
+        } else {
+            dst_w as f32 * 0.5
+        };
+        let cy = if origin_y != 0.0 {
+            origin_y
+        } else {
+            dst_h as f32 * 0.5
+        };
+
+        let half_dst_w = dst_w as f32 * 0.5;
+        let half_dst_h = dst_h as f32 * 0.5;
+
+        // Perspective divisor coefficients
+        //   \fry → horizontal perspective (ax scales with rel_x)
+        //   \frx → vertical perspective   (ay scales with rel_y)
+        let ax = perspective_y.to_radians().sin() / half_dst_w;
+        let ay = perspective_x.to_radians().sin() / half_dst_h;
+
+        for dy in 0..dst_h {
+            for dx in 0..dst_w {
+                // 1. Relative position from rotation centre
+                let rel_x = dx as f32 + 0.5 - cx;
+                let rel_y = dy as f32 + 0.5 - cy;
+
+                // 2. Perspective w-divide (inverse)
+                let w_inv = 1.0 - rel_x * ax - rel_y * ay;
+                let w_inv = w_inv.max(0.01); // clamp to prevent division issues
+
+                // 3. Pre-perspective position
+                let pre_x = rel_x / w_inv + cx;
+                let pre_y = rel_y / w_inv + cy;
+
+                // 4. Apply affine inverse to get source coordinate
+                let (sx, sy) = inv.apply(pre_x, pre_y);
+                let sx = sx - 0.5;
+                let sy = sy - 0.5;
+
+                // 5. Bounds check & bilinear interpolation (same as apply_to_pixmap)
+                if sx < -1.0 || sy < -1.0 || sx >= src_w_f || sy >= src_h_f {
+                    continue;
+                }
+
+                let x0 = sx.floor() as i32;
+                let y0 = sy.floor() as i32;
+                let x1 = x0 + 1;
+                let y1 = y0 + 1;
+
+                let fx = sx - x0 as f32;
+                let fy = sy - y0 as f32;
+
+                let s00 = sample_pixel(src, src_w, src_h, x0, y0);
+                let s10 = sample_pixel(src, src_w, src_h, x1, y0);
+                let s01 = sample_pixel(src, src_w, src_h, x0, y1);
+                let s11 = sample_pixel(src, src_w, src_h, x1, y1);
+
+                let w00 = (1.0 - fx) * (1.0 - fy);
+                let w10 = fx * (1.0 - fy);
+                let w01 = (1.0 - fx) * fy;
+                let w11 = fx * fy;
+
+                let dst_idx = ((dy * dst_w + dx) * 4) as usize;
+
+                let s00_v =
+                    f32x4::from([s00[0] as f32, s00[1] as f32, s00[2] as f32, s00[3] as f32]);
+                let s10_v =
+                    f32x4::from([s10[0] as f32, s10[1] as f32, s10[2] as f32, s10[3] as f32]);
+                let s01_v =
+                    f32x4::from([s01[0] as f32, s01[1] as f32, s01[2] as f32, s01[3] as f32]);
+                let s11_v =
+                    f32x4::from([s11[0] as f32, s11[1] as f32, s11[2] as f32, s11[3] as f32]);
+
+                let result = s00_v * f32x4::splat(w00)
+                    + s10_v * f32x4::splat(w10)
+                    + s01_v * f32x4::splat(w01)
+                    + s11_v * f32x4::splat(w11);
+
+                let arr = result.to_array();
+                dst[dst_idx] = arr[0].round().clamp(0.0, 255.0) as u8;
+                dst[dst_idx + 1] = arr[1].round().clamp(0.0, 255.0) as u8;
+                dst[dst_idx + 2] = arr[2].round().clamp(0.0, 255.0) as u8;
+                dst[dst_idx + 3] = arr[3].round().clamp(0.0, 255.0) as u8;
+            }
+        }
+
+        dst
+    }
 }
 
 /// Sample a pixel from an RGBA buffer, returning `(0,0,0,0)` for out-of-bounds.
@@ -461,5 +581,106 @@ mod tests {
         let simd_result = t.apply_to_pixmap(&src, src_w, src_h, dst_w, dst_h);
         let scalar_result = apply_to_pixmap_scalar(&t, &src, src_w, src_h, dst_w, dst_h);
         assert_eq!(simd_result, scalar_result, "non-square transform failed");
+    }
+
+    // ── Perspective tests ────────────────────────────────────────────────
+
+    /// Create a small RGBA test image (8×8) with varied pixel data.
+    fn make_test_pixmap(w: u32, h: u32) -> Vec<u8> {
+        let mut buf = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                buf[i] = ((x * 36) % 256) as u8;
+                buf[i + 1] = ((y * 36) % 256) as u8;
+                buf[i + 2] = ((x + y) * 20 % 256) as u8;
+                buf[i + 3] = if (x + y) % 2 == 0 { 255 } else { 200 };
+            }
+        }
+        buf
+    }
+
+    #[test]
+    fn test_perspective_identity() {
+        let w = 8u32;
+        let h = 8u32;
+        let src = make_test_pixmap(w, h);
+        let t = AffineTransform::identity();
+
+        let plain = t.apply_to_pixmap(&src, w, h, w, h);
+        let persp = t.apply_with_perspective(&src, w, h, w, h, 0.0, 0.0, 0.0, 0.0);
+
+        assert_eq!(
+            plain, persp,
+            "perspective with 0,0 angles should match identity apply_to_pixmap"
+        );
+    }
+
+    #[test]
+    fn test_perspective_frx_only() {
+        let w = 8u32;
+        let h = 8u32;
+        let src = make_test_pixmap(w, h);
+        let t = AffineTransform::identity();
+
+        let plain = t.apply_to_pixmap(&src, w, h, w, h);
+        let persp = t.apply_with_perspective(&src, w, h, w, h, 45.0, 0.0, 0.0, 0.0);
+
+        assert_ne!(
+            plain, persp,
+            "frx=45 should produce different output from identity"
+        );
+        assert!(!persp.is_empty(), "perspective output should be non-empty");
+    }
+
+    #[test]
+    fn test_perspective_fry_only() {
+        let w = 8u32;
+        let h = 8u32;
+        let src = make_test_pixmap(w, h);
+        let t = AffineTransform::identity();
+
+        let plain = t.apply_to_pixmap(&src, w, h, w, h);
+        let persp = t.apply_with_perspective(&src, w, h, w, h, 0.0, 45.0, 0.0, 0.0);
+
+        assert_ne!(
+            plain, persp,
+            "fry=45 should produce different output from identity"
+        );
+        assert!(!persp.is_empty(), "perspective output should be non-empty");
+    }
+
+    #[test]
+    fn test_perspective_combined() {
+        let w = 8u32;
+        let h = 8u32;
+        let src = make_test_pixmap(w, h);
+        let t = AffineTransform::identity();
+
+        let plain = t.apply_to_pixmap(&src, w, h, w, h);
+        let persp = t.apply_with_perspective(&src, w, h, w, h, 30.0, 20.0, 0.0, 0.0);
+
+        assert_ne!(
+            plain, persp,
+            "combined perspective should produce different output from identity"
+        );
+        assert!(!persp.is_empty(), "perspective output should be non-empty");
+    }
+
+    #[test]
+    fn test_perspective_extreme_angle() {
+        let w = 8u32;
+        let h = 8u32;
+        let src = make_test_pixmap(w, h);
+        let t = AffineTransform::identity();
+
+        // Should not panic even at near-90° angles
+        let persp = t.apply_with_perspective(&src, w, h, w, h, 89.0, 0.0, 0.0, 0.0);
+        assert!(!persp.is_empty(), "extreme perspective output should be non-empty");
+        assert_eq!(
+            persp.len(),
+            (w * h * 4) as usize,
+            "output buffer size should match"
+        );
     }
 }

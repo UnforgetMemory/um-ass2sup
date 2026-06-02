@@ -152,7 +152,7 @@ fn convert_file(
     let format = SubtitleFormat::detect(input);
     info!("Detected format: {:?}", format);
 
-    let ass = AssFile::parse(&content)
+    let mut ass = AssFile::parse(&content)
         .map_err(|e| format!("Failed to parse subtitle: {}", e))?;
 
     info!(
@@ -228,7 +228,15 @@ fn convert_file(
         default_font_size: args.font_size as f32,
     };
 
-    let renderer = Renderer::new(render_config);
+    let mut renderer = Renderer::new(render_config);
+
+    // Load embedded fonts from ASS [Fonts] section
+    let font_data_list = ass.load_embedded_fonts(
+        input.parent().unwrap_or(std::path::Path::new("."))
+    );
+    for (_font_name, font_data) in font_data_list {
+        let _id = renderer.font_manager_mut().load_font_data(font_data);
+    }
 
     let dither_method = match args.dither.as_str() {
         "none" => DitherMethod::None,
