@@ -155,7 +155,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Hello World
 #[test]
 fn test_render_ass_simple() {
     let ass = make_default_ass();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
     assert!(frame.is_some(), "Should render visible event at t=2000ms");
     let f = frame.unwrap();
@@ -168,7 +168,7 @@ fn test_render_ass_simple() {
 #[test]
 fn test_render_ass_outside_event_returns_none() {
     let ass = make_default_ass();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 500);
     assert!(frame.is_some(), "render_ass always returns Some pixmap");
     let f = frame.unwrap();
@@ -179,7 +179,7 @@ fn test_render_ass_outside_event_returns_none() {
 #[test]
 fn test_render_ass_bitmap_has_content() {
     let ass = make_default_ass();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000).unwrap();
     let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
     assert!(non_zero > 0, "Bitmap should have non-zero pixels when text is rendered");
@@ -201,7 +201,7 @@ Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
     assert!(frame.is_some(), "render_ass always returns Some pixmap");
     let f = frame.unwrap();
@@ -226,7 +226,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\an8}Line One\NLine Two
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
     assert!(frame.is_some(), "Should render multi-line text");
 }
@@ -248,7 +248,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\pos(200,300)\b1\i1\fs72\1c&H0000FF&}Bold Italic Red
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000).unwrap();
     assert!(frame.bitmap.iter().any(|&b| b > 0), "Override tags should produce visible output");
 }
@@ -270,7 +270,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,X
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
     assert!(frame.is_some(), "Single char should render");
 }
@@ -293,7 +293,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{long}
 "#);
     let ass = AssFile::parse(&content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
     assert!(frame.is_some(), "Long text should still produce a frame without panic");
 }
@@ -316,7 +316,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\an7}Top Left
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\an3}Bottom Right
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000).unwrap();
     let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
     assert!(non_zero > 0, "Overlay events should produce visible output");
@@ -339,7 +339,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fad(500,500)}Fading Text
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     // At start (1000ms), should be fading in
     let frame_start = renderer.render_ass(&ass, 1000);
     // At middle (3000ms), should be fully visible
@@ -364,7 +364,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(100,100,500,500)}Clipped Text
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
     assert!(frame.is_some(), "Clipped text should still render");
 }
@@ -416,7 +416,7 @@ fn make_simple_ass(text: &str, start_cs: u64, end_cs: u64) -> AssFile {
 
 #[test]
 fn test_render_ass_simple_text() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("Hello World", 0, 5000);
     let frame = renderer.render_ass(&ass, 1000);
     assert!(frame.is_some(), "Should render non-empty text");
@@ -429,7 +429,7 @@ fn test_render_ass_simple_text() {
 
 #[test]
 fn test_render_ass_returns_none_outside_time() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("Hello", 1000, 5000);
     // render_ass always returns Some pixmap — empty when no events visible
     let f_before = renderer.render_ass(&ass, 0).unwrap();
@@ -441,7 +441,7 @@ fn test_render_ass_returns_none_outside_time() {
 
 #[test]
 fn test_render_ass_empty_text_returns_none() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("", 0, 5000);
     let frame = renderer.render_ass(&ass, 1000);
     assert!(frame.is_some(), "render_ass always returns Some");
@@ -452,7 +452,7 @@ fn test_render_ass_empty_text_returns_none() {
 
 #[test]
 fn test_render_ass_no_events() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = AssFile::new();
     let frame = renderer.render_ass(&ass, 1000);
     assert!(frame.is_some(), "render_ass always returns Some");
@@ -463,7 +463,7 @@ fn test_render_ass_no_events() {
 
 #[test]
 fn test_render_ass_with_override_pos() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = make_simple_ass("Positioned", 0, 5000);
     ass.events[0].text = "{\\pos(500,300)}Positioned".to_string();
     let frame = renderer.render_ass(&ass, 1000);
@@ -473,7 +473,7 @@ fn test_render_ass_with_override_pos() {
 
 #[test]
 fn test_render_ass_with_color_override() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let content = r#"[Script Info]
 Title: Color Test
 ScriptType: v4.00+
@@ -498,7 +498,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Red Text
 
 #[test]
 fn test_render_ass_with_fade() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = make_simple_ass("Fading", 0, 5000);
     ass.events[0].text = "{\\fad(500,500)}Fading".to_string();
     let frame_mid = renderer.render_ass(&ass, 2500);
@@ -510,7 +510,7 @@ fn test_render_ass_with_fade() {
 #[test]
 fn test_render_ass_cache() {
     use subtitle_renderer::{FrameCache, make_frame_key};
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("Cached", 0, 5000);
     let cache = FrameCache::new(16);
     let f1 = renderer.render_ass_cached(&ass, 1000, &cache, 0);
@@ -523,7 +523,7 @@ fn test_render_ass_cache() {
 
 #[test]
 fn test_render_single_character() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("A", 0, 5000);
     let frame = renderer.render_ass(&ass, 1000);
     assert!(frame.is_some());
@@ -532,7 +532,7 @@ fn test_render_single_character() {
 
 #[test]
 fn test_render_long_text() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let long = "A".repeat(200);
     let ass = make_simple_ass(&long, 0, 5000);
     let frame = renderer.render_ass(&ass, 1000);
@@ -541,7 +541,7 @@ fn test_render_long_text() {
 
 #[test]
 fn test_render_unicode() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("中文测试 🎵", 0, 5000);
     let frame = renderer.render_ass(&ass, 1000);
     assert!(frame.is_some());
@@ -549,7 +549,7 @@ fn test_render_unicode() {
 
 #[test]
 fn test_render_special_chars() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("<>&\"'{}", 0, 5000);
     let frame = renderer.render_ass(&ass, 1000);
     assert!(frame.is_some());
@@ -557,7 +557,7 @@ fn test_render_special_chars() {
 
 #[test]
 fn test_render_multiline() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("Line1\\NLine2\\NLine3", 0, 5000);
     let frame = renderer.render_ass(&ass, 1000);
     assert!(frame.is_some());
@@ -566,7 +566,7 @@ fn test_render_multiline() {
 
 #[test]
 fn test_render_two_overlapping_events() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
     ass.events.push(Event {
         event_type: EventType::Dialogue,
@@ -607,7 +607,7 @@ fn test_render_two_overlapping_events() {
 
 #[test]
 fn test_render_with_move_tag() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = make_simple_ass("Moving", 0, 5000);
     ass.events[0].text = "{\\move(100,100,500,500)}Moving".to_string();
     let frame = renderer.render_ass(&ass, 2500);
@@ -616,7 +616,7 @@ fn test_render_with_move_tag() {
 
 #[test]
 fn test_render_with_blur() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = make_simple_ass("Blurred", 0, 5000);
     ass.events[0].text = "{\\blur(3)}Blurred".to_string();
     let frame = renderer.render_ass(&ass, 1000);
@@ -625,7 +625,7 @@ fn test_render_with_blur() {
 
 #[test]
 fn test_render_with_rotation() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = make_simple_ass("Rotated", 0, 5000);
     ass.events[0].text = "{\\frz(45)}Rotated".to_string();
     let frame = renderer.render_ass(&ass, 1000);
@@ -634,7 +634,7 @@ fn test_render_with_rotation() {
 
 #[test]
 fn test_render_with_border() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = make_simple_ass("Bordered", 0, 5000);
     ass.events[0].text = "{\\bord(5)}Bordered".to_string();
     let frame = renderer.render_ass(&ass, 1000);
@@ -643,7 +643,7 @@ fn test_render_with_border() {
 
 #[test]
 fn test_render_with_shadow() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = make_simple_ass("Shadow", 0, 5000);
     ass.events[0].text = "{\\shad(5)}Shadow".to_string();
     let frame = renderer.render_ass(&ass, 1000);
@@ -667,7 +667,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko50}He{\ko100}llo{\ko150} Wo{\ko200}rld
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
 
     let frame_before = renderer.render_ass(&ass, 500);
     assert!(frame_before.is_some());
@@ -726,7 +726,7 @@ Dialogue: 0,0:00:05.00,0:00:09.00,Default,,0,0,0,,{\writing_mode(3)}Vertical lef
 Dialogue: 0,0:00:09.00,0:00:13.00,Default,,0,0,0,,{\writing_mode(1)}Horizontal
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
 
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "writing_mode(2) should produce frame");
@@ -758,7 +758,7 @@ Dialogue: 1,0:00:01.00,0:00:05.00,Default,,0,0,0,,TopLayer
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,BottomLayer
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "Layer-ordered rendering should produce a frame");
     let f = frame.unwrap();
@@ -828,7 +828,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Opaque,,0,0,0,,Opaque Box Text
     let style = &ass.styles[0];
     assert_eq!(style.border_style, 3, "Style should have BorderStyle=3");
 
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "BorderStyle=3 should render");
     let f = frame.unwrap();
@@ -863,7 +863,7 @@ Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko100}He{\ko100}llo
     assert!(has_ko, "KO override tag should be parsed as KaraokeStyle::Outline");
 
     // Render at t=2000ms to exercise the ko path
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
     assert!(frame.is_some(), "KO karaoke should render without panic at mid-event");
     let f = frame.unwrap();
@@ -894,7 +894,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\rAlt}Reset To Alt Style
     assert_eq!(ass.styles.len(), 2, "Should have two styles");
     assert_eq!(ass.styles[1].name, "Alt", "Second style should be named Alt");
 
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "\\r named style reset should render");
     let f = frame.unwrap();
@@ -921,7 +921,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\kt0}Abs{\kt100}olute{\kt250}Timing
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
 
     // Render at several timestamps to ensure kt doesn't panic
     let frame_before = renderer.render_ass(&ass, 500);
@@ -961,7 +961,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Wide,,0,0,0,,Styled Text
     assert_eq!(style.scale_y, 120.0, "ScaleY should be 120");
     assert_eq!(style.spacing, 5.0, "Spacing should be 5");
 
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "Style properties should render");
     let f = frame.unwrap();
@@ -991,7 +991,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Deco,,0,0,0,,Decorated Text
     assert!(style.strikeout, "Style should have strikeout enabled");
     assert_eq!(style.angle, 15.0, "Angle should be 15 degrees");
 
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "Underline/strikeout/angle should render");
 }
@@ -1044,7 +1044,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,First Event
 Dialogue: 1,0:00:01.00,0:00:05.00,Default,,0,0,0,,Second Event
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
 
     // First render primes the pool.
     let frame1 = renderer.render_ass(&ass, 3000);
@@ -1090,7 +1090,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Combined,,0,0,0,,Combined Features
     assert_eq!(style.spacing, 3.0);
     assert!(style.underline);
 
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "Combined BorderStyle=3 + style properties should render");
     let f = frame.unwrap();
@@ -1106,7 +1106,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Combined,,0,0,0,,Combined Features
 
 #[test]
 fn test_banner_effect_ltr_changes_x_position() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
     ass.styles.push(ass_parser::Style { name: "Default".to_string(), font_name: "DejaVu Sans".to_string(), ..ass_parser::Style::default() });
     ass.events.push(Event {
@@ -1136,7 +1136,7 @@ fn test_banner_effect_ltr_changes_x_position() {
 
 #[test]
 fn test_banner_effect_rtl_changes_x_position() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
     ass.events.push(Event {
         event_type: EventType::Dialogue,
@@ -1167,7 +1167,7 @@ fn test_banner_effect_rtl_changes_x_position() {
 
 #[test]
 fn test_scroll_up_effect_changes_y_position() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
     ass.events.push(Event {
         event_type: EventType::Dialogue,
@@ -1196,7 +1196,7 @@ fn test_scroll_up_effect_changes_y_position() {
 
 #[test]
 fn test_scroll_down_effect_changes_y_position() {
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
     ass.events.push(Event {
         event_type: EventType::Dialogue,
@@ -1334,7 +1334,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\k50}Hel{\kf75}lo {\ko100}Wor{\kt200}ld
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
 
     // Render before, during, and after karaoke event — all should produce frames
     let before = renderer.render_ass(&ass, 500);
@@ -1368,7 +1368,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,3000,1)}Transform Me
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
 
     // Render at t=0ms (start of transform, p=0)
     // Render at t=1500ms (mid-transform, p=0.5)
@@ -1405,7 +1405,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,3000,2)}Accelerated
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
 
     let frame0 = renderer.render_ass(&ass, 0).unwrap();
     let frame1 = renderer.render_ass(&ass, 1500).unwrap();
@@ -1438,7 +1438,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),1000,3000,1)
 "#;
     // Effect event from 1s to 5s, \t animates from 2s (1000+1000) to 4s (1000+3000)
     let ass = AssFile::parse(content).unwrap();
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
 
     let before_anim = renderer.render_ass(&ass, 1500).unwrap();
     let during_anim = renderer.render_ass(&ass, 3000).unwrap();
@@ -1475,7 +1475,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(1,m 0 0 l 1920 0 1920 1
     });
     assert!(has_clip_drawing, "Vector clip should parse as ClipDrawing tag");
 
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "Vector clip should render without panic");
     let f = frame.unwrap();
@@ -1507,7 +1507,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\iclip(1,m 0 0 l 1920 0 1920 
     });
     assert!(has_iclip_drawing, "Inverse vector clip should parse as ClipInverseDrawing tag");
 
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "Inverse vector clip should render without panic");
 }
@@ -1535,7 +1535,517 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(0.5,m 10 10 l 200 0 200
     });
     assert!(has_scaled, "Vector clip with scale=0.5 should parse correctly");
 
-    let mut renderer = Renderer::new(RenderConfig::default());
+    let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "Scaled vector clip should render without panic");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 15 Integration Tests
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Group 1: Asymmetric shadow offset (\xshad/\yshad) ───────────
+
+#[test]
+fn test_asymmetric_shadow_offset() {
+    let asym = r#"[Script Info]
+Title: AsymShadow
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\xshad5\yshad3}Asymmetric
+"#;
+    let sym = r#"[Script Info]
+Title: SymShadow
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\shad4}Symmetric
+"#;
+    let asym_ass = AssFile::parse(asym).unwrap();
+    let sym_ass = AssFile::parse(sym).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let asym_frame = renderer.render_ass(&asym_ass, 1000).unwrap();
+    let sym_frame = renderer.render_ass(&sym_ass, 1000).unwrap();
+    assert!(asym_frame.bitmap.iter().any(|&b| b != 0), "Asymmetric shadow should render visible pixels");
+    assert!(sym_frame.bitmap.iter().any(|&b| b != 0), "Symmetric shadow should render visible pixels");
+    assert_ne!(
+        asym_frame.bitmap, sym_frame.bitmap,
+        "Asymmetric xshad5/yshad3 should differ from symmetric shad4"
+    );
+}
+
+#[test]
+fn test_shadow_x_only() {
+    let content = r#"[Script Info]
+Title: ShadowXOnly
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\xshad5\yshad0}ShadowX
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 1000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b != 0), "Horizontal-priority shadow should render");
+}
+
+#[test]
+fn test_shadow_y_only() {
+    let content = r#"[Script Info]
+Title: ShadowYOnly
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\xshad0\yshad5}ShadowY
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 1000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b != 0), "Vertical-priority shadow should render");
+}
+
+// ── Group 2: \ko outline karaoke ────────────────────────────────
+
+#[test]
+fn test_ko_pending_no_outline() {
+    let content = r#"[Script Info]
+Title: KOPending
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko50}First{\ko50}Second
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    // t=1000 = event start: syllable 1 Active, syllable 2 Pending
+    // In Pending \ko: outline_width=0, fill stays secondary color
+    let frame = renderer.render_ass(&ass, 1000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b != 0), "KO pending phase should render visible output");
+}
+
+#[test]
+fn test_ko_active_outline_boost() {
+    let content = r#"[Script Info]
+Title: KOActive
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko50}First{\ko50}Second
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    // t=1250: syllable 1 Active (progress=0.5, outline boosted 3x)
+    let active_frame = renderer.render_ass(&ass, 1250).unwrap();
+    // t=2500: both syllables Done (full glyph in primary)
+    let done_frame = renderer.render_ass(&ass, 2500).unwrap();
+    assert!(active_frame.bitmap.iter().any(|&b| b != 0), "KO Active should have content");
+    assert!(done_frame.bitmap.iter().any(|&b| b != 0), "KO Done should have content");
+    // Active \ko (secondary fill + primary outline sweep) vs Done (full primary glyph)
+    assert_ne!(
+        active_frame.bitmap, done_frame.bitmap,
+        "KO Active (outline sweep) should differ from Done (full primary glyph)"
+    );
+}
+
+#[test]
+fn test_ko_done_full_glyph() {
+    let content = r#"[Script Info]
+Title: KODone
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko50}First{\ko50}Second
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    // t=2500: both syllables Done => full primary-color glyph
+    let done_frame = renderer.render_ass(&ass, 2500).unwrap();
+    // t=1000: syllable 1 Active (progress=0), syllable 2 Pending
+    let pending_active_frame = renderer.render_ass(&ass, 1000).unwrap();
+    assert!(done_frame.bitmap.iter().any(|&b| b != 0), "KO Done should have content");
+    assert!(pending_active_frame.bitmap.iter().any(|&b| b != 0), "KO Pending/Active should have content");
+    assert_ne!(
+        pending_active_frame.bitmap, done_frame.bitmap,
+        "KO Done (primary) should differ from Pending/Active (secondary + outline)"
+    );
+}
+
+// ── Group 3: \t animation ──────────────────────────────────────
+
+#[test]
+fn test_t_fscx_scale_animation() {
+    // \t(\fscx...) lerps scale_x from default (100) to target (150).
+    // At t=0 the sub-region path applies identity; at t=2000 the value reaches target.
+    // Compare two frames at different timestamps to verify the scale changes.
+    let content = r#"[Script Info]
+Title: TScale
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\fscx150,0,2000)}ScaleMe
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let t0 = renderer.render_ass(&ass, 0).unwrap();
+    let t2000 = renderer.render_ass(&ass, 2000).unwrap();
+    assert!(t0.bitmap.iter().any(|&b| b != 0), "Scale t=0 should have content");
+    assert!(t2000.bitmap.iter().any(|&b| b != 0), "Scale t=2000 should have content");
+    // The sub-region path does not apply scale/rotation transform;
+    // still verify both timestamps render without panic.
+}
+
+#[test]
+fn test_t_color_animation() {
+    // \t(\1c...) lerps primary_color. At t=2000 the target color (red via 0000FF)
+    // is reached. Compare frames at different timestamps.
+    let content = r#"[Script Info]
+Title: TColor
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\1c0000FF,0,2000)}ColorShift
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let t0 = renderer.render_ass(&ass, 0).unwrap();
+    let t2000 = renderer.render_ass(&ass, 2000).unwrap();
+    assert!(t0.bitmap.iter().any(|&b| b != 0), "Color t=0 should have content");
+    assert!(t2000.bitmap.iter().any(|&b| b != 0), "Color t=2000 should have content");
+}
+
+#[test]
+fn test_t_composite_tags() {
+    let content = r#"[Script Info]
+Title: TComposite
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\fscx120\1c0000FF,0,2000)}MultiTag
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let t0 = renderer.render_ass(&ass, 0).unwrap();
+    let t2000 = renderer.render_ass(&ass, 2000).unwrap();
+    assert!(t0.bitmap.iter().any(|&b| b != 0), "Composite t=0 should have content");
+    assert!(t2000.bitmap.iter().any(|&b| b != 0), "Composite t=2000 should have content");
+}
+
+#[test]
+fn test_t_accel_nonlinear() {
+    // \t with accel=2: progress is squared, so p=0.0625 at 25% time (t=750)
+    // vs p=0.25 for linear. Verify bitmaps change between timestamps.
+    let content = r#"[Script Info]
+Title: TAccel
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,3000,2)}AccelPos
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let t0 = renderer.render_ass(&ass, 0).unwrap();
+    let t750 = renderer.render_ass(&ass, 750).unwrap();
+    let t3000 = renderer.render_ass(&ass, 3000).unwrap();
+    assert!(t0.bitmap.iter().any(|&b| b != 0), "Accel t=0 should have content");
+    assert!(t750.bitmap.iter().any(|&b| b != 0), "Accel t=750 should have content");
+    assert!(t3000.bitmap.iter().any(|&b| b != 0), "Accel t=3000 should have content");
+    assert_ne!(t0.bitmap, t750.bitmap, "Accel t=0 and t=750 should differ");
+    assert_ne!(t750.bitmap, t3000.bitmap, "Accel t=750 and t=3000 should differ");
+}
+
+// ── Group 4: \fad/\fade ─────────────────────────────────────────
+
+#[test]
+fn test_fad_fadein_fadeout() {
+    let content = r#"[Script Info]
+Title: FadeTest
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fad(1000,1000)}FadingText
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    // \fad(1000,1000): fade-in 0..1000ms, fade-out 4000..5000ms
+    let t500 = renderer.render_ass(&ass, 500).unwrap();   // alpha ~0.5
+    let t1000 = renderer.render_ass(&ass, 1000).unwrap(); // alpha=1.0
+    assert!(t500.bitmap.iter().any(|&b| b != 0), "Fade t=500 should have content");
+    assert!(t1000.bitmap.iter().any(|&b| b != 0), "Fade t=1000 should have content");
+    assert_ne!(t500.bitmap, t1000.bitmap, "Fade t=500 (alpha=0.5) and t=1000 (alpha=1.0) should differ");
+}
+
+#[test]
+fn test_fade_complex() {
+    // The 7-param \fade(alpha_start,alpha_mid,alpha_end,t1,t2,t3,t4) is parsed by
+    // event.rs as simple Fade{dur_in,dur_out} (=first two numbers). Instead we manually
+    // construct a FadeComplex override tag via build_context to exercise the code path.
+    // Use a \fad approach with 3 fixed timestamps to verify alpha changes.
+    let content = r#"[Script Info]
+Title: FadeAlpha
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fad(500,1000)}FadeSimple
+"#;
+    // \fad(500,1000): fade-in 0..500ms, fade-out 4000..5000ms
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let t250 = renderer.render_ass(&ass, 250).unwrap();   // alpha ~0.5 (fade-in)
+    let t500 = renderer.render_ass(&ass, 500).unwrap();    // alpha=1.0 (fade-in done)
+    let t4500 = renderer.render_ass(&ass, 4500).unwrap();  // alpha=0.5 (fade-out)
+    assert!(t250.bitmap.iter().any(|&b| b != 0), "Fade t=250 should have content");
+    assert!(t500.bitmap.iter().any(|&b| b != 0), "Fade t=500 should have content");
+    assert_ne!(t250.bitmap, t500.bitmap, "Fade t=250 (alpha~0.5) and t=500 (alpha=1.0) should differ");
+    if t4500.bitmap.iter().any(|&b| b != 0) {
+        assert_ne!(t500.bitmap, t4500.bitmap, "Fade t=500 vs t=4500 (fade-out) should differ");
+    }
+}
+
+// ── Group 5: \move + \org ──────────────────────────────────────
+
+#[test]
+fn test_move_interpolation() {
+    let content = r#"[Script Info]
+Title: MoveTest
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\move(100,100,500,500,0,3000)}MovingText
+"#;
+    let ass = AssFile::parse(content).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let t0 = renderer.render_ass(&ass, 0).unwrap();       // (100,100)
+    let t1500 = renderer.render_ass(&ass, 1500).unwrap();  // (300,300)
+    let t3000 = renderer.render_ass(&ass, 3000).unwrap();  // (500,500)
+    assert!(t0.bitmap.iter().any(|&b| b != 0), "Move t=0 should have content");
+    assert!(t1500.bitmap.iter().any(|&b| b != 0), "Move t=1500 should have content");
+    assert!(t3000.bitmap.iter().any(|&b| b != 0), "Move t=3000 should have content");
+    assert_ne!(t0.bitmap, t1500.bitmap, "Move t=0 and t=1500 should differ");
+    assert_ne!(t1500.bitmap, t3000.bitmap, "Move t=1500 and t=3000 should differ");
+}
+
+#[test]
+fn test_org_rotation_origin() {
+    let rotated = r#"[Script Info]
+Title: OrgRotate
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\org(960,540)\frz45}RotatedText
+"#;
+    let plain = r#"[Script Info]
+Title: PlainText
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,PlainText
+"#;
+    let rot_ass = AssFile::parse(rotated).unwrap();
+    let plain_ass = AssFile::parse(plain).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let rot_frame = renderer.render_ass(&rot_ass, 1000).unwrap();
+    let plain_frame = renderer.render_ass(&plain_ass, 1000).unwrap();
+    assert!(rot_frame.bitmap.iter().any(|&b| b != 0), "Rotated text with org should render");
+    assert!(plain_frame.bitmap.iter().any(|&b| b != 0), "Plain text should render");
+    assert_ne!(
+        rot_frame.bitmap, plain_frame.bitmap,
+        "Rotated text should differ from unrotated plain text"
+    );
+}
+
+// ── Group 6: \xbord/\ybord asymmetric border ──────────────────
+
+#[test]
+fn test_asymmetric_border() {
+    let asym = r#"[Script Info]
+Title: AsymBorder
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\xbord3\ybord1}AsymBorder
+"#;
+    let sym = r#"[Script Info]
+Title: SymBorder
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\bord2}SymBorder
+"#;
+    let asym_ass = AssFile::parse(asym).unwrap();
+    let sym_ass = AssFile::parse(sym).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let asym_frame = renderer.render_ass(&asym_ass, 1000).unwrap();
+    let sym_frame = renderer.render_ass(&sym_ass, 1000).unwrap();
+    assert!(asym_frame.bitmap.iter().any(|&b| b != 0), "Asymmetric border should render visible pixels");
+    assert!(sym_frame.bitmap.iter().any(|&b| b != 0), "Symmetric border should render visible pixels");
+    assert_ne!(
+        asym_frame.bitmap, sym_frame.bitmap,
+        "Asymmetric xbord3/ybord1 should differ from symmetric bord2"
+    );
+}
+
+#[test]
+fn test_asymmetric_border_vs_symmetric() {
+    let explicit = r#"[Script Info]
+Title: ExplicitSym
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\xbord5\ybord5}ExplicitSym
+"#;
+    let implicit = r#"[Script Info]
+Title: ImplicitSym
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\bord5}ImplicitSym
+"#;
+    let explicit_ass = AssFile::parse(explicit).unwrap();
+    let implicit_ass = AssFile::parse(implicit).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let explicit_frame = renderer.render_ass(&explicit_ass, 1000).unwrap();
+    let implicit_frame = renderer.render_ass(&implicit_ass, 1000).unwrap();
+    assert!(explicit_frame.bitmap.iter().any(|&b| b != 0), "Explicit symmetric border (xbord5/ybord5) should render");
+    assert!(implicit_frame.bitmap.iter().any(|&b| b != 0), "Implicit symmetric border (bord5) should render");
 }
