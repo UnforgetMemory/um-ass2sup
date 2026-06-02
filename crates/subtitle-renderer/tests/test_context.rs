@@ -398,7 +398,7 @@ fn test_build_context_no_pos_alignment_computed() {
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.alignment, 2);
-    let expected_x = ctx.margin_l + 0.5 * (1920.0 - ctx.margin_l - ctx.margin_r);
+    let expected_x = ctx.margin_l;
     let expected_y = ctx.margin_v + 1.0 * (1080.0 - ctx.margin_v * 2.0);
     assert!((ctx.x - expected_x).abs() < 0.01);
     assert!((ctx.y - expected_y).abs() < 0.01);

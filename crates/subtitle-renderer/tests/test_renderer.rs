@@ -1,5 +1,5 @@
 use subtitle_renderer::{RenderConfig, RenderContext, RenderedFrame, FontManager, Shaper, Renderer};
-use ass_parser::{AssFile, Effect, ScriptInfo, Style, Event, EventType, Timestamp, AssColor};
+use ass_parser::{AssFile, Effect, Event, EventType, Timestamp};
 
 #[test]
 fn test_render_config_default() {
@@ -387,7 +387,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,720p text
 "#;
     let ass = AssFile::parse(content).unwrap();
     let cfg = RenderConfig { width: 1280, height: 720, script_width: 1280, script_height: 720, ..Default::default() };
-    let mut renderer = Renderer::new(cfg);
+    let renderer = Renderer::new(cfg);
     let frame = renderer.render_ass(&ass, 2000).unwrap();
     assert_eq!(frame.width, 1280);
     assert_eq!(frame.height, 720);
@@ -2048,4 +2048,574 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\bord5}ImplicitSym
     let implicit_frame = renderer.render_ass(&implicit_ass, 1000).unwrap();
     assert!(explicit_frame.bitmap.iter().any(|&b| b != 0), "Explicit symmetric border (xbord5/ybord5) should render");
     assert!(implicit_frame.bitmap.iter().any(|&b| b != 0), "Implicit symmetric border (bord5) should render");
+}
+
+// EFFECT-007: Multi-line underline/strikeout — regression tests
+
+fn count_y_ranges(frame: &RenderedFrame) -> Vec<(u32, u32)> {
+    let mut ranges = Vec::new();
+    let mut in_range = false;
+    let mut range_start: u32 = 0;
+    let w = frame.width as usize;
+    let h = frame.height as usize;
+    for y in 0..h {
+        let mut has_pixel = false;
+        for x in 0..w {
+            let idx = (y * w + x) * 4;
+            if frame.bitmap[idx + 3] > 0 {
+                has_pixel = true;
+                break;
+            }
+        }
+        if has_pixel && !in_range {
+            range_start = y as u32;
+            in_range = true;
+        } else if !has_pixel && in_range {
+            ranges.push((range_start, y as u32));
+            in_range = false;
+        }
+    }
+    if in_range {
+        ranges.push((range_start, h as u32));
+    }
+    ranges
+}
+
+#[test]
+fn test_multiline_underline_position() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,1,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Line1\NLine2"#;
+
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 1000).unwrap();
+
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert!(non_zero > 0, "Multi-line underline should produce visible pixels");
+
+    let ranges = count_y_ranges(&frame);
+    assert!(!ranges.is_empty(),
+        "Multi-line underline should have at least 1 y-range, got {}",
+        ranges.len()
+    );
+}
+
+#[test]
+fn test_multiline_strikeout_position() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,1,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Line1\NLine2"#;
+
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 1000).unwrap();
+
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert!(non_zero > 0, "Multi-line strikeout should produce visible pixels");
+
+    let ranges = count_y_ranges(&frame);
+    assert!(!ranges.is_empty(),
+        "Multi-line strikeout should have at least 1 y-range, got {}",
+        ranges.len()
+    );
+}
+
+#[test]
+fn test_single_line_underline_unchanged() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,1,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Single Line"#;
+
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 1000).unwrap();
+
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert!(non_zero > 0, "Single-line underline should produce visible pixels");
+}
+
+#[test]
+fn test_karaoke_shadow_blur() {
+    // Verify karaoke shadow has blur applied (same as non-karaoke path)
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,5,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\blur5\k100}Test"#;
+
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 1000).unwrap();
+
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert!(non_zero > 0, "Karaoke with shadow+blur should produce visible pixels");
+
+    // Compare with no-blur version — blurred shadow should have more non-zero pixels
+    let ass_no_blur = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,5,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\k100}Test"#;
+
+    let parsed_no_blur = AssFile::parse(ass_no_blur).unwrap();
+    let frame_no_blur = renderer.render_ass(&parsed_no_blur, 1000).unwrap();
+    let non_zero_no_blur = frame_no_blur.bitmap.iter().filter(|&&b| b > 0).count();
+
+    // Blurred shadow should spread to more pixels
+    assert!(
+        non_zero >= non_zero_no_blur,
+        "Blurred karaoke shadow ({non_zero} pixels) should have at least as many visible pixels as non-blurred ({non_zero_no_blur})"
+    );
+}
+
+#[test]
+fn test_karaoke_no_shadow_no_blur() {
+    // Verify no shadow artifacts when shadow_depth=0 (default style)
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\k100}Test"#;
+
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 1000).unwrap();
+
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert!(non_zero > 0, "Karaoke without shadow should produce visible pixels");
+
+    // Compare with shadow version — no-shadow should have fewer pixels
+    let ass_shadow = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,5,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\k100}Test"#;
+
+    let parsed_shadow = AssFile::parse(ass_shadow).unwrap();
+    let frame_shadow = renderer.render_ass(&parsed_shadow, 1000).unwrap();
+    let non_zero_shadow = frame_shadow.bitmap.iter().filter(|&&b| b > 0).count();
+
+    // Shadow should add more visible pixels (shadow extends beyond text)
+    assert!(
+        non_zero_shadow >= non_zero,
+        "Shadow version ({non_zero_shadow} pixels) should have at least as many visible pixels as no-shadow ({non_zero})"
+    );
+}
+
+#[test]
+fn test_clip_rect_pixels() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(100,100,300,300)}{\an7}{\pos(200,250)}X
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    let w = frame.width as usize;
+    assert!(frame.bitmap.iter().any(|&b| b > 0), "Clip rect should keep visible text");
+    assert!(frame.bitmap[(250 * w + 210) * 4 + 3] > 0, "Pixel at (210,250) inside clip+text should be non-zero");
+    assert_eq!(frame.bitmap[(50 * w + 50) * 4 + 3], 0, "Pixel at (50,50) outside clip rect should be zero");
+}
+
+#[test]
+fn test_clip_inverse_pixels() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\an7\iclip(100,100,300,300)}{\pos(50,50)}X
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    let w = frame.width as usize;
+    assert!(frame.bitmap.iter().any(|&b| b > 0), "Inverse clip should keep text outside rect visible");
+    assert!(frame.bitmap[(60 * w + 65) * 4 + 3] > 0, "Pixel at (65,60) outside iclip rect should be non-zero");
+    assert_eq!(frame.bitmap[(200 * w + 200) * 4 + 3], 0, "Pixel at (200,200) inside iclip rect should be zero");
+}
+
+#[test]
+fn test_clip_drawing_pixels() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(0.5,m 0 0 l 1920 0 1920 1080 0 1080 c)}Text
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b > 0), "Full-frame vector clip should keep text visible");
+}
+
+#[test]
+fn test_clip_zero_area() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(100,100,100,100)}Text
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert_eq!(non_zero, 0, "Zero-area clip should produce empty frame");
+}
+
+#[test]
+fn test_clip_out_of_bounds() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(2000,2000,2100,2100)}Text
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert_eq!(non_zero, 0, "Out-of-bounds clip should produce empty frame");
+}
+
+#[test]
+fn test_drawing_basic_move_line() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,7,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p1}m 50 50 l 200 200{\p0}
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b > 0), "Basic line drawing should produce visible pixels");
+}
+
+#[test]
+fn test_drawing_fill_stroke() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,7,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p1}m 50 50 l 250 50 250 250 50 250 c{\p0}
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b > 0), "Filled polygon drawing should produce visible pixels");
+}
+
+#[test]
+fn test_drawing_scale() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,7,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p1\pbo10}m 10 10 l 190 10 190 190 10 190 c{\p0}
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b > 0), "Drawing with baseline offset should produce visible pixels");
+}
+
+#[test]
+fn test_drawing_color_override() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,7,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\1c&H0000FF&\p1}m 50 50 l 250 50 250 250 50 250 c{\p0}
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b > 0), "Colored drawing path should produce visible pixels");
+}
+
+#[test]
+fn test_wrap_smart() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q0}Long text that should wrap around the edges of the screen
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "Smart wrapping should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "Smart wrapping text should have visible pixels");
+}
+
+#[test]
+fn test_wrap_eol() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q2}Line1\NLine2
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "EOL wrapping should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "EOL wrapping text should have visible pixels");
+}
+
+#[test]
+fn test_wrap_no_wrap() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q1}Long text that should NOT wrap around
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000).unwrap();
+    assert!(frame.bitmap.iter().any(|&b| b > 0), "No-wrap text should have visible pixels");
+}
+
+#[test]
+fn test_wrap_smart_bottom() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q3}Same as q0 smart wrapping behavior
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "q3 smart wrapping should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "q3 smart wrapping text should have visible pixels");
+}
+
+#[test]
+fn test_combined_rotate_scale_color() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fscx120\fscy120\1c&H0000FF&}Styled
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "Scale+color should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "Scale+color text should have visible pixels");
+}
+
+#[test]
+fn test_combined_border_shadow_blur() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\bord3\shad5\blur3}ShadowBlur
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2000);
+    assert!(frame.is_some(), "Border+shadow+blur should render without panic");
+    let f = frame.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "Border+shadow+blur text should have visible pixels");
+}
+
+#[test]
+fn test_combined_transform_fade() {
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fad(500,500)\t(\fscx150,0,2000)}AnimFade
+"#;
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame_mid = renderer.render_ass(&parsed, 2000);
+    assert!(frame_mid.is_some(), "Fade+transform should render at 2000ms");
+    let f = frame_mid.unwrap();
+    assert!(f.bitmap.iter().any(|&b| b > 0), "Fade+transform text should have visible pixels at 2000ms");
+    let frame_later = renderer.render_ass(&parsed, 3000);
+    assert!(frame_later.is_some(), "Fade+transform should render at 3000ms");
+    let f2 = frame_later.unwrap();
+    assert!(f2.bitmap.iter().any(|&b| b > 0), "Fade+transform text should have visible pixels at 3000ms");
+    let frame_start = renderer.render_ass(&parsed, 1000);
+    assert!(frame_start.is_some(), "Fade+transform should render at 1000ms");
 }
