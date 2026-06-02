@@ -43,6 +43,7 @@ pub use error::ParseError;
 pub use event::{Event, EventType};
 pub use karaoke::{KaraokeSegment, KaraokeStyle};
 pub use override_tag::OverrideTag;
+pub use override_tag::parse_override_tag;
 pub use style::Style;
 pub use timestamp::Timestamp;
 

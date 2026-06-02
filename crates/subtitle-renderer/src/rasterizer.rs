@@ -8,15 +8,60 @@ use crate::shaper::ShapedGlyph;
 use crate::context::RenderContext;
 use crate::font::FontManager;
 
+/// Adapter that converts ttf-parser glyph outline commands into tiny-skia path
+/// commands, applying font-unit-to-pixel scaling and screen-space translation.
+struct OutlineAdapter<'a> {
+    builder: &'a mut PathBuilder,
+    scale: f32,
+    offset_x: f32,
+    offset_y: f32,
+}
+
+impl ttf_parser::OutlineBuilder for OutlineAdapter<'_> {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.builder.move_to(self.offset_x + x * self.scale, self.offset_y + y * self.scale);
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.builder.line_to(self.offset_x + x * self.scale, self.offset_y + y * self.scale);
+    }
+
+    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+        self.builder.quad_to(
+            self.offset_x + x1 * self.scale,
+            self.offset_y + y1 * self.scale,
+            self.offset_x + x * self.scale,
+            self.offset_y + y * self.scale,
+        );
+    }
+
+    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+        self.builder.cubic_to(
+            self.offset_x + x1 * self.scale,
+            self.offset_y + y1 * self.scale,
+            self.offset_x + x2 * self.scale,
+            self.offset_y + y2 * self.scale,
+            self.offset_x + x * self.scale,
+            self.offset_y + y * self.scale,
+        );
+    }
+
+    fn close(&mut self) {
+        self.builder.close();
+    }
+}
+
 /// Rasterizer for converting glyph outlines to RGBA bitmaps.
 pub struct Rasterizer;
 
 impl Rasterizer {
     /// Rasterize a single glyph onto the target pixmap.
     ///
-    /// Fills the glyph bounding box with the primary color, then strokes
-    /// the outline. Applies the scaling and position offset from the
-    /// render context.
+    /// Extracts the actual glyph outline from the font via `outline_glyph()`
+    /// and fills it with the primary color, then strokes the outline. Falls
+    /// back to a filled bounding-box rectangle when the glyph has no outline
+    /// data (e.g. bitmap-only glyphs). Applies the scaling and position offset
+    /// from the render context.
     ///
     /// # Arguments
     /// * `pixmap` — Target RGBA pixmap
@@ -50,15 +95,25 @@ impl Rasterizer {
         let gy = y + glyph.y_offset;
 
         let mut builder = PathBuilder::new();
+        let glyph_id = ttf_parser::GlyphId(glyph.glyph_id as u16);
 
-        if let Some(bbox) = face.glyph_bounding_box(ttf_parser::GlyphId(glyph.glyph_id as u16)) {
-            let rx = gx + bbox.x_min as f32 * scale;
-            let ry = gy + bbox.y_min as f32 * scale;
-            let rw = (bbox.x_max - bbox.x_min) as f32 * scale;
-            let rh = (bbox.y_max - bbox.y_min) as f32 * scale;
+        let has_outline = face.outline_glyph(glyph_id, &mut OutlineAdapter {
+            builder: &mut builder,
+            scale,
+            offset_x: gx,
+            offset_y: gy,
+        }).is_some();
 
-            if let Some(rect) = Rect::from_xywh(rx, ry, rw, rh) {
-                builder.push_rect(rect);
+        if !has_outline {
+            if let Some(bbox) = face.glyph_bounding_box(glyph_id) {
+                let rx = gx + bbox.x_min as f32 * scale;
+                let ry = gy + bbox.y_min as f32 * scale;
+                let rw = (bbox.x_max - bbox.x_min) as f32 * scale;
+                let rh = (bbox.y_max - bbox.y_min) as f32 * scale;
+
+                if let Some(rect) = Rect::from_xywh(rx, ry, rw, rh) {
+                    builder.push_rect(rect);
+                }
             }
         }
 

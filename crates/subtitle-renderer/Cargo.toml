@@ -12,3 +12,10 @@ rustybuzz = "0.14"
 ttf-parser = "0.21"
 tiny-skia = "0.11"
 ass-parser = { path = "../ass-parser" }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "renderer"
+harness = false

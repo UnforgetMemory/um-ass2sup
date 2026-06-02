@@ -7,7 +7,7 @@ use crate::font::FontManager;
 use crate::karaoke::{KaraokePhase, KaraokeRenderer};
 use ass_parser::karaoke::KaraokeStyle;
 use crate::rasterizer::Rasterizer;
-use crate::shaper::Shaper;
+use crate::shaper::{Shaper, ShapedText};
 use crate::transform::AffineTransform;
 
 /// ASS subtitle renderer that produces RGBA bitmaps for encoding to PGS/SUP.
@@ -36,6 +36,14 @@ use crate::transform::AffineTransform;
 pub struct Renderer {
     config: RenderConfig,
     font_manager: FontManager,
+}
+
+/// Shaped-line layout result used to separate glyph layout from rasterization,
+/// enabling bounding-box computation before pixmap allocation.
+struct ShapedLine {
+    shaped: ShapedText,
+    line_y: f32,
+    x_start: f32,
 }
 
 impl Renderer {
@@ -286,6 +294,27 @@ impl Renderer {
                         ctx.alignment = style.alignment;
                     }
                 }
+                OverrideTag::ResetAll => {
+                    ctx.font_name = style.font_name.clone();
+                    ctx.font_size = style.font_size as f32 * scale_y;
+                    ctx.bold = style.bold;
+                    ctx.italic = style.italic;
+                    ctx.primary_color = style.primary_color.to_rgba();
+                    ctx.secondary_color = style.secondary_color.to_rgba();
+                    ctx.outline_color = style.outline_color.to_rgba();
+                    ctx.shadow_color = style.shadow_color.to_rgba();
+                    ctx.outline_width = style.outline_width as f32;
+                    ctx.shadow_depth = style.shadow_depth as f32;
+                    ctx.alignment = style.alignment;
+                    ctx.writing_mode = 0;
+                    ctx.baseline_offset = 0.0;
+                }
+                OverrideTag::WritingMode(mode) => {
+                    ctx.writing_mode = *mode;
+                }
+                OverrideTag::BaselineOffset(offset) => {
+                    ctx.baseline_offset = *offset;
+                }
                 OverrideTag::Unknown(tag) => {
                     tracing::warn!(tag = %tag, "unrecognized override tag ignored");
                 }
@@ -353,10 +382,10 @@ impl Renderer {
 
         let w = pixmap.width();
         let h = pixmap.height();
-        let mut layer = Pixmap::new(w, h).unwrap();
-
         let align_col = ctx.alignment % 3;
 
+        // Phase 1: Shape all lines, store results for bbox computation and rendering.
+        let mut shaped_lines: Vec<ShapedLine> = Vec::new();
         for (line_idx, line) in lines.iter().enumerate() {
             if line.is_empty() {
                 continue;
@@ -365,7 +394,6 @@ impl Renderer {
                 Ok(s) => s,
                 Err(_) => continue,
             };
-
             let line_y = ctx.y + line_idx as f32 * line_height;
             let text_width = shaped.total_advance;
             let x_start = match align_col {
@@ -373,24 +401,82 @@ impl Renderer {
                 0 => ctx.x + available_width - text_width,
                 _ => ctx.x,
             };
+            shaped_lines.push(ShapedLine { shaped, line_y, x_start });
+        }
 
-            let mut x = x_start;
-            for glyph in &shaped.glyphs {
-                Rasterizer::rasterize_glyph(&mut layer, &self.font_manager, font_id, glyph, x, line_y, ctx);
+        if shaped_lines.is_empty() {
+            return;
+        }
+
+        // Phase 2: Compute tight bounding box of all glyph ink.
+        // Sub-region is only safe when there is no rotation/shear/clip that would
+        // shift content outside the bbox.
+        let can_sub = ctx.rotation == 0.0
+            && ctx.shear_x == 0.0
+            && ctx.shear_y == 0.0
+            && (ctx.writing_mode == 0 || ctx.writing_mode == 1)
+            && !ctx.clip_enabled;
+        let sub_bbox = if can_sub {
+            compute_tight_bbox(&shaped_lines, &shaper, font_id, ctx.font_size, ctx)
+        } else {
+            None
+        };
+
+        // Phase 3: Determine sub-region or full frame.
+        let (ox, oy, lw, lh, use_sub) = if let Some((min_x, min_y, max_x, max_y)) = sub_bbox {
+            let border = ctx.outline_width.max(ctx.outline_x_width).max(ctx.outline_y_width);
+            let shadow = ctx.shadow_depth.max(ctx.shadow_x).max(ctx.shadow_y);
+            let pad = (border * 2.0 + shadow + ctx.blur).max(20.0);
+            let ox = (min_x - pad).floor().max(0.0) as u32;
+            let oy = (min_y - pad).floor().max(0.0) as u32;
+            let lw = ((max_x - min_x) + pad * 2.0).ceil().max(1.0) as u32;
+            let lh = ((max_y - min_y) + pad * 2.0).ceil().max(1.0) as u32;
+            let lw = lw.min(w.saturating_sub(ox)).max(1);
+            let lh = lh.min(h.saturating_sub(oy)).max(1);
+            (ox, oy, lw, lh, true)
+        } else {
+            (0, 0, w, h, false)
+        };
+
+        // Phase 4: Allocate layer and render glyphs with sub-region offset.
+        let mut layer = Pixmap::new(lw, lh).unwrap();
+        let oxf = ox as f32;
+        let oyf = oy as f32;
+
+        for sl in &shaped_lines {
+            let mut x = sl.x_start;
+            for glyph in &sl.shaped.glyphs {
+                Rasterizer::rasterize_glyph(
+                    &mut layer,
+                    &self.font_manager,
+                    font_id,
+                    glyph,
+                    x - oxf,
+                    sl.line_y - oyf,
+                    ctx,
+                );
                 x += glyph.x_advance + ctx.spacing;
             }
 
             if ctx.underline || ctx.strikeout {
                 let line_thickness = (ctx.font_size / 16.0).max(1.0);
                 let mut paint = tiny_skia::Paint::default();
-                paint.set_color_rgba8(ctx.primary_color[0], ctx.primary_color[1], ctx.primary_color[2], ctx.primary_color[3]);
+                paint.set_color_rgba8(
+                    ctx.primary_color[0],
+                    ctx.primary_color[1],
+                    ctx.primary_color[2],
+                    ctx.primary_color[3],
+                );
                 paint.anti_alias = true;
 
+                let x0 = sl.x_start - oxf;
+                let x1 = sl.x_start + sl.shaped.total_advance - oxf;
+
                 if ctx.underline {
-                    let uy = line_y + ctx.font_size * 0.1;
+                    let uy = sl.line_y + ctx.font_size * 0.1 - oyf;
                     let mut pb = tiny_skia::PathBuilder::new();
-                    pb.move_to(x_start, uy);
-                    pb.line_to(x_start + text_width, uy);
+                    pb.move_to(x0, uy);
+                    pb.line_to(x1, uy);
                     pb.close();
                     if let Some(path) = pb.finish() {
                         let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
@@ -399,10 +485,10 @@ impl Renderer {
                 }
 
                 if ctx.strikeout {
-                    let sy = line_y - ctx.font_size * 0.35;
+                    let sy = sl.line_y - ctx.font_size * 0.35 - oyf;
                     let mut pb = tiny_skia::PathBuilder::new();
-                    pb.move_to(x_start, sy);
-                    pb.line_to(x_start + text_width, sy);
+                    pb.move_to(x0, sy);
+                    pb.line_to(x1, sy);
                     pb.close();
                     if let Some(path) = pb.finish() {
                         let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
@@ -412,50 +498,68 @@ impl Renderer {
             }
         }
 
+        // Phase 5: Blur (operates on sub-region).
         if ctx.blur > 0.0 {
             effects::apply_gaussian_blur(&mut layer, ctx.blur);
         }
 
+        // Phase 6: Shadow (operates on sub-region).
         if ctx.shadow_depth > 0.0 {
             let layer_data = layer.data().to_vec();
             let shadow_layer = effects::apply_shadow(
                 &layer_data,
-                w,
-                h,
+                lw,
+                lh,
                 ctx.shadow_depth,
                 ctx.shadow_depth,
                 ctx.blur,
                 ctx.shadow_color,
             );
-            let mut shadow_pixmap = Pixmap::new(w, h).unwrap();
+            let mut shadow_pixmap = Pixmap::new(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
-            effects::composite_over(layer.data_mut(), shadow_pixmap.data(), w, h);
+            effects::composite_over(layer.data_mut(), shadow_pixmap.data(), lw, lh);
         }
 
-        let transform = AffineTransform::rotate_at(ctx.rotation, ctx.origin_x, ctx.origin_y)
-            .then(&AffineTransform::scale(ctx.scale_x / 100.0, ctx.scale_y / 100.0))
-            .then(&AffineTransform::shear(ctx.shear_x, ctx.shear_y));
-
-        let final_data = if transform.is_identity() {
-            layer.data().to_vec()
-        } else {
-            transform.apply_to_pixmap(layer.data(), w, h, w, h)
-        };
-
-        if ctx.clip_enabled {
-            let mut clipped = final_data;
-            apply_clip_mask(&mut clipped, w, h, ctx);
+        // Phase 7: Composite back.
+        if use_sub {
+            // Sub-region path: no rotation, no clip (guaranteed by can_sub check).
             if ctx.alpha_multiplier < 0.999 {
-                apply_alpha_multiplier(&mut clipped, ctx.alpha_multiplier);
+                apply_alpha_multiplier(layer.data_mut(), ctx.alpha_multiplier);
             }
-            effects::composite_over(pixmap.data_mut(), &clipped, w, h);
+            composite_subregion(pixmap.data_mut(), layer.data(), w, h, ox, oy, lw, lh);
         } else {
-            if ctx.alpha_multiplier < 0.999 {
-                let mut alpha_data = final_data;
-                apply_alpha_multiplier(&mut alpha_data, ctx.alpha_multiplier);
-                effects::composite_over(pixmap.data_mut(), &alpha_data, w, h);
+            // Full-frame path: apply transform, clip, alpha — identical to original.
+            let mut transform = AffineTransform::rotate_at(ctx.rotation, ctx.origin_x, ctx.origin_y)
+                .then(&AffineTransform::scale(ctx.scale_x / 100.0, ctx.scale_y / 100.0))
+                .then(&AffineTransform::shear(ctx.shear_x, ctx.shear_y));
+
+            if ctx.writing_mode == 2 {
+                transform = transform.then(&AffineTransform::rotate_at(-90.0, ctx.x, ctx.y));
+            } else if ctx.writing_mode == 3 {
+                transform = transform.then(&AffineTransform::rotate_at(90.0, ctx.x, ctx.y));
+            }
+
+            let final_data = if transform.is_identity() {
+                layer.data().to_vec()
             } else {
-                effects::composite_over(pixmap.data_mut(), &final_data, w, h);
+                transform.apply_to_pixmap(layer.data(), w, h, w, h)
+            };
+
+            if ctx.clip_enabled {
+                let mut clipped = final_data;
+                apply_clip_mask(&mut clipped, w, h, ctx);
+                if ctx.alpha_multiplier < 0.999 {
+                    apply_alpha_multiplier(&mut clipped, ctx.alpha_multiplier);
+                }
+                effects::composite_over(pixmap.data_mut(), &clipped, w, h);
+            } else {
+                if ctx.alpha_multiplier < 0.999 {
+                    let mut alpha_data = final_data;
+                    apply_alpha_multiplier(&mut alpha_data, ctx.alpha_multiplier);
+                    effects::composite_over(pixmap.data_mut(), &alpha_data, w, h);
+                } else {
+                    effects::composite_over(pixmap.data_mut(), &final_data, w, h);
+                }
             }
         }
     }
@@ -480,97 +584,197 @@ impl Renderer {
 
         let shaper = Shaper::new(&self.font_manager);
 
-        let mut bg_layer = Pixmap::new(w, h).unwrap();
-        let mut fg_layer = Pixmap::new(w, h).unwrap();
+        // Phase 1: Shape all syllables, track cursor and bounding box.
+        struct SyllableInfo {
+            shaped: ShapedText,
+            syllable_x: f32,
+            syllable_width: f32,
+            is_active: bool,
+            progress: f32,
+            style: KaraokeStyle,
+        }
 
+        let mut syllable_infos: Vec<SyllableInfo> = Vec::new();
         let mut cursor_x = ctx.x;
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+        let mut any_glyph = false;
 
         for syllable in &syllables {
             if syllable.text.is_empty() {
                 continue;
             }
 
-            let is_done = matches!(syllable.phase, KaraokePhase::Done);
-            let is_active = matches!(syllable.phase, KaraokePhase::Active { .. });
-            let progress = match syllable.phase {
-                KaraokePhase::Active { progress } => progress,
-                _ => 0.0,
-            };
-
-            let mut sy_ctx = ctx.clone();
-            if is_done || is_active {
-                sy_ctx.primary_color = ctx.primary_color;
-            } else {
-                sy_ctx.primary_color = ctx.secondary_color;
-            }
-
             if let Ok(shaped) = shaper.shape(&syllable.text, font_id, ctx.font_size) {
                 let syllable_x = cursor_x;
                 let syllable_width = shaped.total_advance;
-
-                let target_layer = if is_active {
-                    &mut fg_layer
-                } else {
-                    &mut bg_layer
+                let is_active = matches!(syllable.phase, KaraokePhase::Active { .. });
+                let _is_done = matches!(syllable.phase, KaraokePhase::Done);
+                let progress = match syllable.phase {
+                    KaraokePhase::Active { progress } => progress,
+                    _ => 0.0,
                 };
 
+                // Track glyph ink extents for bounding box.
                 let mut sx = syllable_x;
                 for glyph in &shaped.glyphs {
-                    Rasterizer::rasterize_glyph(target_layer, &self.font_manager, font_id, glyph, sx, ctx.y, &sy_ctx);
-                    sx += glyph.x_advance + ctx.spacing;
+                    if let Some(bbox) = shaper.get_glyph_bbox(font_id, glyph.glyph_id, ctx.font_size) {
+                        any_glyph = true;
+                        let gx = sx + glyph.x_offset;
+                        let gy = ctx.y + glyph.y_offset;
+                        min_x = min_x.min(gx + bbox.x_min);
+                        min_y = min_y.min(gy + bbox.y_min);
+                        max_x = max_x.max(gx + bbox.x_max);
+                        max_y = max_y.max(gy + bbox.y_max);
+                    }
+                    sx += glyph.x_advance;
                 }
 
+                // Track karaoke fill clip region extent for active syllables.
                 if is_active && matches!(syllable.style, KaraokeStyle::Fill) {
                     let clip_x = syllable_x + KaraokeRenderer::get_fill_clip_x(progress, syllable_width);
-                    let fg_w = fg_layer.width() as usize;
-                    let y_start = ctx.y.max(0.0) as usize;
-                    let y_end = (ctx.y + ctx.font_size * 1.5).min(h as f32) as usize;
-                    let data = fg_layer.data_mut();
-                    for py in y_start..y_end.min(h as usize) {
-                        for px in (clip_x as usize)..fg_w.min(w as usize) {
-                            let idx = (py * fg_w + px) * 4;
-                            if idx + 3 < data.len() {
-                                data[idx] = 0;
-                                data[idx + 1] = 0;
-                                data[idx + 2] = 0;
-                                data[idx + 3] = 0;
-                            }
-                        }
-                    }
+                    let clip_y_max = ctx.y + ctx.font_size * 1.5;
+                    min_x = min_x.min(clip_x);
+                    max_x = max_x.max(syllable_x + syllable_width);
+                    min_y = min_y.min(ctx.y);
+                    max_y = max_y.max(clip_y_max);
+                    any_glyph = true;
                 }
+
+                syllable_infos.push(SyllableInfo {
+                    shaped,
+                    syllable_x,
+                    syllable_width,
+                    is_active,
+                    progress,
+                    style: syllable.style,
+                });
 
                 cursor_x += syllable_width + ctx.spacing;
             }
         }
 
+        if syllable_infos.is_empty() {
+            return;
+        }
+
+        // Phase 2: Determine sub-region or full frame.
+        let can_sub = ctx.rotation == 0.0
+            && ctx.shear_x == 0.0
+            && ctx.shear_y == 0.0
+            && (ctx.writing_mode == 0 || ctx.writing_mode == 1)
+            && !ctx.clip_enabled;
+
+        let (ox, oy, lw, lh, use_sub) = if can_sub && any_glyph {
+            let border = ctx.outline_width.max(ctx.outline_x_width).max(ctx.outline_y_width);
+            let shadow = ctx.shadow_depth.max(ctx.shadow_x).max(ctx.shadow_y);
+            let pad = (border * 2.0 + shadow + ctx.blur).max(20.0);
+            let ox = (min_x - pad).floor().max(0.0) as u32;
+            let oy = (min_y - pad).floor().max(0.0) as u32;
+            let lw = ((max_x - min_x) + pad * 2.0).ceil().max(1.0) as u32;
+            let lh = ((max_y - min_y) + pad * 2.0).ceil().max(1.0) as u32;
+            let lw = lw.min(w.saturating_sub(ox)).max(1);
+            let lh = lh.min(h.saturating_sub(oy)).max(1);
+            (ox, oy, lw, lh, true)
+        } else {
+            (0, 0, w, h, false)
+        };
+
+        // Phase 3: Allocate layers and render with offset.
+        let mut bg_layer = Pixmap::new(lw, lh).unwrap();
+        let mut fg_layer = Pixmap::new(lw, lh).unwrap();
+        let oxf = ox as f32;
+        let oyf = oy as f32;
+
+        for (i, info) in syllable_infos.iter().enumerate() {
+            let syllable = &syllables[i];
+            let mut sy_ctx = ctx.clone();
+            if matches!(syllable.phase, KaraokePhase::Done | KaraokePhase::Active { .. }) {
+                sy_ctx.primary_color = ctx.primary_color;
+            } else {
+                sy_ctx.primary_color = ctx.secondary_color;
+            }
+
+            let target_layer = if info.is_active {
+                &mut fg_layer
+            } else {
+                &mut bg_layer
+            };
+
+            let mut sx = info.syllable_x;
+            for glyph in &info.shaped.glyphs {
+                Rasterizer::rasterize_glyph(
+                    target_layer,
+                    &self.font_manager,
+                    font_id,
+                    glyph,
+                    sx - oxf,
+                    ctx.y - oyf,
+                    &sy_ctx,
+                );
+                sx += glyph.x_advance + ctx.spacing;
+            }
+
+            if info.is_active && matches!(info.style, KaraokeStyle::Fill) {
+                let clip_x = info.syllable_x
+                    + KaraokeRenderer::get_fill_clip_x(info.progress, info.syllable_width);
+                let clip_x_adj = (clip_x - oxf).max(0.0) as usize;
+                let y_start = (ctx.y - oyf).max(0.0) as usize;
+                let y_end = (ctx.y + ctx.font_size * 1.5 - oyf).min(lh as f32) as usize;
+                let fg_w = lw as usize;
+                let data = fg_layer.data_mut();
+                for py in y_start..y_end.min(lh as usize) {
+                    for px in clip_x_adj..fg_w {
+                        let idx = (py * fg_w + px) * 4;
+                        if idx + 3 < data.len() {
+                            data[idx] = 0;
+                            data[idx + 1] = 0;
+                            data[idx + 2] = 0;
+                            data[idx + 3] = 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Phase 4: Blur on sub-region.
         if ctx.blur > 0.0 {
             effects::apply_gaussian_blur(&mut bg_layer, ctx.blur);
             effects::apply_gaussian_blur(&mut fg_layer, ctx.blur);
         }
 
+        // Phase 5: Shadow on sub-region.
         if ctx.shadow_depth > 0.0 {
             let bg_data = bg_layer.data().to_vec();
             let shadow_data = effects::apply_shadow(
-                &bg_data, w, h,
+                &bg_data, lw, lh,
                 ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
             );
-            let mut shadow_pixmap = Pixmap::new(w, h).unwrap();
+            let mut shadow_pixmap = Pixmap::new(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
-            effects::composite_over(bg_layer.data_mut(), shadow_pixmap.data(), w, h);
+            effects::composite_over(bg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
         }
         if ctx.shadow_depth > 0.0 {
             let fg_data = fg_layer.data().to_vec();
             let shadow_data = effects::apply_shadow(
-                &fg_data, w, h,
+                &fg_data, lw, lh,
                 ctx.shadow_depth, ctx.shadow_depth, ctx.blur, ctx.shadow_color,
             );
-            let mut shadow_pixmap = Pixmap::new(w, h).unwrap();
+            let mut shadow_pixmap = Pixmap::new(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
-            effects::composite_over(fg_layer.data_mut(), shadow_pixmap.data(), w, h);
+            effects::composite_over(fg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
         }
 
-        effects::composite_over(pixmap.data_mut(), bg_layer.data(), w, h);
-        effects::composite_over(pixmap.data_mut(), fg_layer.data(), w, h);
+        // Phase 6: Composite back.
+        if use_sub {
+            composite_subregion(pixmap.data_mut(), bg_layer.data(), w, h, ox, oy, lw, lh);
+            composite_subregion(pixmap.data_mut(), fg_layer.data(), w, h, ox, oy, lw, lh);
+        } else {
+            effects::composite_over(pixmap.data_mut(), bg_layer.data(), w, h);
+            effects::composite_over(pixmap.data_mut(), fg_layer.data(), w, h);
+        }
     }
 
     fn render_drawing(&self, pixmap: &mut Pixmap, text: &str, ctx: &RenderContext, drawing_level: u8) {
@@ -854,7 +1058,8 @@ fn parse_override_block(text: &str) -> Vec<OverrideTag> {
         match ch {
             '\\' if !in_paren => {
                 if !current.is_empty() {
-                    if let Some(tag) = parse_single_tag_from_str(&current) {
+                    let tag_str = current.strip_prefix('\\').unwrap_or(&current);
+                    if let Some(tag) = ass_parser::parse_override_tag(tag_str) {
                         tags.push(tag);
                     }
                     current.clear();
@@ -876,140 +1081,13 @@ fn parse_override_block(text: &str) -> Vec<OverrideTag> {
     }
 
     if !current.is_empty() {
-        if let Some(tag) = parse_single_tag_from_str(&current) {
+        let tag_str = current.strip_prefix('\\').unwrap_or(&current);
+        if let Some(tag) = ass_parser::parse_override_tag(tag_str) {
             tags.push(tag);
         }
     }
 
     tags
-}
-
-fn parse_single_tag_from_str(raw: &str) -> Option<OverrideTag> {
-    let s = raw.strip_prefix('\\').unwrap_or(raw);
-    if s.is_empty() {
-        return None;
-    }
-
-    if let Some(rest) = s.strip_prefix("fs") {
-        if let Ok(v) = rest.parse::<f64>() {
-            return Some(OverrideTag::FontSize(v));
-        }
-    }
-    if let Some(rest) = s.strip_prefix("fn") {
-        return Some(OverrideTag::FontName(rest.to_string()));
-    }
-    if s == "b1" { return Some(OverrideTag::Bold(true)); }
-    if s == "b0" { return Some(OverrideTag::Bold(false)); }
-    if s == "i1" { return Some(OverrideTag::Italic(true)); }
-    if s == "i0" { return Some(OverrideTag::Italic(false)); }
-    if let Some(rest) = s.strip_prefix("bord") {
-        if let Ok(v) = rest.parse::<f64>() {
-            return Some(OverrideTag::Border(v));
-        }
-    }
-    if let Some(rest) = s.strip_prefix("shad") {
-        if let Ok(v) = rest.parse::<f64>() {
-            return Some(OverrideTag::Shadow(v));
-        }
-    }
-    if let Some(rest) = s.strip_prefix("fscx") {
-        if let Ok(v) = rest.parse::<f64>() {
-            return Some(OverrideTag::Scale { x: v, y: 100.0 });
-        }
-    }
-    if let Some(rest) = s.strip_prefix("fscy") {
-        if let Ok(v) = rest.parse::<f64>() {
-            return Some(OverrideTag::Scale { x: 100.0, y: v });
-        }
-    }
-    if let Some(rest) = s.strip_prefix("frz") {
-        if let Ok(v) = rest.parse::<f64>() {
-            return Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z: v });
-        }
-    }
-    if let Some(rest) = s.strip_prefix("k") {
-        if let Ok(v) = rest.parse::<u64>() {
-            return Some(OverrideTag::Karaoke {
-                style: ass_parser::KaraokeStyle::Instant,
-                duration: v * 10,
-            });
-        }
-    }
-    if let Some(rest) = s.strip_prefix("kf") {
-        if let Ok(v) = rest.parse::<u64>() {
-            return Some(OverrideTag::Karaoke {
-                style: ass_parser::KaraokeStyle::Fill,
-                duration: v * 10,
-            });
-        }
-    }
-    if let Some(rest) = s.strip_prefix("an") {
-        if let Ok(v) = rest.parse::<u8>() {
-            return Some(OverrideTag::AlignmentNumpad(v));
-        }
-    }
-    if let Some(rest) = s.strip_prefix("1c&H") {
-        let hex = rest.strip_suffix('&').unwrap_or(rest);
-        if let Ok(c) = parse_ass_color(hex) {
-            return Some(OverrideTag::PrimaryColor(c));
-        }
-    }
-    if let Some(rest) = s.strip_prefix("2c&H") {
-        let hex = rest.strip_suffix('&').unwrap_or(rest);
-        if let Ok(c) = parse_ass_color(hex) {
-            return Some(OverrideTag::SecondaryColor(c));
-        }
-    }
-    if let Some(rest) = s.strip_prefix("3c&H") {
-        let hex = rest.strip_suffix('&').unwrap_or(rest);
-        if let Ok(c) = parse_ass_color(hex) {
-            return Some(OverrideTag::OutlineColor(c));
-        }
-    }
-    if let Some(rest) = s.strip_prefix("4c&H") {
-        let hex = rest.strip_suffix('&').unwrap_or(rest);
-        if let Ok(c) = parse_ass_color(hex) {
-            return Some(OverrideTag::ShadowColor(c));
-        }
-    }
-    if let Some(rest) = s.strip_prefix("clip(").and_then(|r| r.strip_suffix(')')) {
-        let nums: Vec<f64> = rest.split(',')
-            .filter_map(|n| n.trim().parse().ok())
-            .collect();
-        if nums.len() == 4 {
-            return Some(OverrideTag::Clip { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
-        }
-    }
-    if let Some(rest) = s.strip_prefix("iclip(").and_then(|r| r.strip_suffix(')')) {
-        let nums: Vec<f64> = rest.split(',')
-            .filter_map(|n| n.trim().parse().ok())
-            .collect();
-        if nums.len() == 4 {
-            return Some(OverrideTag::ClipInverse { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
-        }
-    }
-
-    None
-}
-
-fn parse_ass_color(hex: &str) -> Result<ass_parser::AssColor, ()> {
-    let clean = hex.trim_start_matches("0x").trim_start_matches("0X");
-    match clean.len() {
-        6 => {
-            let b = u8::from_str_radix(&clean[0..2], 16).map_err(|_| ())?;
-            let g = u8::from_str_radix(&clean[2..4], 16).map_err(|_| ())?;
-            let r = u8::from_str_radix(&clean[4..6], 16).map_err(|_| ())?;
-            Ok(ass_parser::AssColor { alpha: 0, blue: b, green: g, red: r })
-        }
-        8 => {
-            let a = u8::from_str_radix(&clean[0..2], 16).map_err(|_| ())?;
-            let b = u8::from_str_radix(&clean[2..4], 16).map_err(|_| ())?;
-            let g = u8::from_str_radix(&clean[4..6], 16).map_err(|_| ())?;
-            let r = u8::from_str_radix(&clean[6..8], 16).map_err(|_| ())?;
-            Ok(ass_parser::AssColor { alpha: a, blue: b, green: g, red: r })
-        }
-        _ => Err(()),
-    }
 }
 
 fn apply_alpha_multiplier(data: &mut [u8], alpha: f32) {
@@ -1038,6 +1116,114 @@ fn apply_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &RenderContext) {
             }
         }
     }
+}
+
+/// Composite a sub-region source buffer into a larger destination buffer.
+///
+/// Performs Porter-Duff "over" compositing of a (`sw` × `sh`) source image
+/// positioned at (`sx`, `sy`) in the (`dw` × `dh`) destination image.
+/// The source and destination pixel data are in RGBA byte order.
+fn composite_subregion(
+    dst: &mut [u8],
+    src: &[u8],
+    dst_w: u32,
+    dst_h: u32,
+    src_x: u32,
+    src_y: u32,
+    src_w: u32,
+    src_h: u32,
+) {
+    for ry in 0..src_h {
+        let dy = src_y + ry;
+        if dy >= dst_h {
+            continue;
+        }
+        for rx in 0..src_w {
+            let dx = src_x + rx;
+            if dx >= dst_w {
+                continue;
+            }
+
+            let si = (ry * src_w + rx) as usize * 4;
+            let di = (dy * dst_w + dx) as usize * 4;
+
+            let sa = src[si + 3] as u32;
+            if sa == 0 {
+                continue;
+            }
+
+            let da = dst[di + 3] as u32;
+            let out_a = sa + da * (255 - sa) / 255;
+            if out_a == 0 {
+                continue;
+            }
+
+            for c in 0..3 {
+                let sv = src[si + c] as u32;
+                let dv = dst[di + c] as u32;
+                dst[di + c] = ((sv * sa + dv * da * (255 - sa) / 255) / out_a) as u8;
+            }
+            dst[di + 3] = out_a as u8;
+        }
+    }
+}
+
+/// Compute the tight ink bounding box of all glyphs in `shaped_lines`.
+///
+/// Returns `(min_x, min_y, max_x, max_y)` in the layer's pixel coordinate space
+/// (before any shadow/blur/border padding). Returns `None` if no glyph bbox can
+/// be determined (triggers fallback to full-frame allocation).
+fn compute_tight_bbox(
+    shaped_lines: &[ShapedLine],
+    shaper: &Shaper,
+    font_id: fontdb::ID,
+    font_size: f32,
+    ctx: &RenderContext,
+) -> Option<(f32, f32, f32, f32)> {
+    let mut min_x = f32::MAX;
+    let mut min_y = f32::MAX;
+    let mut max_x = f32::MIN;
+    let mut max_y = f32::MIN;
+    let mut any_glyph = false;
+
+    for sl in shaped_lines {
+        let mut x = sl.x_start;
+        for glyph in &sl.shaped.glyphs {
+            if let Some(bbox) = shaper.get_glyph_bbox(font_id, glyph.glyph_id, font_size) {
+                any_glyph = true;
+                let gx = x + glyph.x_offset;
+                let gy = sl.line_y + glyph.y_offset;
+                min_x = min_x.min(gx + bbox.x_min);
+                min_y = min_y.min(gy + bbox.y_min);
+                max_x = max_x.max(gx + bbox.x_max);
+                max_y = max_y.max(gy + bbox.y_max);
+            }
+            x += glyph.x_advance;
+        }
+
+        // Account for underline / strikeout lines.
+        if ctx.underline {
+            let uy = sl.line_y + ctx.font_size * 0.1;
+            min_y = min_y.min(uy - 2.0);
+            max_y = max_y.max(uy + 2.0);
+            min_x = min_x.min(sl.x_start);
+            max_x = max_x.max(sl.x_start + sl.shaped.total_advance);
+            any_glyph = true;
+        }
+        if ctx.strikeout {
+            let sy = sl.line_y - ctx.font_size * 0.35;
+            min_y = min_y.min(sy - 2.0);
+            max_y = max_y.max(sy + 2.0);
+            min_x = min_x.min(sl.x_start);
+            max_x = max_x.max(sl.x_start + sl.shaped.total_advance);
+            any_glyph = true;
+        }
+    }
+
+    if !any_glyph {
+        return None;
+    }
+    Some((min_x, min_y, max_x, max_y))
 }
 
 fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
@@ -1118,12 +1304,13 @@ fn wrap_text(text: &str, wrap_style: u8, shaper: &Shaper, font_id: fontdb::ID, f
                         let word_width = shaped.total_advance + spacing * shaped.glyphs.len() as f32;
                         if current_width > 0.0 && word_width > available_width {
                             result.push(current_line.clone());
+                            // Extract word width from combined shape by cluster byte offset
+                            let word_byte_start = (current_line.len() + 1) as u32;
                             current_line = word.to_string();
-                            if let Ok(sw) = shaper.shape(word, font_id, font_size) {
-                                current_width = sw.total_advance;
-                            } else {
-                                current_width = 0.0;
-                            }
+                            current_width = shaped.glyphs.iter()
+                                .filter(|g| g.cluster >= word_byte_start)
+                                .map(|g| g.x_advance)
+                                .sum::<f32>();
                         } else {
                             current_line = test_str;
                             current_width = word_width;
@@ -1574,7 +1761,7 @@ mod tests {
         let tags = parse_override_block("\\bord2\\clip(10,20,30,40)\\shad3");
         assert_eq!(tags.len(), 3);
         assert!(matches!(&tags[0], OverrideTag::Border(v) if *v == 2.0));
-        // clip is parsed via the regular ASS parser, not parse_single_tag_from_str
+        // clip is parsed via the regular ASS parser, not ass_parser::parse_override_tag
         assert!(matches!(&tags[1], OverrideTag::Clip{..}));
         assert!(matches!(&tags[2], OverrideTag::Shadow(v) if *v == 3.0));
     }
@@ -1593,68 +1780,66 @@ mod tests {
         assert!(matches!(&tags[1], OverrideTag::Karaoke { duration: 1000, .. }));
     }
 
-    // ── parse_single_tag_from_str ─────────────────────────────
-
-    #[test]
+    // ── ass_parser::parse_override_tag ─────────────────────────────────
     fn test_parse_single_tag_fs() {
-        assert!(matches!(parse_single_tag_from_str("fs48"), Some(OverrideTag::FontSize(v)) if v == 48.0));
+        assert!(matches!(ass_parser::parse_override_tag("fs48"), Some(OverrideTag::FontSize(v)) if v == 48.0));
     }
 
     #[test]
     fn test_parse_single_tag_fn() {
-        assert!(matches!(parse_single_tag_from_str("fnArial"), Some(OverrideTag::FontName(n)) if n == "Arial"));
+        assert!(matches!(ass_parser::parse_override_tag("fnArial"), Some(OverrideTag::FontName(n)) if n == "Arial"));
     }
 
     #[test]
     fn test_parse_single_tag_bold() {
-        assert!(matches!(parse_single_tag_from_str("b1"), Some(OverrideTag::Bold(true))));
-        assert!(matches!(parse_single_tag_from_str("b0"), Some(OverrideTag::Bold(false))));
+        assert!(matches!(ass_parser::parse_override_tag("b1"), Some(OverrideTag::Bold(true))));
+        assert!(matches!(ass_parser::parse_override_tag("b0"), Some(OverrideTag::Bold(false))));
     }
 
     #[test]
     fn test_parse_single_tag_italic() {
-        assert!(matches!(parse_single_tag_from_str("i1"), Some(OverrideTag::Italic(true))));
-        assert!(matches!(parse_single_tag_from_str("i0"), Some(OverrideTag::Italic(false))));
+        assert!(matches!(ass_parser::parse_override_tag("i1"), Some(OverrideTag::Italic(true))));
+        assert!(matches!(ass_parser::parse_override_tag("i0"), Some(OverrideTag::Italic(false))));
     }
 
     #[test]
     fn test_parse_single_tag_bord() {
-        assert!(matches!(parse_single_tag_from_str("bord3"), Some(OverrideTag::Border(v)) if v == 3.0));
+        assert!(matches!(ass_parser::parse_override_tag("bord3"), Some(OverrideTag::Border(v)) if v == 3.0));
     }
 
     #[test]
     fn test_parse_single_tag_shad() {
-        assert!(matches!(parse_single_tag_from_str("shad5"), Some(OverrideTag::Shadow(v)) if v == 5.0));
+        assert!(matches!(ass_parser::parse_override_tag("shad5"), Some(OverrideTag::Shadow(v)) if v == 5.0));
     }
 
     #[test]
     fn test_parse_single_tag_fscx() {
-        assert!(matches!(parse_single_tag_from_str("fscx150"), Some(OverrideTag::Scale { x, y: 100.0 }) if x == 150.0));
+        assert!(matches!(ass_parser::parse_override_tag("fscx150"), Some(OverrideTag::Scale { x, y: 100.0 }) if x == 150.0));
     }
 
     #[test]
     fn test_parse_single_tag_fscy() {
-        assert!(matches!(parse_single_tag_from_str("fscy80"), Some(OverrideTag::Scale { x: 100.0, y }) if y == 80.0));
+        assert!(matches!(ass_parser::parse_override_tag("fscy80"), Some(OverrideTag::Scale { x: 100.0, y }) if y == 80.0));
     }
 
     #[test]
     fn test_parse_single_tag_frz() {
-        assert!(matches!(parse_single_tag_from_str("frz45"), Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z }) if z == 45.0));
+        assert!(matches!(ass_parser::parse_override_tag("frz45"), Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z }) if z == 45.0));
     }
 
     #[test]
     fn test_parse_single_tag_an() {
-        assert!(matches!(parse_single_tag_from_str("an8"), Some(OverrideTag::AlignmentNumpad(v)) if v == 8));
+        assert!(matches!(ass_parser::parse_override_tag("an8"), Some(OverrideTag::AlignmentNumpad(v)) if v == 8));
     }
 
     #[test]
     fn test_parse_single_tag_unknown() {
-        assert!(parse_single_tag_from_str("zzz").is_none());
+        assert!(ass_parser::parse_override_tag("zzz").is_none());
     }
 
     #[test]
     fn test_parse_single_tag_empty() {
-        assert!(parse_single_tag_from_str("").is_none());
+        assert!(ass_parser::parse_override_tag("").is_none());
     }
 
     // ── apply_transform_tag integration ───────────────────────
