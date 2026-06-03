@@ -574,4 +574,45 @@ mod tests {
         assert!((ctx.x - 1920.0).abs() < 1.0);
         assert!((ctx.y - 1080.0).abs() < 1.0);
     }
+
+    #[test]
+    fn test_fad_zero_duration_returns_zero() {
+        assert_eq!(compute_fad_alpha(500, 0, 200, 200), 0.0);
+    }
+
+    #[test]
+    fn test_fad_fade_in_longer_than_duration() {
+        let a = compute_fad_alpha(500, 1000, 5000, 0);
+        assert!(a > 0.0 && a < 1.0, "should be partial: {a}");
+    }
+
+    #[test]
+    fn test_fade_complex_t1_eq_t2_returns_a1() {
+        let a = compute_fade_complex(500, 100, 200, 50, 500, 500, 800, 1000);
+        let expected = (255 - 100) as f32 / 255.0;
+        assert!((a - expected).abs() < 0.01, "t1==t2 elapsed==t1 returns a1: {a}");
+    }
+
+    #[test]
+    fn test_parse_override_block_whitespace() {
+        let tags = parse_override_block("   ");
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn test_apply_transform_empty_tag_no_crash() {
+        let mut ctx = RenderContext { font_size: 20.0, ..Default::default() };
+        apply_transform_tag(&mut ctx, "", 0, 1000, 1.0, 500, 0, 1000, 1.0, 1.0);
+        assert_eq!(ctx.font_size, 20.0);
+    }
+
+    #[test]
+    fn test_lerp_u8_t_zero() {
+        assert_eq!(lerp_u8(100, 200, 0.0), 100);
+    }
+
+    #[test]
+    fn test_lerp_u8_t_one() {
+        assert_eq!(lerp_u8(100, 200, 1.0), 200);
+    }
 }

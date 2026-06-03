@@ -131,3 +131,140 @@ pub(super) fn wrap_text(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── alignment_to_pos ──────────────────────────────────────
+
+    #[test]
+    fn test_alignment_to_pos_bottom_left() {
+        let (x, y) = alignment_to_pos(1);
+        assert!((x - 0.0).abs() < f32::EPSILON);
+        assert!((y - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_bottom_center() {
+        let (x, y) = alignment_to_pos(2);
+        assert!((x - 0.5).abs() < f32::EPSILON);
+        assert!((y - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_bottom_right() {
+        let (x, y) = alignment_to_pos(3);
+        assert!((x - 1.0).abs() < f32::EPSILON);
+        assert!((y - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_middle_left() {
+        let (x, y) = alignment_to_pos(4);
+        assert!((x - 0.0).abs() < f32::EPSILON);
+        assert!((y - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_middle_center() {
+        let (x, y) = alignment_to_pos(5);
+        assert!((x - 0.5).abs() < f32::EPSILON);
+        assert!((y - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_middle_right() {
+        let (x, y) = alignment_to_pos(6);
+        assert!((x - 1.0).abs() < f32::EPSILON);
+        assert!((y - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_top_left() {
+        let (x, y) = alignment_to_pos(7);
+        assert!((x - 0.0).abs() < f32::EPSILON);
+        assert!((y - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_top_center() {
+        let (x, y) = alignment_to_pos(8);
+        assert!((x - 0.5).abs() < f32::EPSILON);
+        assert!((y - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_top_right() {
+        let (x, y) = alignment_to_pos(9);
+        assert!((x - 1.0).abs() < f32::EPSILON);
+        assert!((y - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_default_is_bottom_center() {
+        let (x, y) = alignment_to_pos(0);
+        assert!((x - 0.5).abs() < f32::EPSILON);
+        assert!((y - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_alignment_to_pos_out_of_range_default() {
+        let (x, y) = alignment_to_pos(10);
+        assert!((x - 0.5).abs() < f32::EPSILON);
+        assert!((y - 1.0).abs() < f32::EPSILON);
+    }
+
+    // ── strip_override_blocks ─────────────────────────────────
+
+    #[test]
+    fn test_strip_override_blocks_no_blocks() {
+        assert_eq!(strip_override_blocks("Hello World"), "Hello World");
+    }
+
+    #[test]
+    fn test_strip_override_blocks_empty() {
+        assert_eq!(strip_override_blocks(""), "");
+    }
+
+    #[test]
+    fn test_strip_override_blocks_single_block() {
+        assert_eq!(strip_override_blocks("{\\b1}Bold"), "Bold");
+    }
+
+    #[test]
+    fn test_strip_override_blocks_multiple_blocks() {
+        assert_eq!(
+            strip_override_blocks("{\\b1}Hello{\\i1} World"),
+            "Hello World"
+        );
+    }
+
+    #[test]
+    fn test_strip_override_blocks_nested_blocks() {
+        assert_eq!(
+            strip_override_blocks("{\\b1{\\i1}}Nested"),
+            "Nested"
+        );
+    }
+
+    #[test]
+    fn test_strip_override_blocks_empty_block() {
+        assert_eq!(strip_override_blocks("{}Empty"), "Empty");
+    }
+
+    #[test]
+    fn test_strip_override_blocks_only_blocks() {
+        assert_eq!(strip_override_blocks("{\\b1}{\\i1}"), "");
+    }
+
+    #[test]
+    fn test_strip_override_blocks_unmatched_close_ignored() {
+        assert_eq!(strip_override_blocks("Hello}World"), "Hello}World");
+    }
+
+    #[test]
+    fn test_strip_override_blocks_unmatched_open_strips_rest() {
+        assert_eq!(strip_override_blocks("{Hello"), "");
+    }
+}

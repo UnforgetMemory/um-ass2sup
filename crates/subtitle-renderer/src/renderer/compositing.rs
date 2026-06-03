@@ -360,4 +360,112 @@ mod tests {
         let outside_alpha = data[((9 * w + 9) * 4 + 3) as usize];
         assert_eq!(outside_alpha, 0, "pixel outside scaled triangle should be cleared");
     }
+
+    // ── edge cases ────────────────────────────────────────────
+
+    #[test]
+    fn test_alpha_multiplier_empty_data() {
+        let mut data: Vec<u8> = vec![];
+        apply_alpha_multiplier(&mut data, 0.5);
+        assert!(data.is_empty());
+    }
+
+    #[test]
+    fn test_alpha_multiplier_clamp_over_1() {
+        let mut data = vec![100, 150, 200, 160];
+        apply_alpha_multiplier(&mut data, 2.0);
+        assert_eq!(data[3], 160);
+    }
+
+    #[test]
+    fn test_alpha_multiplier_clamp_under_0() {
+        let mut data = vec![100, 150, 200, 160];
+        apply_alpha_multiplier(&mut data, -0.5);
+        assert_eq!(data[3], 0);
+    }
+
+    #[test]
+    fn test_clip_mask_out_of_bounds_clip() {
+        let mut data = vec![255u8; 4 * 4 * 4];
+        let ctx = RenderContext {
+            clip_enabled: true,
+            clip_x1: 10.0,
+            clip_y1: 10.0,
+            clip_x2: 20.0,
+            clip_y2: 20.0,
+            clip_inverse: false,
+            ..Default::default()
+        };
+        apply_clip_mask(&mut data, 4, 4, &ctx);
+        assert_eq!(data[3], 0);
+    }
+
+    #[test]
+    fn test_clip_mask_full_image_clip() {
+        let mut data = vec![255u8; 4 * 4 * 4];
+        let ctx = RenderContext {
+            clip_enabled: true,
+            clip_x1: 0.0,
+            clip_y1: 0.0,
+            clip_x2: 4.0,
+            clip_y2: 4.0,
+            clip_inverse: false,
+            ..Default::default()
+        };
+        apply_clip_mask(&mut data, 4, 4, &ctx);
+        assert_eq!(data[3], 255);
+    }
+
+    #[test]
+    fn test_clip_mask_negative_coords_clamped() {
+        let mut data = vec![255u8; 4 * 4 * 4];
+        let ctx = RenderContext {
+            clip_enabled: true,
+            clip_x1: -5.0,
+            clip_y1: -5.0,
+            clip_x2: 2.0,
+            clip_y2: 2.0,
+            clip_inverse: false,
+            ..Default::default()
+        };
+        apply_clip_mask(&mut data, 4, 4, &ctx);
+        assert_eq!(data[3], 255);
+    }
+
+    #[test]
+    fn test_composite_subregion_empty_source() {
+        let mut dst = vec![255u8; 4 * 4 * 4];
+        let src: Vec<u8> = vec![];
+        composite_subregion(&mut dst, &src, 4, 4, 0, 0, 0, 0);
+        assert_eq!(dst[3], 255);
+    }
+
+    #[test]
+    fn test_composite_subregion_transparent_source() {
+        let mut dst = vec![255u8; 4 * 4 * 4];
+        let src = vec![0u8; 4 * 2 * 2];
+        composite_subregion(&mut dst, &src, 4, 4, 0, 0, 2, 2);
+        assert_eq!(dst[3], 255);
+    }
+
+    #[test]
+    fn test_drawing_clip_no_commands() {
+        let mut data = vec![255u8; 4 * 4 * 4];
+        let ctx = RenderContext::default();
+        apply_drawing_clip_mask(&mut data, 4, 4, &ctx, 1.0, 1.0);
+        assert_eq!(data[3], 255);
+    }
+
+    #[test]
+    fn test_drawing_clip_empty_path() {
+        let mut data = vec![255u8; 4 * 4 * 4];
+        let ctx = RenderContext {
+            clip_drawing_commands: Some("".to_string()),
+            clip_drawing_scale: 1.0,
+            clip_drawing_inverse: false,
+            ..Default::default()
+        };
+        apply_drawing_clip_mask(&mut data, 4, 4, &ctx, 1.0, 1.0);
+        assert_eq!(data[3], 255);
+    }
 }

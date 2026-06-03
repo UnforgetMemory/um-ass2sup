@@ -140,3 +140,178 @@ pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
 
     commands
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── parse_drawing_level ────────────────────────────────────
+
+    #[test]
+    fn test_parse_drawing_level_empty() {
+        assert_eq!(parse_drawing_level(""), 0);
+    }
+
+    #[test]
+    fn test_parse_drawing_level_no_p_tag() {
+        assert_eq!(parse_drawing_level("m 0 0 l 100 100"), 0);
+    }
+
+    #[test]
+    fn test_parse_drawing_level_p1() {
+        assert_eq!(parse_drawing_level("\\p1 m 0 0 l 100 100"), 1);
+    }
+
+    #[test]
+    fn test_parse_drawing_level_p2() {
+        assert_eq!(parse_drawing_level("\\p2 m 0 0 l 100 100"), 2);
+    }
+
+    #[test]
+    fn test_parse_drawing_level_p_in_override_block() {
+        assert_eq!(parse_drawing_level("{\\p3}m 0 0 l 100 100"), 3);
+    }
+
+    // ── parse_drawing_commands ─────────────────────────────────
+
+    #[test]
+    fn test_parse_drawing_commands_empty() {
+        assert!(parse_drawing_commands("").is_empty());
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_move_to() {
+        let cmds = parse_drawing_commands("m 10 20");
+        assert_eq!(cmds.len(), 1);
+        match cmds[0] {
+            DrawingCommand::MoveTo(x, y) => {
+                assert!((x - 10.0).abs() < f32::EPSILON);
+                assert!((y - 20.0).abs() < f32::EPSILON);
+            }
+            _ => panic!("Expected MoveTo"),
+        }
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_line_to() {
+        let cmds = parse_drawing_commands("l 30 40");
+        assert_eq!(cmds.len(), 1);
+        match cmds[0] {
+            DrawingCommand::LineTo(x, y) => {
+                assert!((x - 30.0).abs() < f32::EPSILON);
+                assert!((y - 40.0).abs() < f32::EPSILON);
+            }
+            _ => panic!("Expected LineTo"),
+        }
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_bezier() {
+        let cmds = parse_drawing_commands("b 10 20 30 40 50 60");
+        assert_eq!(cmds.len(), 1);
+        match cmds[0] {
+            DrawingCommand::BezierTo(x1, y1, x2, y2, x3, y3) => {
+                assert!((x1 - 10.0).abs() < f32::EPSILON);
+                assert!((y1 - 20.0).abs() < f32::EPSILON);
+                assert!((x2 - 30.0).abs() < f32::EPSILON);
+                assert!((y2 - 40.0).abs() < f32::EPSILON);
+                assert!((x3 - 50.0).abs() < f32::EPSILON);
+                assert!((y3 - 60.0).abs() < f32::EPSILON);
+            }
+            _ => panic!("Expected BezierTo"),
+        }
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_close_p() {
+        let cmds = parse_drawing_commands("p");
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], DrawingCommand::Close));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_close_n() {
+        let cmds = parse_drawing_commands("n");
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], DrawingCommand::Close));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_close_c() {
+        let cmds = parse_drawing_commands("c");
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], DrawingCommand::Close));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_pc() {
+        let cmds = parse_drawing_commands("p c");
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], DrawingCommand::Close));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_nc() {
+        let cmds = parse_drawing_commands("n c");
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], DrawingCommand::Close));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_implicit_continuation_after_m() {
+        // After "m", bare number pairs become implicit MoveTo
+        let cmds = parse_drawing_commands("m 0 0 100 100 200 200");
+        assert_eq!(cmds.len(), 3);
+        assert!(matches!(cmds[0], DrawingCommand::MoveTo(0.0, 0.0)));
+        assert!(matches!(cmds[1], DrawingCommand::MoveTo(100.0, 100.0)));
+        assert!(matches!(cmds[2], DrawingCommand::MoveTo(200.0, 200.0)));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_implicit_continuation_after_l() {
+        // After "l", bare number pairs become implicit LineTo
+        let cmds = parse_drawing_commands("m 0 0 l 100 0 100 100 0 100 c");
+        assert_eq!(cmds.len(), 5);
+        assert!(matches!(cmds[0], DrawingCommand::MoveTo(0.0, 0.0)));
+        assert!(matches!(cmds[1], DrawingCommand::LineTo(100.0, 0.0)));
+        assert!(matches!(cmds[2], DrawingCommand::LineTo(100.0, 100.0)));
+        assert!(matches!(cmds[3], DrawingCommand::LineTo(0.0, 100.0)));
+        assert!(matches!(cmds[4], DrawingCommand::Close));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_repeat_m() {
+        let cmds = parse_drawing_commands("2 m 10 20 30 40");
+        assert_eq!(cmds.len(), 2);
+        assert!(matches!(cmds[0], DrawingCommand::MoveTo(10.0, 20.0)));
+        assert!(matches!(cmds[1], DrawingCommand::MoveTo(30.0, 40.0)));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_repeat_l() {
+        let cmds = parse_drawing_commands("3 l 10 20 30 40 50 60");
+        assert_eq!(cmds.len(), 3);
+        assert!(matches!(cmds[0], DrawingCommand::LineTo(10.0, 20.0)));
+        assert!(matches!(cmds[1], DrawingCommand::LineTo(30.0, 40.0)));
+        assert!(matches!(cmds[2], DrawingCommand::LineTo(50.0, 60.0)));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_full_rectangle() {
+        // Full canvas rectangle: m 0 0 l 1920 0 1920 1080 0 1080 c
+        let cmds = parse_drawing_commands("m 0 0 l 1920 0 1920 1080 0 1080 c");
+        assert_eq!(cmds.len(), 5);
+        assert!(matches!(cmds[0], DrawingCommand::MoveTo(0.0, 0.0)));
+        assert!(matches!(cmds[1], DrawingCommand::LineTo(1920.0, 0.0)));
+        assert!(matches!(cmds[2], DrawingCommand::LineTo(1920.0, 1080.0)));
+        assert!(matches!(cmds[3], DrawingCommand::LineTo(0.0, 1080.0)));
+        assert!(matches!(cmds[4], DrawingCommand::Close));
+    }
+
+    #[test]
+    fn test_parse_drawing_commands_unknown_tokens_skipped() {
+        let cmds = parse_drawing_commands("x y z m 10 20");
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], DrawingCommand::MoveTo(10.0, 20.0)));
+    }
+}
