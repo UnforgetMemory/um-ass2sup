@@ -225,6 +225,78 @@ pub fn generate_png(palette: &[[u8; 4]], indices: &[u8], width: u32, height: u32
 ///
 /// Returns [`BdnError::Png`] if PNG encoding fails, or an I/O error if the
 /// file cannot be written.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// (a) The output is always exactly 11 characters: `HH:MM:SS:FF`.
+        /// fps is bounded to < 101 because `fps as u64` truncation produces
+        /// frame values up to `fps as u64 - 1`; at fps >= 101 the frame
+        /// component can become 3 digits, breaking the fixed-width format.
+        #[test]
+        fn format_invariant(ms in 0u64..86_400_000u64, fps in 1.0..101.0) {
+            let tc = ms_to_timecode(ms, fps);
+            assert_eq!(tc.len(), 11, "timecode ({ms}ms @ {fps}fps) = {tc:?}");
+            let parts: Vec<&str> = tc.split(':').collect();
+            assert_eq!(parts.len(), 4, "expected 4 colon-separated fields");
+            for part in &parts {
+                assert_eq!(part.len(), 2, "each field must be 2 digits, got {part:?}");
+                assert!(part.chars().all(|c| c.is_ascii_digit()), "field {part:?} is not numeric");
+            }
+        }
+    }
+
+    proptest! {
+        /// (b) Zero milliseconds always gives `00:00:00:00`.
+        #[test]
+        fn zero_invariant(fps in proptest::array::uniform2(24.0f64..=30.0f64)) {
+            let fps = fps[0]; // just pick the first
+            assert_eq!(ms_to_timecode(0, fps), "00:00:00:00");
+        }
+    }
+
+    proptest! {
+        /// (c) For integer fps, the last two characters (frames) are in `0..fps`.
+        #[test]
+        fn frame_component(ms in 1u64..86_400_000u64) {
+            for fps in &[24.0f64, 25.0, 30.0] {
+                let tc = ms_to_timecode(ms, *fps);
+                let frames: u64 = tc[9..11].parse().unwrap();
+                assert!(frames < *fps as u64,
+                    "frame {frames} out of range [0,{}) for {ms}ms @ {fps}fps: {tc}",
+                    fps);
+            }
+        }
+    }
+
+    /// (d) 24 hours at 24 fps gives `24:00:00:00` (hours can exceed 23).
+    #[test]
+    fn twenty_four_hour_boundary() {
+        assert_eq!(ms_to_timecode(24 * 60 * 60 * 1000, 24.0), "24:00:00:00");
+    }
+
+    proptest! {
+        /// (e) NTSC 23.976 fps — output is well-formed (format invariant).
+        #[test]
+        fn ntsc_handling(ms in 0u64..86_400_000u64) {
+            let tc = ms_to_timecode(ms, 23.976);
+            assert_eq!(tc.len(), 11, "NTSC timecode ({ms}ms) = {tc:?}");
+            let parts: Vec<&str> = tc.split(':').collect();
+            assert_eq!(parts.len(), 4);
+            for part in &parts {
+                assert_eq!(part.len(), 2);
+                assert!(part.chars().all(|c| c.is_ascii_digit()));
+            }
+            // At 23.976 fps, `fps as u64` truncates to 23, so the frame
+            // component should be in 0..23.
+            let frames: u64 = tc[9..11].parse().unwrap();
+            assert!(frames < 23, "frame {frames} should be < 23 for 23.976 fps");
+        }
+    }
+}
+
 pub fn save_frame_png(
     path: &std::path::Path,
     palette: &[[u8; 4]],
