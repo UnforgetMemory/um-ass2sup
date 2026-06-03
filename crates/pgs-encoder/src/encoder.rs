@@ -117,8 +117,8 @@ impl PgsEncoder {
         let rle = rle_encode(&frame.indices, frame.width, frame.height);
         let rle_hash = hash_bytes(&rle);
 
-        let palette_changed = self.prev_palette_hash.map_or(true, |h| h != palette_hash);
-        let object_changed = self.prev_object_rle_hash.map_or(true, |h| h != rle_hash);
+        let palette_changed = self.prev_palette_hash != Some(palette_hash);
+        let object_changed = self.prev_object_rle_hash != Some(rle_hash);
 
         let composition_state = if self.frame_count == 0 {
             CompositionState::EpochStart
@@ -198,6 +198,7 @@ impl PgsEncoder {
         all_segments
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_single_window_display_set(
         &self,
         frame: &QuantizedFrame,
@@ -279,6 +280,7 @@ impl PgsEncoder {
         segments
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_multi_window_display_set(
         &self,
         frame: &QuantizedFrame,

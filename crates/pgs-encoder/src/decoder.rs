@@ -405,19 +405,6 @@ fn read_be32(data: &[u8], offset: usize) -> u32 {
     u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
 }
 
-fn read_be64(data: &[u8], offset: usize) -> u64 {
-    u64::from_be_bytes([
-        data[offset],
-        data[offset + 1],
-        data[offset + 2],
-        data[offset + 3],
-        data[offset + 4],
-        data[offset + 5],
-        data[offset + 6],
-        data[offset + 7],
-    ])
-}
-
 // === Tests ===
 
 #[cfg(test)]

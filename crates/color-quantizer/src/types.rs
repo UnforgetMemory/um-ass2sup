@@ -77,18 +77,13 @@ impl QuantizedFrame {
 /// Dithering spreads quantization error to neighboring pixels, reducing
 /// banding artifacts in smooth gradients. This is especially useful for
 /// ASS subtitle renders that contain alpha-blended shadows and gradients.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum DitherMethod {
     /// No dithering — each pixel maps to the nearest palette color independently.
     None,
     /// Floyd–Steinberg error-diffusion dithering. Good quality, moderate cost.
+    #[default]
     FloydSteinberg,
     /// Bayer ordered dithering. Faster but produces visible cross-hatch patterns.
     Ordered,
-}
-
-impl Default for DitherMethod {
-    fn default() -> Self {
-        DitherMethod::FloydSteinberg
-    }
 }

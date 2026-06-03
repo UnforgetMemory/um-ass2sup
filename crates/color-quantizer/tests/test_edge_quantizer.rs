@@ -57,7 +57,7 @@ fn median_cut_mixed_transparent_and_opaque() {
 #[test]
 fn find_nearest_index_empty_palette() {
     let idx = color_quantizer::Quantizer::new(1).quantize(&[128, 128, 128, 255], 1, 1);
-    assert!(idx.palette.len() >= 1);
+    assert!(!idx.palette.is_empty());
 }
 
 #[test]

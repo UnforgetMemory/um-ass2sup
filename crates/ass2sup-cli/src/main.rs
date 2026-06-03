@@ -302,7 +302,7 @@ fn convert_file(
     for (_event, frame_opt, pts_ms, duration_ms) in &frame_data {
         if let Some(frame) = frame_opt {
             let quantized = if use_palette_reuse {
-                let prev = prev_palette.as_ref().map(|p| p.as_slice());
+                let prev = prev_palette.as_deref();
                 let q = quantize_with_palette(
                     &frame.bitmap,
                     frame.width,

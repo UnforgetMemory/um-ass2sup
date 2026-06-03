@@ -267,7 +267,7 @@ fn validate_events(events: &[Event], styles: &[Style], report: &mut ValidationRe
 
 fn validate_semantics(ass: &AssFile, report: &mut ValidationReport) {
     // V014: Karaoke events with missing karaoke tags
-    for (_i, event) in ass.events.iter().enumerate() {
+    for event in &ass.events {
         if event.has_karaoke() {
             let _has_k_tag = event.override_tags.iter().any(|t| {
                 matches!(t, OverrideTag::Karaoke { .. })
@@ -382,8 +382,7 @@ pub fn detect_overlaps(
         let (idx_a, event_a) = dialogue_events[i];
         let pos_a = get_event_position(event_a, play_res_x, play_res_y);
 
-        for j in (i + 1)..dialogue_events.len() {
-            let (idx_b, event_b) = dialogue_events[j];
+        for &(idx_b, event_b) in &dialogue_events[i + 1..] {
             let pos_b = get_event_position(event_b, play_res_x, play_res_y);
 
             // Time overlap check

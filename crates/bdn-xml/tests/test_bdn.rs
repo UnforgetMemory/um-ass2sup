@@ -76,7 +76,7 @@ fn test_timecode_one_frame() {
 
 #[test]
 fn test_timecode_complex() {
-    let ms = (1 * 3600 + 23 * 60 + 45) * 1000 + 500;
+    let ms = (3600 + 23 * 60 + 45) * 1000 + 500;
     let tc = ms_to_timecode(ms, 24.0);
     assert!(tc.starts_with("01:23:45:"));
 }
