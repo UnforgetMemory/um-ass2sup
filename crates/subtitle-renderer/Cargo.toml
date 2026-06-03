@@ -1,7 +1,8 @@
 [package]
 name = "subtitle-renderer"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
+rust-version.workspace = true
 description = "ASS/SRT subtitle rendering to RGBA bitmaps with font management, text shaping, and effects"
 
 [dependencies]
