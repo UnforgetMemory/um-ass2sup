@@ -6,8 +6,33 @@ use super::drawing::{DrawingCommand, parse_drawing_commands};
 
 pub(super) fn apply_alpha_multiplier(data: &mut [u8], alpha: f32) {
     let factor = alpha.clamp(0.0, 1.0);
-    for i in (3..data.len()).step_by(4) {
-        data[i] = (data[i] as f32 * factor) as u8;
+    if factor >= 1.0 {
+        return; // no-op
+    }
+    if factor <= 0.0 {
+        // Zero all alpha channels
+        for i in (3..data.len()).step_by(4) {
+            data[i] = 0;
+        }
+        return;
+    }
+
+    let factor_256 = (factor * 256.0) as u32;
+
+    // Process 4 pixels at a time (16 bytes)
+    let chunks = data.len() / 16;
+    for chunk in 0..chunks {
+        let base = chunk * 16;
+        for &offset in &[3usize, 7, 11, 15] {
+            let idx = base + offset;
+            data[idx] = ((data[idx] as u32 * factor_256) >> 8) as u8;
+        }
+    }
+
+    // Handle remaining pixels
+    let remaining_start = chunks * 16;
+    for i in (remaining_start + 3..data.len()).step_by(4) {
+        data[i] = ((data[i] as u32 * factor_256) >> 8) as u8;
     }
 }
 
@@ -120,17 +145,25 @@ pub(super) fn composite_subregion(
                 continue;
             }
 
+            if sa == 255 {
+                // Fully opaque source — direct copy, no blending needed
+                dst[di] = src[si];
+                dst[di + 1] = src[si + 1];
+                dst[di + 2] = src[si + 2];
+                dst[di + 3] = 255;
+                continue;
+            }
+
             let da = dst[di + 3] as u32;
-            let out_a = sa + da * (255 - sa) / 255;
+            let inv_sa = 255 - sa;
+            let out_a = sa + da * inv_sa / 255;
             if out_a == 0 {
                 continue;
             }
 
-            for c in 0..3 {
-                let sv = src[si + c] as u32;
-                let dv = dst[di + c] as u32;
-                dst[di + c] = ((sv * sa + dv * da * (255 - sa) / 255) / out_a) as u8;
-            }
+            dst[di]     = ((src[si]     as u32 * sa + dst[di]     as u32 * da * inv_sa / 255) / out_a) as u8;
+            dst[di + 1] = ((src[si + 1] as u32 * sa + dst[di + 1] as u32 * da * inv_sa / 255) / out_a) as u8;
+            dst[di + 2] = ((src[si + 2] as u32 * sa + dst[di + 2] as u32 * da * inv_sa / 255) / out_a) as u8;
             dst[di + 3] = out_a as u8;
         }
     }

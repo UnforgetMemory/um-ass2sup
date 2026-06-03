@@ -1,6 +1,6 @@
 use fontdb::{Database, Family, Query, Weight};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::path::Path;
 use thiserror::Error;
 
@@ -50,7 +50,10 @@ pub struct FontInfo {
 pub struct FontManager {
     db: Database,
     /// Cache of font data keyed by fontdb::ID to avoid repeated cloning from fontdb.
-    font_data_cache: Mutex<HashMap<fontdb::ID, Vec<u8>>>,
+    font_data_cache: Mutex<HashMap<fontdb::ID, Arc<Vec<u8>>>>,
+    // Cache for font queries: (lowercase family, bold, italic) → fontdb::ID.
+    // Cleared when fonts are loaded or added.
+    query_cache: Mutex<HashMap<(String, bool, bool), fontdb::ID>>,
 }
 
 impl FontManager {
@@ -59,12 +62,14 @@ impl FontManager {
         Self {
             db: Database::new(),
             font_data_cache: Mutex::new(HashMap::new()),
+            query_cache: Mutex::new(HashMap::new()),
         }
     }
 
     /// Loads all system-installed fonts. May be slow on first call.
     pub fn load_system_fonts(&mut self) {
         self.db.load_system_fonts();
+        self.query_cache.lock().unwrap().clear();
     }
 
     /// Loads a font file from disk (TTF, OTF, WOFF2).
@@ -76,6 +81,7 @@ impl FontManager {
         self.db
             .load_font_file(path)
             .map_err(|e| FontError::LoadError(e.to_string()))?;
+        self.query_cache.lock().unwrap().clear();
         let id = self
             .db
             .faces()
@@ -90,6 +96,7 @@ impl FontManager {
     /// Returns the font ID, or [`fontdb::ID::dummy()`] if no face was loaded.
     pub fn load_font_data(&mut self, data: Vec<u8>) -> fontdb::ID {
         self.db.load_font_data(data);
+        self.query_cache.lock().unwrap().clear();
         self.db
             .faces()
             .last()
@@ -153,7 +160,23 @@ impl FontManager {
     /// Queries a font with a 6-level fallback cascade. First tries `query_with_score`,
     /// then falls back through Liberation Sans → DejaVu Sans → Noto Sans → Arial → Helvetica,
     /// and finally returns any available font as a last resort.
+    ///
+    /// Results are cached internally by (family, bold, italic) key. The cache is
+    /// invalidated whenever fonts are loaded or added.
     pub fn query_with_fallback(&self, family: &str, bold: bool, italic: bool) -> Option<fontdb::ID> {
+        let key = (family.to_lowercase(), bold, italic);
+        if let Some(cached) = self.query_cache.lock().unwrap().get(&key) {
+            return Some(*cached);
+        }
+        let result = self.query_with_fallback_inner(family, bold, italic);
+        if let Some(id) = result {
+            self.query_cache.lock().unwrap().insert(key, id);
+        }
+        result
+    }
+
+    /// Fallback query implementation (un-cached). See [`query_with_fallback`].
+    fn query_with_fallback_inner(&self, family: &str, bold: bool, italic: bool) -> Option<fontdb::ID> {
         if let Some(id) = self.query_with_score(family, bold, italic) {
             return Some(id);
         }
@@ -174,17 +197,18 @@ impl FontManager {
 
     /// Returns the raw font data (TTF/OTF bytes) for the given font ID.
     ///
-    /// Results are cached so repeated calls with the same ID avoid re-cloning
-    /// from the font database. The first call clones from fontdb; subsequent
-    /// calls return a clone of the cached data (still O(1) amortized).
-    pub fn get_font_data(&self, id: fontdb::ID) -> Option<Vec<u8>> {
+    /// Results are cached as `Arc<Vec<u8>>` so that repeated calls with the same
+    /// ID share the underlying allocation via cheap Arc clones instead of full
+    /// byte copies. The first call clones from fontdb; subsequent calls only
+    /// increment the Arc reference count.
+    pub fn get_font_data(&self, id: fontdb::ID) -> Option<Arc<Vec<u8>>> {
         if let Some(cached) = self.font_data_cache.lock().unwrap().get(&id) {
-            return Some(cached.clone());
+            return Some(Arc::clone(cached));
         }
         self.db.with_face_data(id, |data, _index| {
-            let vec = data.to_vec();
-            self.font_data_cache.lock().unwrap().insert(id, vec.clone());
-            vec
+            let arc = Arc::new(data.to_vec());
+            self.font_data_cache.lock().unwrap().insert(id, Arc::clone(&arc));
+            arc
         })
     }
 
@@ -320,7 +344,7 @@ mod tests {
         fm.load_system_fonts();
         if let Some(id) = find_any_font(&fm) {
             if let Some(data) = fm.get_font_data(id) {
-                let loaded_id = fm.load_font_data(data);
+                let loaded_id = fm.load_font_data(data.to_vec());
                 let loaded_data = fm.get_font_data(loaded_id);
                 assert!(loaded_data.is_some(), "Loading valid font data should produce retrievable font");
             }

@@ -871,9 +871,18 @@ impl Renderer {
         let oxf = ox as f32;
         let oyf = oy as f32;
 
+        // Clone RenderContext once and reset only the fields that change per-syllable,
+        // avoiding repeated full struct clones (String, Option<String> heap allocations).
+        let mut sy_ctx = ctx.clone();
+
         for (i, info) in syllable_infos.iter().enumerate() {
             let syllable = &syllables[i];
-            let mut sy_ctx = ctx.clone();
+            // Reset fields possibly modified in the previous iteration.
+            sy_ctx.primary_color = ctx.primary_color;
+            sy_ctx.outline_color = ctx.outline_color;
+            sy_ctx.outline_width = ctx.outline_width;
+            sy_ctx.outline_x_width = ctx.outline_x_width;
+            sy_ctx.outline_y_width = ctx.outline_y_width;
             // B2: \ko (Outline) karaoke — hide fill during active, show outline sweep.
             if info.style == KaraokeStyle::Outline {
                 match syllable.phase {
