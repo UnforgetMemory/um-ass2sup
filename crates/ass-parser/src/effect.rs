@@ -11,9 +11,10 @@
 /// | `"Scroll up;N;top;bottom"` | Vertical scroll up |
 /// | `"Scroll down;N;top;bottom"` | Vertical scroll down |
 /// | `"Karaoke"` | Karaoke marker |
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Effect {
     /// No effect.
+    #[default]
     None,
     /// Horizontal scrolling banner.
     ///
@@ -64,12 +65,6 @@ pub enum Effect {
     Karaoke,
 }
 
-impl Default for Effect {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 /// Parses an ASS effect string into an [`Effect`] value.
 ///
 /// Returns [`Effect::None`] for empty strings, unrecognized formats, or
@@ -108,10 +103,7 @@ pub fn parse_effect(s: &str) -> Effect {
     match keyword {
         kw if kw.eq_ignore_ascii_case("Banner") => {
             let delay_per_pixel = parts.get(1).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
-            let left_to_right = match parts.get(2).map(|v| v.trim()) {
-                Some("1") => true,
-                _ => false,
-            };
+            let left_to_right = matches!(parts.get(2).map(|v| v.trim()), Some("1"));
             let fadeaway_width = parts.get(3).and_then(|v| v.trim().parse().ok()).unwrap_or(0.0);
             Effect::Banner { delay_per_pixel, left_to_right, fadeaway_width }
         }

@@ -90,6 +90,7 @@ pub(super) fn apply_drawing_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &Ren
 /// Performs Porter-Duff "over" compositing of a (`sw` × `sh`) source image
 /// positioned at (`sx`, `sy`) in the (`dw` × `dh`) destination image.
 /// The source and destination pixel data are in RGBA byte order.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn composite_subregion(
     dst: &mut [u8],
     src: &[u8],
@@ -242,16 +243,18 @@ mod tests {
             data[i * 4 + 2] = 255;
             data[i * 4 + 3] = 255;
         }
-        let mut ctx = RenderContext::default();
-        ctx.clip_enabled = true;
-        ctx.clip_x1 = 1.0;
-        ctx.clip_y1 = 1.0;
-        ctx.clip_x2 = 3.0;
-        ctx.clip_y2 = 3.0;
-        ctx.clip_inverse = false;
+        let ctx = RenderContext {
+            clip_enabled: true,
+            clip_x1: 1.0,
+            clip_y1: 1.0,
+            clip_x2: 3.0,
+            clip_y2: 3.0,
+            clip_inverse: false,
+            ..Default::default()
+        };
         apply_clip_mask(&mut data, 4, 4, &ctx);
         // Inside clip: pixel (1,1) should be preserved
-        let inside_idx = ((1 * 4 + 1) * 4) as usize;
+        let inside_idx = ((4 + 1) * 4) as usize;
         assert_eq!(data[inside_idx + 3], 255);
         // Outside clip: pixel (0,0) should be cleared
         assert_eq!(data[3], 0);
@@ -266,16 +269,18 @@ mod tests {
             data[i * 4 + 2] = 255;
             data[i * 4 + 3] = 255;
         }
-        let mut ctx = RenderContext::default();
-        ctx.clip_enabled = true;
-        ctx.clip_x1 = 1.0;
-        ctx.clip_y1 = 1.0;
-        ctx.clip_x2 = 3.0;
-        ctx.clip_y2 = 3.0;
-        ctx.clip_inverse = true;
+        let ctx = RenderContext {
+            clip_enabled: true,
+            clip_x1: 1.0,
+            clip_y1: 1.0,
+            clip_x2: 3.0,
+            clip_y2: 3.0,
+            clip_inverse: true,
+            ..Default::default()
+        };
         apply_clip_mask(&mut data, 4, 4, &ctx);
         // Inside clip: pixel (1,1) should be CLEARED
-        let inside_idx = ((1 * 4 + 1) * 4) as usize;
+        let inside_idx = ((4 + 1) * 4) as usize;
         assert_eq!(data[inside_idx + 3], 0);
         // Outside clip: pixel (0,0) should be PRESERVED
         assert_eq!(data[3], 255);
@@ -289,10 +294,12 @@ mod tests {
         let h = 10u32;
         let mut data = vec![255u8; (w * h * 4) as usize];
 
-        let mut ctx = RenderContext::default();
-        ctx.clip_drawing_commands = Some("m 5 0 l 10 10 l 0 10".to_string());
-        ctx.clip_drawing_scale = 1.0;
-        ctx.clip_drawing_inverse = false;
+        let ctx = RenderContext {
+            clip_drawing_commands: Some("m 5 0 l 10 10 l 0 10".to_string()),
+            clip_drawing_scale: 1.0,
+            clip_drawing_inverse: false,
+            ..Default::default()
+        };
 
         apply_drawing_clip_mask(&mut data, w, h, &ctx, 1.0, 1.0);
 
@@ -311,10 +318,12 @@ mod tests {
         let h = 10u32;
         let mut data = vec![255u8; (w * h * 4) as usize];
 
-        let mut ctx = RenderContext::default();
-        ctx.clip_drawing_commands = Some("m 5 0 l 10 10 l 0 10".to_string());
-        ctx.clip_drawing_scale = 1.0;
-        ctx.clip_drawing_inverse = true;
+        let ctx = RenderContext {
+            clip_drawing_commands: Some("m 5 0 l 10 10 l 0 10".to_string()),
+            clip_drawing_scale: 1.0,
+            clip_drawing_inverse: true,
+            ..Default::default()
+        };
 
         apply_drawing_clip_mask(&mut data, w, h, &ctx, 1.0, 1.0);
 
@@ -333,11 +342,13 @@ mod tests {
         let h = 20u32;
         let mut data = vec![255u8; (w * h * 4) as usize];
 
-        let mut ctx = RenderContext::default();
-        // Scale=2 means coordinates are halved: m 5 0 l 10 10 l 0 10 becomes m 2.5 0 l 5 5 l 0 5
-        ctx.clip_drawing_commands = Some("m 5 0 l 10 10 l 0 10".to_string());
-        ctx.clip_drawing_scale = 2.0;
-        ctx.clip_drawing_inverse = false;
+        let ctx = RenderContext {
+            // Scale=2 means coordinates are halved: m 5 0 l 10 10 l 0 10 becomes m 2.5 0 l 5 5 l 0 5
+            clip_drawing_commands: Some("m 5 0 l 10 10 l 0 10".to_string()),
+            clip_drawing_scale: 2.0,
+            clip_drawing_inverse: false,
+            ..Default::default()
+        };
 
         apply_drawing_clip_mask(&mut data, w, h, &ctx, 1.0, 1.0);
 

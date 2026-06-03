@@ -188,19 +188,19 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
             return Some(OverrideTag::Fade { duration_in: nums[0], duration_out: nums[1] });
         }
     }
-    if s.starts_with("fn") {
-        return Some(OverrideTag::FontName(s[2..].to_string()));
+    if let Some(stripped) = s.strip_prefix("fn") {
+        return Some(OverrideTag::FontName(stripped.to_string()));
     }
-    if s.starts_with("fs") {
-        if let Ok(size) = s[2..].parse() {
+    if let Some(stripped) = s.strip_prefix("fs") {
+        if let Ok(size) = stripped.parse() {
             return Some(OverrideTag::FontSize(size));
         }
     }
     if s == "b1" || s == "b0" || s == "b-1" {
         return Some(OverrideTag::Bold(s == "b1"));
     }
-    if s.starts_with("b") {
-        if let Ok(weight) = s[1..].parse() {
+    if let Some(stripped) = s.strip_prefix("b") {
+        if let Ok(weight) = stripped.parse() {
             return Some(OverrideTag::BoldWeight(weight));
         }
     }
@@ -213,8 +213,8 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
     if s == "s1" || s == "s0" || s == "s-1" {
         return Some(OverrideTag::Strikeout(s == "s1"));
     }
-    if s.starts_with("an") {
-        if let Ok(align) = s[2..].parse::<u8>() {
+    if let Some(stripped) = s.strip_prefix("an") {
+        if let Ok(align) = stripped.parse::<u8>() {
             if (1..=9).contains(&align) {
                 return Some(OverrideTag::AlignmentNumpad(align));
             }
@@ -225,11 +225,11 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
             return Some(OverrideTag::Alignment(align));
         }
     }
-    if s.starts_with("k") || s.starts_with("kf") || s.starts_with("ko") || s.starts_with("kt") {
-        let (tag_str, dur_str) = if s.starts_with("kf") { ("kf", &s[2..]) }
-            else if s.starts_with("ko") { ("ko", &s[2..]) }
-            else if s.starts_with("kt") { ("kt", &s[2..]) }
-            else { ("k", &s[1..]) };
+    if let Some(stripped) = s.strip_prefix("k") {
+        let (tag_str, dur_str) = if let Some(stripped) = stripped.strip_prefix("f") { ("kf", stripped) }
+            else if let Some(stripped) = stripped.strip_prefix('o') { ("ko", stripped) }
+            else if let Some(stripped) = stripped.strip_prefix('t') { ("kt", stripped) }
+            else { ("k", stripped) };
         if let Some(style) = super::karaoke::KaraokeStyle::from_tag(tag_str) {
             if let Ok(dur) = dur_str.parse::<u64>() {
                 return Some(OverrideTag::Karaoke { style, duration: dur * 10 });
@@ -284,93 +284,93 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
             return Some(OverrideTag::Origin { x: nums[0], y: nums[1] });
         }
     }
-    if s.starts_with("frz") {
-        if let Ok(z) = s[3..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("frz") {
+        if let Ok(z) = stripped.parse::<f64>() {
             return Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z });
         }
     }
-    if s.starts_with("frx") {
-        if let Ok(x) = s[3..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("frx") {
+        if let Ok(x) = stripped.parse::<f64>() {
             return Some(OverrideTag::Rotation { x, y: 0.0, z: 0.0 });
         }
     }
-    if s.starts_with("fry") {
-        if let Ok(y) = s[3..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("fry") {
+        if let Ok(y) = stripped.parse::<f64>() {
             return Some(OverrideTag::Rotation { x: 0.0, y, z: 0.0 });
         }
     }
-    if s.starts_with("fr") {
-        if let Ok(z) = s[2..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("fr") {
+        if let Ok(z) = stripped.parse::<f64>() {
             return Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z });
         }
     }
-    if s.starts_with("fscx") {
-        if let Ok(x) = s[4..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("fscx") {
+        if let Ok(x) = stripped.parse::<f64>() {
             return Some(OverrideTag::Scale { x, y: 100.0 });
         }
     }
-    if s.starts_with("fscy") {
-        if let Ok(y) = s[4..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("fscy") {
+        if let Ok(y) = stripped.parse::<f64>() {
             return Some(OverrideTag::Scale { x: 100.0, y });
         }
     }
-    if s.starts_with("fax") {
-        if let Ok(x) = s[3..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("fax") {
+        if let Ok(x) = stripped.parse::<f64>() {
             return Some(OverrideTag::Shear { x, y: 0.0 });
         }
     }
-    if s.starts_with("fay") {
-        if let Ok(y) = s[3..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("fay") {
+        if let Ok(y) = stripped.parse::<f64>() {
             return Some(OverrideTag::Shear { x: 0.0, y });
         }
     }
-    if s.starts_with("fsp") {
-        if let Ok(v) = s[3..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("fsp") {
+        if let Ok(v) = stripped.parse::<f64>() {
             return Some(OverrideTag::Spacing(v));
         }
     }
-    if s.starts_with("bord") {
-        if let Ok(w) = s[4..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("bord") {
+        if let Ok(w) = stripped.parse::<f64>() {
             return Some(OverrideTag::Border(w));
         }
     }
-    if s.starts_with("shad") {
-        if let Ok(d) = s[4..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("shad") {
+        if let Ok(d) = stripped.parse::<f64>() {
             return Some(OverrideTag::Shadow(d));
         }
     }
-    if s.starts_with("xbord") {
-        if let Ok(w) = s[5..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("xbord") {
+        if let Ok(w) = stripped.parse::<f64>() {
             return Some(OverrideTag::BorderX(w));
         }
     }
-    if s.starts_with("ybord") {
-        if let Ok(w) = s[5..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("ybord") {
+        if let Ok(w) = stripped.parse::<f64>() {
             return Some(OverrideTag::BorderY(w));
         }
     }
-    if s.starts_with("xshad") {
-        if let Ok(d) = s[5..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("xshad") {
+        if let Ok(d) = stripped.parse::<f64>() {
             return Some(OverrideTag::ShadowX(d));
         }
     }
-    if s.starts_with("yshad") {
-        if let Ok(d) = s[5..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("yshad") {
+        if let Ok(d) = stripped.parse::<f64>() {
             return Some(OverrideTag::ShadowY(d));
         }
     }
-    if s.starts_with("be") {
-        if let Ok(v) = s[2..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("be") {
+        if let Ok(v) = stripped.parse::<f64>() {
             return Some(OverrideTag::Blur(v));
         }
     }
-    if s.starts_with("blur") {
-        if let Ok(v) = s[4..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("blur") {
+        if let Ok(v) = stripped.parse::<f64>() {
             return Some(OverrideTag::GaussianBlur(v));
         }
     }
-    if s.starts_with("q") {
-        if let Ok(v) = s[1..].parse::<u8>() {
+    if let Some(stripped) = s.strip_prefix("q") {
+        if let Ok(v) = stripped.parse::<u8>() {
             if v <= 3 {
                 return Some(OverrideTag::WrapStyle(v));
             }
@@ -381,8 +381,8 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
             return Some(OverrideTag::DrawingMode(v));
         }
     }
-    if s.starts_with("pbo") {
-        if let Ok(v) = s[3..].parse::<f64>() {
+    if let Some(stripped) = s.strip_prefix("pbo") {
+        if let Ok(v) = stripped.parse::<f64>() {
             return Some(OverrideTag::BaselineOffset(v));
         }
     }
@@ -393,8 +393,7 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
         }
     }
     for (prefix, variant) in [("1c", "primary"), ("2c", "secondary"), ("3c", "outline"), ("4c", "shadow")] {
-        if s.starts_with(prefix) {
-            let color_str = &s[prefix.len()..];
+        if let Some(color_str) = s.strip_prefix(prefix) {
             if let Ok(color) = parse_ass_color(color_str) {
                 return Some(match variant {
                     "primary" => OverrideTag::PrimaryColor(color),
@@ -406,15 +405,13 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
             }
         }
     }
-    if s.starts_with("alpha") {
-        let val_str = &s[5..];
+    if let Some(val_str) = s.strip_prefix("alpha") {
         if let Ok(v) = parse_hex_u8(val_str) {
             return Some(OverrideTag::Alpha { value: v });
         }
     }
     for (prefix, variant) in [("1a", "primary"), ("2a", "secondary"), ("3a", "outline"), ("4a", "shadow")] {
-        if s.starts_with(prefix) {
-            let val_str = &s[prefix.len()..];
+        if let Some(val_str) = s.strip_prefix(prefix) {
             if let Ok(v) = parse_hex_u8(val_str) {
                 return Some(match variant {
                     "primary" => OverrideTag::PrimaryAlpha { value: v },
@@ -429,8 +426,8 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
     if s.starts_with("r") && !s.starts_with("reset") {
         return Some(OverrideTag::Reset(s[1..].to_string()));
     }
-    if s.starts_with("fe") {
-        if let Ok(v) = s[2..].parse::<u8>() {
+    if let Some(stripped) = s.strip_prefix("fe") {
+        if let Ok(v) = stripped.parse::<u8>() {
             return Some(OverrideTag::Charset(v));
         }
     }

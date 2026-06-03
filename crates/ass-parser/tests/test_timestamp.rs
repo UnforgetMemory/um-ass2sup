@@ -10,7 +10,7 @@ fn test_from_ms() {
 fn test_from_hms() {
     // 1 hour, 30 minutes, 15 seconds, 500 milliseconds
     let ts = Timestamp::from_hms(1, 30, 15, 500);
-    assert_eq!(ts.as_ms(), 1 * 3600000 + 30 * 60000 + 15 * 1000 + 500);
+    assert_eq!(ts.as_ms(), 3600000 + 30 * 60000 + 15 * 1000 + 500);
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn test_zero() {
 fn test_from_ass_time() {
     // ASS format: H:MM:SS.CS where CS = centiseconds
     let ts = Timestamp::from_ass_time("1:23:45.67").unwrap();
-    assert_eq!(ts.as_ms(), 1 * 3600000 + 23 * 60000 + 45 * 1000 + 670);
+    assert_eq!(ts.as_ms(), 3600000 + 23 * 60000 + 45 * 1000 + 670);
 }
 
 #[test]

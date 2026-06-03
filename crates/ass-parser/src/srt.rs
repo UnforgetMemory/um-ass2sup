@@ -21,9 +21,9 @@ use super::ParseError;
 /// ```
 pub fn parse_srt(content: &str) -> Result<AssFile, ParseError> {
     let mut events = Vec::new();
-    let mut blocks = content.split("\n\n").peekable();
+    let blocks = content.split("\n\n").peekable();
 
-    while let Some(block) = blocks.next() {
+    for block in blocks {
         let block = block.trim();
         if block.is_empty() {
             continue;

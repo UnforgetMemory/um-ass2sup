@@ -26,8 +26,8 @@ pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
         let token = tokens[i];
         if token.len() == 1 {
             match token {
-                "m" => {
-                    if i + 2 < tokens.len() {
+                "m"
+                    if i + 2 < tokens.len() => {
                         if let (Ok(x), Ok(y)) = (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>()) {
                             commands.push(DrawingCommand::MoveTo(x, y));
                             last_cmd = Some("m");
@@ -35,9 +35,8 @@ pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                             continue;
                         }
                     }
-                }
-                "l" => {
-                    if i + 2 < tokens.len() {
+                "l"
+                    if i + 2 < tokens.len() => {
                         if let (Ok(x), Ok(y)) = (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>()) {
                             commands.push(DrawingCommand::LineTo(x, y));
                             last_cmd = Some("l");
@@ -45,9 +44,8 @@ pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                             continue;
                         }
                     }
-                }
-                "b" => {
-                    if i + 6 < tokens.len() {
+                "b"
+                    if i + 6 < tokens.len() => {
                         let nums: Option<Vec<f32>> = (1..=6)
                             .map(|j| tokens[i + j].parse::<f32>().ok())
                             .collect::<Option<Vec<_>>>();
@@ -58,16 +56,14 @@ pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                             continue;
                         }
                     }
-                }
                 "p" | "n" => {
-                    if i + 1 < tokens.len() {
-                        if tokens[i + 1] == "c" {
+                    if i + 1 < tokens.len()
+                        && tokens[i + 1] == "c" {
                             commands.push(DrawingCommand::Close);
                             last_cmd = None;
                             i += 2;
                             continue;
                         }
-                    }
                     commands.push(DrawingCommand::Close);
                     last_cmd = None;
                     i += 1;

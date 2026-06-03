@@ -236,7 +236,7 @@ fn bench_blur(c: &mut Criterion) {
     for y in 0..180u32 {
         for x in 0..320u32 {
             let idx = ((y * 320 + x) * 4) as usize;
-            if x >= 80 && x < 240 && y >= 40 && y < 140 {
+            if (80..240).contains(&x) && (40..140).contains(&y) {
                 data[idx] = 255;
                 data[idx + 1] = 255;
                 data[idx + 2] = 255;
@@ -270,7 +270,7 @@ fn bench_transform(c: &mut Criterion) {
     for y in 0..180u32 {
         for x in 0..320u32 {
             let idx = ((y * 320 + x) * 4) as usize;
-            if x >= 80 && x < 240 && y >= 40 && y < 140 {
+            if (80..240).contains(&x) && (40..140).contains(&y) {
                 data[idx] = 255;
                 data[idx + 1] = 255;
                 data[idx + 2] = 255;
@@ -324,7 +324,7 @@ fn bench_shadow(c: &mut Criterion) {
     for y in 0..h {
         for x in 0..w {
             let idx = ((y * w + x) * 4) as usize;
-            if x >= 80 && x < 240 && y >= 40 && y < 140 {
+            if (80..240).contains(&x) && (40..140).contains(&y) {
                 src[idx] = 255;
                 src[idx + 1] = 255;
                 src[idx + 2] = 255;

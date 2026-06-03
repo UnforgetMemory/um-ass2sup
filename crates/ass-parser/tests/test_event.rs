@@ -22,13 +22,13 @@ fn test_parse_comment_line() {
 
 #[test]
 fn test_event_type_from_str() {
-    assert!(matches!(EventType::from_str("Dialogue"), Some(EventType::Dialogue)));
-    assert!(matches!(EventType::from_str("Comment"), Some(EventType::Comment)));
-    assert!(matches!(EventType::from_str("Picture"), Some(EventType::Picture)));
-    assert!(matches!(EventType::from_str("Sound"), Some(EventType::Sound)));
-    assert!(matches!(EventType::from_str("Movie"), Some(EventType::Movie)));
-    assert!(matches!(EventType::from_str("Command"), Some(EventType::Command)));
-    assert!(EventType::from_str("Other").is_none());
+    assert!(matches!(EventType::parse("Dialogue"), Some(EventType::Dialogue)));
+    assert!(matches!(EventType::parse("Comment"), Some(EventType::Comment)));
+    assert!(matches!(EventType::parse("Picture"), Some(EventType::Picture)));
+    assert!(matches!(EventType::parse("Sound"), Some(EventType::Sound)));
+    assert!(matches!(EventType::parse("Movie"), Some(EventType::Movie)));
+    assert!(matches!(EventType::parse("Command"), Some(EventType::Command)));
+    assert!(EventType::parse("Other").is_none());
 }
 
 #[test]

@@ -191,7 +191,7 @@ fn test_apply_to_pixmap_identity() {
     let w = 4u32;
     let h = 4u32;
     let mut src = vec![0u8; (w * h * 4) as usize];
-    let idx = ((1 * w + 1) * 4) as usize;
+    let idx = ((w + 1) * 4) as usize;
     src[idx] = 255;
     src[idx + 1] = 255;
     src[idx + 2] = 255;
@@ -219,7 +219,7 @@ fn test_apply_to_pixmap_translate() {
     let dst = t.apply_to_pixmap(&src, w, h, w, h);
 
     // Pixel should now be at (2, 1)
-    let dst_idx = ((1 * w + 2) * 4) as usize;
+    let dst_idx = ((w + 2) * 4) as usize;
     assert_eq!(dst[dst_idx], 255, "R at (2,1)");
     assert_eq!(dst[dst_idx + 3], 255, "A at (2,1)");
 
@@ -284,7 +284,7 @@ fn test_apply_to_pixmap_rotation_quality() {
     let h = 8u32;
     let mut src = vec![0u8; (w * h * 4) as usize];
     // Bright red pixel at (4, 0)
-    let idx = ((0 * w + 4) * 4) as usize;
+    let idx = (4 * 4) as usize; // row 0, col 4
     src[idx] = 255;
     src[idx + 1] = 0;
     src[idx + 2] = 0;

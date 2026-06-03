@@ -94,7 +94,7 @@ impl FontManager {
             .faces()
             .last()
             .map(|f| f.id)
-            .unwrap_or_else(|| fontdb::ID::dummy())
+            .unwrap_or_else(fontdb::ID::dummy)
     }
 
     /// Queries a font by family name, bold, and italic flags using fontdb's
@@ -143,7 +143,7 @@ impl FontManager {
                 200.0
             };
             let score = weight_diff + italic_penalty + family_bonus;
-            if best.map_or(true, |(_, bs)| score < bs) {
+            if best.is_none_or(|(_, bs)| score < bs) {
                 best = Some((face.id, score));
             }
         }
@@ -295,7 +295,6 @@ mod tests {
         let data_a = fm.get_font_data(fonts[0].id).expect("Font data");
         let data_b = fm.get_font_data(fonts[1].id).expect("Font data");
         if data_a.len() != data_b.len() || data_a != data_b {
-            return;
         }
         // If two different IDs happen to return same data, that's valid (duplicated font).
         // The point is no panic or corruption.

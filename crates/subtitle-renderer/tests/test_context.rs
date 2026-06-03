@@ -508,10 +508,10 @@ fn test_render_context_clone() {
     let ctx = RenderContext::default();
     let cloned = ctx.clone();
     assert_eq!(cloned.origin_x, 0.0);
-    assert_eq!(cloned.clip_enabled, false);
+    assert!(!cloned.clip_enabled);
     assert_eq!(cloned.wrap_style, 0);
-    assert_eq!(cloned.underline, false);
-    assert_eq!(cloned.strikeout, false);
+    assert!(!cloned.underline);
+    assert!(!cloned.strikeout);
 }
 
 #[test]

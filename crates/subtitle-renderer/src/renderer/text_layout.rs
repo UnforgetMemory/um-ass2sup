@@ -27,11 +27,10 @@ pub fn strip_override_blocks(text: &str) -> String {
     for ch in text.chars() {
         match ch {
             '{' => depth += 1,
-            '}' => {
-                if depth > 0 {
+            '}'
+                if depth > 0 => {
                     depth -= 1;
                 }
-            }
             _ if depth == 0 => result.push(ch),
             _ => {}
         }

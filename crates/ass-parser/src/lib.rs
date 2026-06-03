@@ -121,6 +121,12 @@ pub struct AssFile {
     pub embedded_fonts: Vec<EmbeddedFont>,
 }
 
+impl Default for AssFile {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AssFile {
     pub fn new() -> Self {
         Self {
@@ -244,7 +250,7 @@ impl AssFile {
     fn parse_event_line(&mut self, line: &str) -> Result<(), ParseError> {
         if let Some(colon_pos) = line.find(':') {
             let type_str = &line[..colon_pos];
-            if let Some(event_type) = EventType::from_str(type_str) {
+            if let Some(event_type) = EventType::parse(type_str) {
                 let event_data = line[colon_pos + 1..].trim();
                 let event = Event::parse_from_line(event_type, event_data)?;
                 self.events.push(event);

@@ -6,7 +6,7 @@ fn test_default_style() {
     assert_eq!(s.name, "Default");
     assert_eq!(s.font_name, "Arial");
     assert_eq!(s.font_size, 20.0);
-    assert_eq!(s.bold, false);
+    assert!(!s.bold);
     assert_eq!(s.alignment, 2);
     assert_eq!(s.margin_l, 10);
     assert_eq!(s.margin_r, 10);
@@ -22,7 +22,7 @@ fn test_parse_style_line() {
     assert_eq!(s.name, "Default");
     assert_eq!(s.font_name, "Arial");
     assert_eq!(s.font_size, 20.0);
-    assert_eq!(s.bold, false);
+    assert!(!s.bold);
     assert_eq!(s.alignment, 2);
 }
 
@@ -30,7 +30,7 @@ fn test_parse_style_line() {
 fn test_parse_style_bold() {
     let line = "Default,Arial,28,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1";
     let s = Style::parse_from_line(line).unwrap();
-    assert_eq!(s.bold, true); // -1 means true in ASS
+    assert!(s.bold); // -1 means true in ASS
 }
 
 #[test]

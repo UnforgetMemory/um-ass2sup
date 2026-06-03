@@ -23,6 +23,7 @@ pub(super) fn compute_fad_alpha(elapsed: u64, total_duration: u64, fade_in: u64,
     1.0
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn compute_fade_complex(
     elapsed: u64,
     alpha_start: u8,
@@ -53,6 +54,7 @@ pub(super) fn compute_fade_complex(
     a3
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn apply_transform_tag(
     ctx: &mut RenderContext,
     inner_tag: &str,
@@ -88,43 +90,40 @@ pub(super) fn apply_transform_tag(
                 let target = *fs as f32 * scale_y;
                 ctx.font_size = default_val + (target - default_val) * p;
             }
-            OverrideTag::FontName(name) => {
-                if p >= 0.5 {
+            OverrideTag::FontName(name)
+                if p >= 0.5 => {
                     ctx.font_name = name.clone();
                 }
-            }
-            OverrideTag::Bold(b) => {
-                if p >= 0.5 {
+            OverrideTag::Bold(b)
+                if p >= 0.5 => {
                     ctx.bold = *b;
                 }
-            }
-            OverrideTag::Italic(i) => {
-                if p >= 0.5 {
+            OverrideTag::Italic(i)
+                if p >= 0.5 => {
                     ctx.italic = *i;
                 }
-            }
             OverrideTag::PrimaryColor(c) => {
                 let target = c.to_rgba();
-                for i in 0..4 {
-                    ctx.primary_color[i] = lerp_u8(ctx.primary_color[i], target[i], p);
+                for (i, target_val) in target.iter().enumerate() {
+                    ctx.primary_color[i] = lerp_u8(ctx.primary_color[i], *target_val, p);
                 }
             }
             OverrideTag::SecondaryColor(c) => {
                 let target = c.to_rgba();
-                for i in 0..4 {
-                    ctx.secondary_color[i] = lerp_u8(ctx.secondary_color[i], target[i], p);
+                for (i, target_val) in target.iter().enumerate() {
+                    ctx.secondary_color[i] = lerp_u8(ctx.secondary_color[i], *target_val, p);
                 }
             }
             OverrideTag::OutlineColor(c) => {
                 let target = c.to_rgba();
-                for i in 0..4 {
-                    ctx.outline_color[i] = lerp_u8(ctx.outline_color[i], target[i], p);
+                for (i, target_val) in target.iter().enumerate() {
+                    ctx.outline_color[i] = lerp_u8(ctx.outline_color[i], *target_val, p);
                 }
             }
             OverrideTag::ShadowColor(c) => {
                 let target = c.to_rgba();
-                for i in 0..4 {
-                    ctx.shadow_color[i] = lerp_u8(ctx.shadow_color[i], target[i], p);
+                for (i, target_val) in target.iter().enumerate() {
+                    ctx.shadow_color[i] = lerp_u8(ctx.shadow_color[i], *target_val, p);
                 }
             }
             OverrideTag::Alpha { value } => {
@@ -193,21 +192,18 @@ pub(super) fn apply_transform_tag(
                 ctx.origin_x = ctx.origin_x + (*x as f32 * scale_x - ctx.origin_x) * p;
                 ctx.origin_y = ctx.origin_y + (*y as f32 * scale_y - ctx.origin_y) * p;
             }
-            OverrideTag::Underline(u) => {
-                if p >= 0.5 {
+            OverrideTag::Underline(u)
+                if p >= 0.5 => {
                     ctx.underline = *u;
                 }
-            }
-            OverrideTag::Strikeout(s) => {
-                if p >= 0.5 {
+            OverrideTag::Strikeout(s)
+                if p >= 0.5 => {
                     ctx.strikeout = *s;
                 }
-            }
-            OverrideTag::BoldWeight(w) => {
-                if p >= 0.5 {
+            OverrideTag::BoldWeight(w)
+                if p >= 0.5 => {
                     ctx.bold = *w > 0;
                 }
-            }
             OverrideTag::Pos { x, y } => {
                 let target_x = *x as f32 * scale_x;
                 let target_y = *y as f32 * scale_y;
@@ -508,8 +504,7 @@ mod tests {
 
     #[test]
     fn test_apply_transform_fontsize() {
-        let mut ctx = RenderContext::default();
-        ctx.font_size = 20.0;
+        let mut ctx = RenderContext { font_size: 20.0, ..Default::default() };
         apply_transform_tag(&mut ctx, "\\fs40", 0, 1000, 1.0, 500, 0, 1000, 1.0, 1.0);
         assert!(ctx.font_size > 29.0 && ctx.font_size < 31.0);
     }
@@ -527,8 +522,7 @@ mod tests {
 
     #[test]
     fn test_apply_transform_outside_range() {
-        let mut ctx = RenderContext::default();
-        ctx.font_size = 20.0;
+        let mut ctx = RenderContext { font_size: 20.0, ..Default::default() };
         apply_transform_tag(&mut ctx, "\\fs40", 500, 1000, 1.0, 200, 0, 1500, 100.0, 100.0);
         // Before t1=500 → no change
         assert_eq!(ctx.font_size, 20.0);
@@ -536,8 +530,7 @@ mod tests {
 
     #[test]
     fn test_apply_transform_color() {
-        let mut ctx = RenderContext::default();
-        ctx.primary_color = [255, 0, 0, 255]; // red
+        let mut ctx = RenderContext { primary_color: [255, 0, 0, 255], ..Default::default() }; // red
         let red = AssColor::from_rgb(0, 0, 255); // blue in ASS format (BGR)
         apply_transform_tag(&mut ctx, &format!("\\1c{}", red.to_ass_hex()), 0, 1000, 1.0, 1000, 0, 1000, 100.0, 100.0);
         // At progress=1.0 → fully interpolated to target
@@ -547,9 +540,7 @@ mod tests {
 
     #[test]
     fn test_apply_transform_scale() {
-        let mut ctx = RenderContext::default();
-        ctx.scale_x = 100.0;
-        ctx.scale_y = 100.0;
+        let mut ctx = RenderContext { scale_x: 100.0, scale_y: 100.0, ..Default::default() };
         apply_transform_tag(&mut ctx, "\\fscx200", 0, 1000, 1.0, 500, 0, 1000, 100.0, 100.0);
         assert!(ctx.scale_x > 149.0 && ctx.scale_x < 151.0);
         assert_eq!(ctx.scale_y, 100.0); // y unchanged
@@ -559,9 +550,7 @@ mod tests {
 
     #[test]
     fn test_apply_transform_pos_interpolation() {
-        let mut ctx = RenderContext::default();
-        ctx.x = 0.0;
-        ctx.y = 0.0;
+        let mut ctx = RenderContext { x: 0.0, y: 0.0, ..Default::default() };
         // Interpolate from (0,0) to (1920,1080) at 50% progress (t=500, duration=1000)
         apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 0, 1000, 1.0, 500, 0, 1000, 1.0, 1.0);
         assert!((ctx.x - 960.0).abs() < 1.0, "x should be ~960, got {}", ctx.x);
@@ -570,9 +559,7 @@ mod tests {
 
     #[test]
     fn test_apply_transform_pos_before_start() {
-        let mut ctx = RenderContext::default();
-        ctx.x = 100.0;
-        ctx.y = 200.0;
+        let mut ctx = RenderContext { x: 100.0, y: 200.0, ..Default::default() };
         // Before t1=500, no interpolation should happen
         apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 500, 1000, 1.0, 100, 0, 2000, 1.0, 1.0);
         assert_eq!(ctx.x, 100.0);
@@ -581,9 +568,7 @@ mod tests {
 
     #[test]
     fn test_apply_transform_pos_after_end() {
-        let mut ctx = RenderContext::default();
-        ctx.x = 100.0;
-        ctx.y = 200.0;
+        let mut ctx = RenderContext { x: 100.0, y: 200.0, ..Default::default() };
         // At t2=1000 (the end of animation), should be at target
         apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 0, 1000, 1.0, 1000, 0, 1000, 1.0, 1.0);
         assert!((ctx.x - 1920.0).abs() < 1.0);

@@ -211,9 +211,9 @@ impl Renderer {
         let res_y = self.config.script_height as f32;
         let scale_x = self.config.width as f32 / res_x;
         let scale_y = self.config.height as f32 / res_y;
-        ctx.margin_l = ctx.margin_l * scale_x;
-        ctx.margin_r = ctx.margin_r * scale_x;
-        ctx.margin_v = ctx.margin_v * scale_y;
+        ctx.margin_l *= scale_x;
+        ctx.margin_r *= scale_x;
+        ctx.margin_v *= scale_y;
         ctx.font_size = ctx.font_size * self.config.height as f32 / res_y;
 
         let mut has_pos = false;
@@ -299,8 +299,8 @@ impl Renderer {
                     ctx.y = *y1 as f32 * scale_y;
                     move_x2 = *x2 as f32 * scale_x;
                     move_y2 = *y2 as f32 * scale_y;
-                    move_t1 = *t1 as u64;
-                    move_t2 = *t2 as u64;
+                    move_t1 = *t1;
+                    move_t2 = *t2;
                     has_move = true;
                     has_pos = true;
                 }
@@ -1077,6 +1077,7 @@ mod tests {
 
 
     // ── ass_parser::parse_override_tag ─────────────────────────────────
+    #[test]
     fn test_parse_single_tag_fs() {
         assert!(matches!(ass_parser::parse_override_tag("fs48"), Some(OverrideTag::FontSize(v)) if v == 48.0));
     }
@@ -1182,9 +1183,7 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_scale() {
-        let mut style = Style::default();
-        style.scale_x = 120.0;
-        style.scale_y = 80.0;
+        let style = Style { scale_x: 120.0, scale_y: 80.0, ..Default::default() };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1195,8 +1194,7 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_spacing() {
-        let mut style = Style::default();
-        style.spacing = 5.0;
+        let style = Style { spacing: 5.0, ..Default::default() };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1206,8 +1204,7 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_underline() {
-        let mut style = Style::default();
-        style.underline = true;
+        let style = Style { underline: true, ..Default::default() };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1217,8 +1214,7 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_strikeout() {
-        let mut style = Style::default();
-        style.strikeout = true;
+        let style = Style { strikeout: true, ..Default::default() };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1228,8 +1224,7 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_rotation() {
-        let mut style = Style::default();
-        style.angle = 45.0;
+        let style = Style { angle: 45.0, ..Default::default() };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1443,8 +1438,7 @@ mod tests {
 
     #[test]
     fn test_build_context_border_style_opaque_box() {
-        let mut style = Style::default();
-        style.border_style = 3;
+        let style = Style { border_style: 3, ..Default::default() };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1456,12 +1450,14 @@ mod tests {
 
     #[test]
     fn test_build_context_reset_named_style() {
-        let mut named_style = Style::default();
-        named_style.name = "Alt".into();
-        named_style.font_name = "Times New Roman".into();
-        named_style.font_size = 48.0;
-        named_style.bold = true;
-        named_style.underline = true;
+        let named_style = Style {
+            name: "Alt".into(),
+            font_name: "Times New Roman".into(),
+            font_size: 48.0,
+            bold: true,
+            underline: true,
+            ..Default::default()
+        };
 
         let mut ass = make_test_ass();
         ass.styles.push(named_style);
