@@ -9,4 +9,9 @@ thiserror = "1"
 tracing = "0.1"
 
 [dev-dependencies]
+criterion.workspace = true
 proptest = "1"
+
+[[bench]]
+name = "quantizer"
+harness = false

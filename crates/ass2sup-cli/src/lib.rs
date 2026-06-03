@@ -126,6 +126,10 @@ pub struct Args {
     /// Color output mode (auto/always/never)
     #[arg(long, default_value = "auto", value_parser = ["auto", "always", "never"])]
     pub color: String,
+
+    /// Convert to SRT format instead of SUP/PGS
+    #[arg(long)]
+    pub to_srt: bool,
 }
 
 #[derive(Debug)]
@@ -535,7 +539,31 @@ pub fn run(args: Args) -> Result<(), CliError> {
             AssFile::parse(&content)
                 .map_err(|e| CliError::ParseError(input.display().to_string(), e.to_string()))?;
         }
-        // All files parsed successfully
+        return Ok(());
+    }
+
+    // --to-srt mode: convert ASS to SRT format
+    if args.to_srt {
+        for input in &inputs {
+            let content = std::fs::read_to_string(input)
+                .map_err(|e| CliError::ReadError(input.display().to_string(), e.to_string()))?;
+            let ass = AssFile::parse(&content)
+                .map_err(|e| CliError::ParseError(input.display().to_string(), e.to_string()))?;
+            let srt_content = ass.to_srt();
+
+            let output = if let Some(ref out) = args.output {
+                out.clone()
+            } else {
+                let mut out = input.clone();
+                out.set_extension("srt");
+                out
+            };
+
+            std::fs::write(&output, &srt_content)
+                .map_err(|e| CliError::Conversion(format!("Failed to write SRT: {e}")))?;
+
+            info!("{} → {}", input.display(), output.display());
+        }
         return Ok(());
     }
 

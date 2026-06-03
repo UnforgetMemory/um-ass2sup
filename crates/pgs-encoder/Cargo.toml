@@ -11,4 +11,9 @@ tracing.workspace = true
 color-quantizer = { path = "../color-quantizer" }
 
 [dev-dependencies]
+criterion.workspace = true
 proptest = "1"
+
+[[bench]]
+name = "encoder"
+harness = false
