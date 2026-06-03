@@ -573,6 +573,29 @@ mod tests {
     }
 
     #[test]
+    fn fuzz_regression_override_tag_lphaa() {
+        // Fuzz crasher: binary noise starting with `1ca` then `lphaa` + non-ASCII.
+        // Tests whether parse_override_tag panics on binary/garbled input.
+        let input = std::fs::read_to_string("tests/data/fuzz_override_tag_crash.txt")
+            .expect("fuzz_override_tag_crash.txt test data file missing");
+        // Must not panic — should return None for unrecognized tags
+        let result = parse_override_tag(&input);
+        // If this test passes, the crash is stale or was already handled
+        assert!(result.is_none(), "expected None for binary noise input, got {:?}", result);
+    }
+
+    #[test]
+    fn fuzz_regression_override_tag_lphaa_inline() {
+        // Same as above but inline (no test data dependency)
+        // Binary noise with `lphaa` — the actual bytes from the crasher
+        let bytes = &[0x31, 0x63, 0x61, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                      0x6c, 0x70, 0x68, 0x61, 0x61, 0xc6, 0x97, 0x1a, 0x20, 0x20, 0x20, 0x22];
+        let input = std::str::from_utf8(bytes).expect("valid UTF-8");
+        let result = parse_override_tag(input);
+        assert!(result.is_none(), "expected None for binary noise input, got {:?}", result);
+    }
+
+    #[test]
     fn parse_ass_color_non_ascii_no_panic() {
         let _ = parse_ass_color("1ca\u{0197}"); // Regression: fuzz crash — multi-byte char slice
     }

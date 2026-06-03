@@ -406,6 +406,52 @@ mod tests {
     }
 
     #[test]
+    fn fuzz_regression_srt_malformed_timestamp() {
+        // Fuzz crasher: `3:2223:00006817148741241740400-->`
+        // Tests whether parse_srt panics on malformed timestamps with overflow-causing seconds.
+        let input = std::fs::read_to_string("tests/data/fuzz_srt_crash.txt")
+            .expect("fuzz_srt_crash.txt test data file missing");
+        // Must not panic — should return Err gracefully
+        let result = parse_srt(&input);
+        // If this passed without panic, the crasher is stale (no actual bug remains).
+        // If it panicked, the fix made it return Err instead.
+        assert!(result.is_err(), "expected Err for malformed SRT timestamp, got Ok");
+    }
+
+    #[test]
+    fn fuzz_regression_srt_malformed_timestamp_inline() {
+        // Edge case: same pattern inline (no test data dependency)
+        let input = "3:2223:00006817148741241740400-->\n+";
+        let result = parse_srt(input);
+        assert!(result.is_err(), "expected Err for malformed SRT timestamp");
+    }
+
+    #[test]
+    fn srt_edge_empty_string() {
+        let result = parse_srt("");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn srt_edge_single_char() {
+        let result = parse_srt("x");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn srt_edge_just_arrow() {
+        // Just the arrow with no valid timestamps
+        let result = parse_srt("-->");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn srt_edge_negative_timestamp() {
+        let result = parse_srt("0\n-1:00:00,000 --> 00:00:05,000\nHello");
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn to_srt_strips_complex_tags() {
         let mut ass = AssFile::new();
         ass.events.push(Event {

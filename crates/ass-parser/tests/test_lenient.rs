@@ -145,6 +145,19 @@ Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello
 }
 
 #[test]
+fn fuzz_regression_lenient_fonts_garbage() {
+    // Fuzz crasher: ASS with garbled [Fonts] sections containing binary noise.
+    // Tests whether parse_lenient panics on malformed font lines.
+    let input = std::fs::read_to_string("tests/data/fuzz_lenient_crash.txt")
+        .expect("fuzz_lenient_crash.txt test data file missing");
+    // Must not panic
+    let (ass, errors) = AssFile::parse_lenient(&input);
+    // Even with garbled data, there should be no panic — errors are ok
+    // If readable events survived, even better
+    let _ = (ass, errors);
+}
+
+#[test]
 fn lenient_mixed_valid_and_invalid_events() {
     let content = "\
 [Script Info]
