@@ -48,7 +48,7 @@ impl Timestamp {
         }
         let sec: u32 = sec_parts[0].parse().map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
         let cs: u32 = sec_parts[1].parse().map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
-        Ok(Self::from_hms(h, m, sec, cs * 10))
+        Ok(Self::from_hms(h, m, sec, cs.saturating_mul(10)))
     }
 
     /// Returns the timestamp in milliseconds.

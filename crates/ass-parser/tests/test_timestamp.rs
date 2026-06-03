@@ -87,3 +87,11 @@ fn test_large_values() {
     let ts = Timestamp::from_hms(100, 0, 0, 0);
     assert_eq!(ts.as_ms(), 360_000_000);
 }
+
+#[test]
+fn test_from_ass_time_large_centiseconds_no_panic() {
+    // Regression: fuzz crash — cs * 10 overflowed u32 for large centisecond values
+    // Should saturate instead of panicking
+    let result = Timestamp::from_ass_time("0:00:00.999999999");
+    assert!(result.is_ok() || result.is_err()); // must not panic
+}

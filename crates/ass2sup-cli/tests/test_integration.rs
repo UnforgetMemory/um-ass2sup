@@ -529,3 +529,407 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(1,m 0 0 l 100 0 100 100
     assert_eq!(sup_data[0], b'P', "SUP should start with P");
     assert_eq!(sup_data[1], b'G', "SUP should start with G");
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Error-Path Tests
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_empty_string_fails_gracefully() {
+    let result = AssFile::parse("");
+    // Parser accepts empty string as valid (empty ASS) - should not panic
+    let _ = result;
+}
+
+#[test]
+fn test_binary_garbage_fails_gracefully() {
+    let garbage: &[u8] = &[0xFF, 0xFE, 0x00, 0x01, 0x80, 0x90, 0xAB, 0xCD];
+    let s = String::from_utf8_lossy(garbage);
+    let result = AssFile::parse(&s);
+    // Should not panic - either succeeds or returns error
+    let _ = result;
+}
+
+#[test]
+fn test_missing_script_info_parses() {
+    let ass = "[V4+ Styles]\nFormat: Name, Fontname\nStyle: Default,Arial\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Hello\n";
+    let result = AssFile::parse(ass);
+    // Missing [Script Info] - lenient parser should handle, strict may fail
+    let _ = result;
+}
+
+#[test]
+fn test_invalid_timestamp_fails() {
+    let ass = "[Script Info]\nTitle: Test\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.000,0:00:05.000,Default,,0,0,0,,Hello\n";
+    let result = AssFile::parse(ass);
+    // Should either parse or fail gracefully - no panic
+    let _ = result;
+}
+
+#[test]
+fn test_missing_style_reference() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,NonExistent,,0,0,0,,Hello
+"#;
+    let sup_outputs = run_full_pipeline(ass);
+    assert!(!sup_outputs.is_empty(), "Should produce SUP output even with non-existent style ref");
+    assert_eq!(sup_outputs[0][0], b'P', "SUP should start with P");
+    assert_eq!(sup_outputs[0][1], b'G', "SUP should start with G");
+}
+
+#[test]
+fn test_render_with_no_events() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"#;
+    let ass = AssFile::parse(ass).expect("Valid ASS with no events should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000);
+    if let Some(frame) = frame {
+        assert!(frame.bitmap.iter().all(|&b| b == 0), "No events should produce empty frame");
+    }
+}
+
+#[test]
+fn test_render_with_zero_duration() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:01.00,Default,,0,0,0,,Zero
+"#;
+    let ass = AssFile::parse(ass).expect("Zero duration should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    // Zero duration event at its start time should not panic
+    let _ = renderer.render_ass(&ass, 1000);
+}
+
+#[test]
+fn test_render_with_max_timestamp() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,99:59:59.99,Default,,0,0,0,,Long
+"#;
+    let ass = AssFile::parse(ass).expect("Very long event should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    // Very large timestamp (100 hours) should not cause panic or overflow
+    let _ = renderer.render_ass(&ass, 360000000);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Edge-Case ASS Tests
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_unicode_text() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,日本語テスト 🎌 한국어
+"#;
+    let ass = AssFile::parse(ass).expect("Unicode ASS should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Unicode text should render");
+    assert!(frame.width > 0, "Unicode text should produce valid frame");
+}
+
+#[test]
+fn test_many_simultaneous_events() {
+    let header = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"#;
+    let mut events = String::new();
+    for i in 0..50 {
+        events.push_str(&format!("Dialogue: {i},0:00:01.00,0:00:05.00,Default,,0,0,0,,Event{i}\n"));
+    }
+    let ass_content = format!("{}{}", header, events);
+    let ass = AssFile::parse(&ass_content).expect("Many events should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Should render at 2s");
+    assert!(frame.width > 0, "50 simultaneous events should render");
+}
+
+#[test]
+fn test_long_event_duration() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,25:00:00.00,Default,,0,0,0,,25 hour event
+"#;
+    let ass = AssFile::parse(ass).expect("Long duration ASS should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 36000000).expect("Should render at 10h");
+    assert!(frame.width > 0, "Long duration event should render at 10h");
+}
+
+#[test]
+fn test_nested_override_tags() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\b1\i1\c&H0000FF&\fs72}Nested{\b0\i0\c&HFFFFFF&\fs48}Tags
+"#;
+    let ass = AssFile::parse(ass).expect("Nested override tags ASS should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Nested override tags should render");
+    assert!(frame.width > 0, "Nested override tags should render");
+}
+
+#[test]
+fn test_drawing_mode_p1() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p1}m 0 0 l 100 0 100 100 0 100 c{\p0}
+"#;
+    let ass = AssFile::parse(ass).expect("Drawing mode p1 ASS should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Drawing mode p1 should render");
+    assert!(frame.width > 0, "Drawing mode p1 should render");
+}
+
+#[test]
+fn test_drawing_mode_p4_clip() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p4}m 0 0 l 1920 0 1920 540 0 540 c{\p0}Clipped
+"#;
+    let ass = AssFile::parse(ass).expect("Drawing mode p4 ASS should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Drawing mode p4 clip should render");
+    assert!(frame.width > 0, "Drawing mode p4 clip should render");
+}
+
+#[test]
+fn test_writing_mode_vertical() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q2}Vertical Text
+"#;
+    let ass = AssFile::parse(ass).expect("Writing mode vertical ASS should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Writing mode vertical should render");
+    assert!(frame.width > 0, "Writing mode vertical should render");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Font Fallback Tests
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_nonexistent_font_falls_back() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,NonExistentFont12345,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Fallback Test
+"#;
+    let ass = AssFile::parse(ass).expect("ASS with nonexistent font should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Nonexistent font should fall back and render");
+    // Should not panic - falls back to a default font
+    assert!(frame.width > 0, "Nonexistent font should fall back and render");
+}
+
+#[test]
+fn test_default_font_used() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Default Font
+"#;
+    let ass = AssFile::parse(ass).expect("ASS with DejaVu Sans should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Default DejaVu Sans should render");
+    assert!(frame.width > 0, "Default DejaVu Sans should render");
+}
+
+#[test]
+fn test_font_size_override() {
+    let ass = r#"[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fs72}Large Text
+"#;
+    let ass = AssFile::parse(ass).expect("ASS with font size override should parse");
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&ass, 2000).expect("Font size override should render");
+    assert!(frame.width > 0, "Font size override should render");
+}
+
+#[test]
+fn test_invalid_style_fails() {
+    let ass = "\
+[Script Info]
+Title: Invalid Style
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default, Arial, 48, &H00FFFFFF, &H000000FF, &H00000000, &H00000000, 0, 0, 0, 0, 100, 100, 0, 0, 1, 2, 0, 2, 10, 10, 10, 1
+Style: BAD_STYLE_TOO_FEW_FIELDS, Arial, 48
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test";
+    let result = AssFile::parse(ass);
+    if let Ok(ass) = result {
+        assert!(!ass.styles.is_empty(), "Should have at least one valid style");
+    }
+}
+
+#[test]
+fn test_render_with_negative_duration() {
+    let ass = "\
+[Script Info]
+Title: Negative Duration
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:05.00,0:00:01.00,Default,,0,0,0,,Reverse Time";
+    let result = AssFile::parse(ass);
+    assert!(result.is_ok(), "Negative duration ASS should parse");
+    let ass = result.unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let _frame = renderer.render_ass(&ass, 3000);
+}

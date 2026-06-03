@@ -91,6 +91,14 @@ struct Args {
     /// Suppress progress bar
     #[arg(long)]
     quiet: bool,
+
+    /// Parse and validate only, don't convert (exit 0 if OK, 1 if errors)
+    #[arg(long)]
+    check: bool,
+
+    /// Color output mode (auto/always/never)
+    #[arg(long, default_value = "auto", value_parser = ["auto", "always", "never"])]
+    color: String,
 }
 
 struct Resolution {
@@ -111,8 +119,10 @@ fn parse_resolution(s: &str) -> Result<Resolution, String> {
     Ok(Resolution { width, height })
 }
 
-fn setup_logging(verbose: bool) {
-    let level = if verbose {
+fn setup_logging(verbose: bool, quiet: bool) {
+    let level = if quiet {
+        tracing::level_filters::LevelFilter::ERROR
+    } else if verbose {
         tracing::level_filters::LevelFilter::DEBUG
     } else {
         tracing::level_filters::LevelFilter::INFO
@@ -124,6 +134,14 @@ fn setup_logging(verbose: bool) {
         .with_file(false)
         .with_line_number(false)
         .init();
+}
+
+fn should_use_color(color: &str) -> bool {
+    match color {
+        "always" => true,
+        "never" => false,
+        _ => std::io::IsTerminal::is_terminal(&std::io::stdout()),
+    }
 }
 
 fn create_progress_bar(len: u64, message: &str) -> ProgressBar {
@@ -363,15 +381,39 @@ struct ConversionStats {
 
 fn main() {
     let args = Args::parse();
-    setup_logging(args.verbose);
+    setup_logging(args.verbose, args.quiet);
+
+    let use_color = should_use_color(&args.color);
 
     let res = match parse_resolution(&args.resolution) {
         Ok(r) => r,
         Err(e) => {
-            error!("Invalid resolution: {}", e);
+            error!("Invalid resolution '{}': {}", args.resolution, e);
             process::exit(1);
         }
     };
+
+    // --check mode: parse + validate only
+    if args.check {
+        for input in &args.input {
+            let content = match std::fs::read_to_string(input) {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("Cannot read '{}': {}", input.display(), e);
+                    process::exit(1);
+                }
+            };
+            match AssFile::parse(&content) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Parse error in '{}': {}", input.display(), e);
+                    process::exit(1);
+                }
+            }
+        }
+        // All files parsed successfully
+        process::exit(0);
+    }
 
     info!(
         "ass2sup v{} - ASS/SRT to SUP/PGS converter",
@@ -390,7 +432,8 @@ fn main() {
         match convert_file(input, &output, &args, &res) {
             Ok(stats) => {
                 info!(
-                    "✅ Converted {} events ({} frames) → {} ({} bytes)",
+                    "{} Converted {} events ({} frames) → {} ({} bytes)",
+                    if use_color { "✅" } else { "[OK]" },
                     stats.events_processed,
                     stats.frames_encoded,
                     output.display(),
@@ -398,7 +441,7 @@ fn main() {
                 );
             }
             Err(e) => {
-                error!("❌ Conversion failed: {}", e);
+                error!("{}Conversion failed: {}", if use_color { "❌ " } else { "[FAIL] " }, e);
                 process::exit(1);
             }
         }
@@ -408,7 +451,7 @@ fn main() {
     let output_dir = args.output_dir.clone().unwrap_or_else(|| PathBuf::from("."));
     if !output_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&output_dir) {
-            error!("Failed to create output directory: {}", e);
+            error!("Failed to create output directory '{}': {}", output_dir.display(), e);
             process::exit(1);
         }
     }
@@ -455,7 +498,8 @@ fn main() {
         match result {
             Ok(stats) => {
                 info!(
-                    "✅ [{}] {} events ({} frames) → {} bytes",
+                    "{} [{}] {} events ({} frames) → {} bytes",
+                    if use_color { "✅" } else { "[OK]" },
                     inputs[i].display(),
                     stats.events_processed,
                     stats.frames_encoded,
@@ -464,7 +508,7 @@ fn main() {
                 successes += 1;
             }
             Err(e) => {
-                error!("❌ [{}] {}", inputs[i].display(), e);
+                error!("{} [{}] {}", if use_color { "❌" } else { "[FAIL]" }, inputs[i].display(), e);
                 failures += 1;
             }
         }

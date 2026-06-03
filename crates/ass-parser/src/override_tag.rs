@@ -446,6 +446,7 @@ fn parse_hex_u8(s: &str) -> Result<u8, std::num::ParseIntError> {
 
 fn parse_ass_color(s: &str) -> Result<super::color::AssColor, ()> {
     let s = s.trim().trim_start_matches("H").trim_start_matches("h").trim_end_matches('&');
+    if !s.is_ascii() { return Err(()); }
     if s.len() < 6 { return Err(()); }
     let hex = if s.len() >= 8 { &s[s.len()-8..] } else { s };
     let parse = |range: &str| u8::from_str_radix(range, 16).map_err(|_| ());
@@ -569,5 +570,10 @@ mod tests {
     fn iclip_rectangular_unchanged() {
         let result = parse_override_tag("iclip(10,20,30,40)").unwrap();
         assert_eq!(result, OverrideTag::ClipInverse { x1: 10.0, y1: 20.0, x2: 30.0, y2: 40.0 });
+    }
+
+    #[test]
+    fn parse_ass_color_non_ascii_no_panic() {
+        let _ = parse_ass_color("1ca\u{0197}"); // Regression: fuzz crash — multi-byte char slice
     }
 }

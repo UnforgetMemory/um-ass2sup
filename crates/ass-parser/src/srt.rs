@@ -90,7 +90,11 @@ fn parse_srt_timecode(s: &str) -> Result<Timestamp, ParseError> {
     let h: u64 = parts[0].parse().map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
     let m: u64 = parts[1].parse().map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
     let sec: u64 = parts[2].parse().map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
-    Ok(Timestamp::from_ms(h * 3600000 + m * 60000 + sec * 1000 + ms))
+    let ms_total = h.saturating_mul(3_600_000)
+        .saturating_add(m.saturating_mul(60_000))
+        .saturating_add(sec.saturating_mul(1000))
+        .saturating_add(ms);
+    Ok(Timestamp::from_ms(ms_total))
 }
 
 fn convert_srt_tags(text: &str) -> String {

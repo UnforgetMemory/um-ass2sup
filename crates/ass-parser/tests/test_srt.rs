@@ -101,3 +101,13 @@ Second"#;
         assert!(e.is_dialogue());
     }
 }
+
+#[test]
+fn test_parse_srt_huge_timestamp_no_panic() {
+    // Regression: fuzz crash — sec * 1000 overflowed u64 for huge second values
+    // Should saturate instead of panicking
+    let input = "3:2223:00006817148741241740400-->\ntest";
+    let result = parse_srt(input);
+    // Must not panic — may return Ok or Err
+    let _ = result;
+}

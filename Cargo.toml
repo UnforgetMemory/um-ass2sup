@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+exclude = ["crates/*/fuzz"]
 members = [
     "crates/ass-parser",
     "crates/subtitle-validator",
