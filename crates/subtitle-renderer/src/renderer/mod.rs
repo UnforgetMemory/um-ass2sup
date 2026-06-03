@@ -34,7 +34,7 @@ pub use text_layout::{alignment_to_pos, strip_override_blocks};
 /// 1. [`render_ass`](Renderer::render_ass) iterates visible dialogue events at a timestamp
 /// 2. For each event, [`build_context`](Renderer::build_context) applies override tags
 ///    to create a [`RenderContext`] with time-aware animation state
-/// 3. [`render_event`](Renderer::render_event) shapes text, rasterizes glyphs, applies
+/// 3. Internal rendering shapes text, rasterizes glyphs, applies
 ///    effects, and composites onto the frame bitmap
 ///
 /// # Example
@@ -115,7 +115,7 @@ impl Renderer {
 
     /// Renders all visible dialogue events at the given timestamp to an RGBA frame.
     ///
-    /// Events outside the timestamp range are skipped via [`Event::is_visible_at`].
+    /// Events outside the timestamp range are skipped.
     /// Each visible event is shaped, rasterized, and composited onto the frame bitmap.
     ///
     /// Returns `None` if the output dimensions are zero.
@@ -153,7 +153,7 @@ impl Renderer {
 
     /// Renders events with frame caching to avoid redundant work for static subtitles.
     ///
-    /// Uses [`FrameCache`] keyed by `(event_index, timestamp_ms)`. On cache hit,
+    /// Uses [`FrameCache`](crate::FrameCache) keyed by `(event_index, timestamp_ms)`. On cache hit,
     /// returns the cached frame directly. On miss, calls [`render_ass`](Renderer::render_ass)
     /// and stores the result.
     pub fn render_ass_cached(

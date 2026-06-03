@@ -92,8 +92,8 @@ impl Event {
     ///
     /// # Errors
     ///
-    /// Returns [`ParseError::InvalidEvent`] if fewer than 10 fields are present,
-    /// or [`ParseError::InvalidTimestamp`] if start/end timecodes are malformed.
+    /// Returns [`ParseError::InvalidEvent`](crate::ParseError::InvalidEvent) if fewer than 10 fields are present,
+    /// or [`ParseError::InvalidTimestamp`](crate::ParseError::InvalidTimestamp) if start/end timecodes are malformed.
     pub fn parse_from_line(event_type: EventType, data: &str) -> Result<Self, super::error::ParseError> {
         let parts: Vec<&str> = data.splitn(10, ',').collect();
         if parts.len() < 10 {

@@ -4,11 +4,11 @@
 /// - Single pixel (color != 0): just the color byte
 /// - Single transparent pixel (color == 0): 0x00
 /// - Short run (len <= 0x3F):
-///   - Transparent: [len_hi | 0x00] [len_lo]  (2 bytes)
-///   - Opaque:      [color] [len_hi | 0x40] [len_lo]  (3 bytes)
+///   - Transparent: `[len_hi | 0x00] [len_lo]` (2 bytes)
+///   - Opaque:      `[color] [len_hi | 0x40] [len_lo]` (3 bytes)
 /// - Long run (len > 0x3F, max 0x3FFF):
-///   - Transparent: [len_hi | 0x40] [len_lo]  (2 bytes)
-///   - Opaque:      [color] [len_hi | 0x80] [len_lo]  (3 bytes)
+///   - Transparent: `[len_hi | 0x40] [len_lo]` (2 bytes)
+///   - Opaque:      `[color] [len_hi | 0x80] [len_lo]` (3 bytes)
 ///
 /// Row separator: 0x00 0x00 between rows (except after last row).
 pub fn rle_encode(palette_indices: &[u8], width: u32, height: u32) -> Vec<u8> {

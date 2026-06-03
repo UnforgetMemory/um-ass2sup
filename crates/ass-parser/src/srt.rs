@@ -130,6 +130,68 @@ fn convert_srt_tags(text: &str) -> String {
     result
 }
 
+fn strip_override_tags(text: &str) -> String {
+    let mut result = String::new();
+    let mut in_tag = false;
+    for c in text.chars() {
+        match c {
+            '{' => in_tag = true,
+            '}' => in_tag = false,
+            _ => {
+                if !in_tag {
+                    result.push(c);
+                }
+            }
+        }
+    }
+    result
+}
+
+fn ass_to_srt_text(text: &str) -> String {
+    let stripped = strip_override_tags(text);
+    stripped.replace("\\N", "\n").replace("\\n", "\n")
+}
+
+fn format_srt_time(ts: Timestamp) -> String {
+    let ms = ts.as_ms();
+    let h = ms / 3_600_000;
+    let m = (ms % 3_600_000) / 60_000;
+    let s = (ms % 60_000) / 1_000;
+    let ms_remainder = ms % 1_000;
+    format!("{:02}:{:02}:{:02},{:03}", h, m, s, ms_remainder)
+}
+
+impl AssFile {
+    pub fn to_srt(&self) -> String {
+        let mut events: Vec<&Event> = self.events.iter()
+            .filter(|e| e.is_dialogue())
+            .collect();
+
+        events.sort_by_key(|e| (e.start, e.layer));
+
+        let mut output = String::new();
+        for (i, event) in events.iter().enumerate() {
+            let start = format_srt_time(event.start);
+            let end = format_srt_time(event.end);
+            let text = ass_to_srt_text(&event.text);
+
+            output.push_str(&format!(
+                "{}\n{} --> {}\n{}\n",
+                i + 1,
+                start,
+                end,
+                text.trim(),
+            ));
+
+            if i + 1 < events.len() {
+                output.push('\n');
+            }
+        }
+
+        output
+    }
+}
+
 fn srt_default_style() -> Style {
     Style {
         name: "Default".to_string(),
@@ -156,5 +218,214 @@ fn srt_default_style() -> Style {
         margin_v: 10,
         encoding: 1,
         relative_to: 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Effect, Event, EventType};
+
+    #[test]
+    fn to_srt_basic() {
+        let mut ass = AssFile::new();
+        ass.events.push(Event {
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(1000),
+            end: Timestamp::from_ms(5000),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "Hello World".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+
+        let srt = ass.to_srt();
+        let expected = "1\n00:00:01,000 --> 00:00:05,000\nHello World\n";
+        assert_eq!(srt, expected);
+    }
+
+    #[test]
+    fn to_srt_multiple_events() {
+        let mut ass = AssFile::new();
+        ass.events.push(Event {
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(5000),
+            end: Timestamp::from_ms(10000),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "Second".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+        ass.events.push(Event {
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(1000),
+            end: Timestamp::from_ms(5000),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "First".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+
+        let srt = ass.to_srt();
+        assert!(srt.starts_with("1\n00:00:01,000 --> 00:00:05,000\nFirst\n"));
+        assert!(srt.contains("2\n00:00:05,000 --> 00:00:10,000\nSecond\n"));
+    }
+
+    #[test]
+    fn to_srt_strips_override_tags() {
+        let mut ass = AssFile::new();
+        ass.events.push(Event {
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::ZERO,
+            end: Timestamp::from_ms(3000),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "{\\b1}Bold{\\b0} and {\\i1}Italic{\\i0}".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+
+        let srt = ass.to_srt();
+        assert!(srt.contains("Bold and Italic"));
+        assert!(!srt.contains("{\\"));
+    }
+
+    #[test]
+    fn to_srt_converts_newline_escapes() {
+        let mut ass = AssFile::new();
+        ass.events.push(Event {
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::ZERO,
+            end: Timestamp::from_ms(3000),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "Line one\\NLine two".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+
+        let srt = ass.to_srt();
+        assert!(srt.contains("Line one\nLine two"));
+    }
+
+    #[test]
+    fn to_srt_skips_comments() {
+        let mut ass = AssFile::new();
+        ass.events.push(Event {
+            event_type: EventType::Comment,
+            layer: 0,
+            start: Timestamp::ZERO,
+            end: Timestamp::from_ms(3000),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "Comment".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+        ass.events.push(Event {
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_ms(1000),
+            end: Timestamp::from_ms(2000),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "Visible".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+
+        let srt = ass.to_srt();
+        assert!(!srt.contains("Comment"));
+        assert!(srt.contains("Visible"));
+    }
+
+    #[test]
+    fn to_srt_empty_events() {
+        let ass = AssFile::new();
+        let srt = ass.to_srt();
+        assert_eq!(srt, "");
+    }
+
+    #[test]
+    fn to_srt_timestamp_formatting() {
+        let mut ass = AssFile::new();
+        ass.events.push(Event {
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::from_hms(1, 23, 45, 678),
+            end: Timestamp::from_hms(2, 0, 0, 0),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "Timestamps".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+
+        let srt = ass.to_srt();
+        assert!(srt.contains("01:23:45,678 --> 02:00:00,000"));
+    }
+
+    #[test]
+    fn to_srt_roundtrip() {
+        let input = "1\n00:00:01,000 --> 00:00:05,000\nHello World\n\n2\n00:00:06,000 --> 00:00:10,000\nLine two\n";
+        let parsed = parse_srt(input).unwrap();
+        let output = parsed.to_srt();
+        assert_eq!(input, output);
+    }
+
+    #[test]
+    fn to_srt_strips_complex_tags() {
+        let mut ass = AssFile::new();
+        ass.events.push(Event {
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start: Timestamp::ZERO,
+            end: Timestamp::from_ms(3000),
+            style_name: "Default".to_string(),
+            name: String::new(),
+            margin_l: 0, margin_r: 0, margin_v: 0,
+            effect: Effect::None,
+            text: "{\\pos(100,200)}Positioned{\\move(0,0,100,100)} text".to_string(),
+            override_tags: Vec::new(),
+            karaoke_segments: Vec::new(),
+            raw_override_block: String::new(),
+        });
+
+        let srt = ass.to_srt();
+        assert!(srt.contains("Positioned text"));
+        assert!(!srt.contains("\\pos"));
+        assert!(!srt.contains("\\move"));
     }
 }

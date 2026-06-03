@@ -237,7 +237,7 @@ impl AffineTransform {
     #[allow(clippy::too_many_arguments)]
     /// Transform an RGBA pixmap with 3D perspective projection.
     ///
-    /// Like [`apply_to_pixmap`] but adds a perspective w-divide step before the
+    /// Like [`apply_to_pixmap`](Self::apply_to_pixmap) but adds a perspective w-divide step before the
     /// affine inverse mapping, implementing ASS `\frx` / `\fry` rotation effects.
     ///
     /// `perspective_x` and `perspective_y` are the ASS `\frx` / `\fry` angles in

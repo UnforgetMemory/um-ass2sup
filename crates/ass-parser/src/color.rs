@@ -57,6 +57,17 @@ impl AssColor {
         Ok(Self { alpha, blue, green, red })
     }
 
+    /// Creates an opaque color from an ABGR u32 value (SSA v4 decimal color format).
+    /// Byte order: AA BB GG RR (alpha, blue, green, red).
+    pub fn from_raw_abgr(val: u32) -> Self {
+        Self {
+            alpha: ((val >> 24) & 0xFF) as u8,
+            blue: ((val >> 16) & 0xFF) as u8,
+            green: ((val >> 8) & 0xFF) as u8,
+            red: (val & 0xFF) as u8,
+        }
+    }
+
     /// Creates an opaque color from RGB channels (alpha=0 in ASS convention = opaque).
     pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
         Self { alpha: 0, blue: b, green: g, red: r }

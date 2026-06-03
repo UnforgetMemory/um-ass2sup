@@ -70,7 +70,7 @@ impl fmt::Display for ValidationStage {
 /// Unique validation rule identifier.
 ///
 /// Each rule is a numeric ID in the range `V001`–`V015`. The prefix `V` is
-/// added by the [`Display`] implementation. Constants are provided for all
+/// added by the [`Display`](std::fmt::Display) implementation. Constants are provided for all
 /// defined rules:
 ///
 /// | Constant | Checks |

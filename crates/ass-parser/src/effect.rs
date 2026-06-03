@@ -61,7 +61,7 @@ pub enum Effect {
     /// Karaoke effect marker.
     ///
     /// When present, the event contains `\k` / `\kf` / `\ko` tags for
-    /// syllable-by-syllable timing (already parsed by [`KaraokeSegment`]).
+    /// syllable-by-syllable timing (already parsed by [`KaraokeSegment`](crate::KaraokeSegment)).
     Karaoke,
 }
 

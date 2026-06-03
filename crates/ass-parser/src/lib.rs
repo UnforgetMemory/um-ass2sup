@@ -88,14 +88,21 @@ impl Default for ScriptInfo {
     }
 }
 
+/// Supported subtitle file formats.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SubtitleFormat {
+    /// Advanced SubStation Alpha (.ass)
     Ass,
+    /// SubStation Alpha (.ssa)
     Ssa,
+    /// SubRip (.srt)
     Srt,
 }
 
 impl SubtitleFormat {
+    /// Detect subtitle format from file extension.
+    ///
+    /// Returns `None` for unrecognized extensions.
     pub fn detect(path: &Path) -> Option<Self> {
         match path.extension()?.to_str()? {
             "ass" => Some(Self::Ass),
@@ -106,18 +113,31 @@ impl SubtitleFormat {
     }
 }
 
+/// An embedded font entry from the ASS `[Fonts]` section.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EmbeddedFont {
+    /// Font family name (e.g. "Arial").
     pub font_name: String,
+    /// Filename of the font file on disk.
     pub filename: String,
 }
 
+/// A parsed ASS/SSA/SRT subtitle file.
+///
+/// Contains script metadata, styles, dialogue events, and any embedded fonts.
+/// Use [`AssFile::parse`] to create from a string, or [`AssFile::parse_file`]
+/// to read from disk.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssFile {
+    /// Detected subtitle format (ASS, SSA, or SRT).
     pub format: SubtitleFormat,
+    /// Script-level metadata from `[Script Info]`.
     pub script_info: ScriptInfo,
+    /// Named styles defined in `[V4+ Styles]` or `[V4 Styles]`.
     pub styles: Vec<Style>,
+    /// Dialogue and other events from `[Events]`.
     pub events: Vec<Event>,
+    /// Embedded font references from `[Fonts]`.
     pub embedded_fonts: Vec<EmbeddedFont>,
 }
 
@@ -128,6 +148,7 @@ impl Default for AssFile {
 }
 
 impl AssFile {
+    /// Creates an empty ASS file with default script info (1920x1080, v4.00+).
     pub fn new() -> Self {
         Self {
             format: SubtitleFormat::Ass,
@@ -138,6 +159,40 @@ impl AssFile {
         }
     }
 
+    /// Parse ASS/SSA/SRT content from a string.
+    ///
+    /// Supports `[Script Info]`, `[V4+ Styles]`, `[V4 Styles]`, `[Events]`,
+    /// and `[Fonts]` sections. Lines starting with `;` or `!` are treated as
+    /// comments and skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if a required field is malformed (e.g. invalid
+    /// style format line, unparseable event timestamp).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ass_parser::AssFile;
+    ///
+    /// let content = r#"
+    /// [Script Info]
+    /// Title: Test
+    /// PlayResX: 1920
+    /// PlayResY: 1080
+    ///
+    /// [V4+ Styles]
+    /// Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+    /// Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+    ///
+    /// [Events]
+    /// Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+    /// Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Hello World
+    /// "#;
+    ///
+    /// let ass = AssFile::parse(content).unwrap();
+    /// assert_eq!(ass.events.len(), 1);
+    /// ```
     pub fn parse(content: &str) -> Result<Self, ParseError> {
         let mut ass = Self::new();
         let mut current_section = String::new();
@@ -153,7 +208,8 @@ impl AssFile {
             }
             match current_section.as_str() {
                 "Script Info" => ass.parse_script_info(line)?,
-                "V4+ Styles" | "V4 Styles" => ass.parse_style_line(line)?,
+                "V4+ Styles" => ass.parse_style_line(line, false)?,
+                "V4 Styles" => ass.parse_style_line(line, true)?,
                 "Events" => ass.parse_event_line(line)?,
                 "Fonts" => ass.parse_font_line(line),
                 _ => {}
@@ -185,11 +241,19 @@ impl AssFile {
                 "Script Info" => {
                     let _ = ass.parse_script_info(line);
                 }
-                "V4+ Styles" | "V4 Styles" => {
+                "V4+ Styles" => {
                     if line.starts_with("Format:") {
                         continue;
                     }
-                    if let Err(e) = ass.parse_style_line(line) {
+                    if let Err(e) = ass.parse_style_line(line, false) {
+                        errors.push(e);
+                    }
+                }
+                "V4 Styles" => {
+                    if line.starts_with("Format:") {
+                        continue;
+                    }
+                    if let Err(e) = ass.parse_style_line(line, true) {
                         errors.push(e);
                     }
                 }
@@ -208,6 +272,15 @@ impl AssFile {
         (ass, errors)
     }
 
+    /// Parse an ASS/SSA/SRT file from disk.
+    ///
+    /// Reads the file content, detects the format from the file extension,
+    /// and parses it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if the file cannot be read or contains invalid
+    /// subtitle data.
     pub fn parse_file(path: &Path) -> Result<Self, ParseError> {
         let content = std::fs::read_to_string(path)?;
         let format = SubtitleFormat::detect(path).unwrap_or(SubtitleFormat::Ass);
@@ -238,10 +311,14 @@ impl AssFile {
         Ok(())
     }
 
-    fn parse_style_line(&mut self, line: &str) -> Result<(), ParseError> {
+    fn parse_style_line(&mut self, line: &str, is_v4: bool) -> Result<(), ParseError> {
         if line.starts_with("Style:") {
             let style_data = line.trim_start_matches("Style:").trim();
-            let style = Style::parse_from_line(style_data)?;
+            let style = if is_v4 {
+                Style::parse_from_line_v4(style_data)?
+            } else {
+                Style::parse_from_line(style_data)?
+            };
             self.styles.push(style);
         }
         Ok(())
@@ -259,6 +336,7 @@ impl AssFile {
         Ok(())
     }
 
+    /// Returns an iterator over dialogue events only (skips comments, pictures, etc.).
     pub fn dialogue_events(&self) -> impl Iterator<Item = &Event> {
         self.events.iter().filter(|e| e.is_dialogue())
     }
@@ -304,10 +382,12 @@ impl AssFile {
         loaded
     }
 
+    /// Find a style by name.
     pub fn find_style(&self, name: &str) -> Option<&Style> {
         self.styles.iter().find(|s| s.name == name)
     }
 
+    /// Returns the script resolution as (width, height) from `[Script Info]`.
     pub fn resolution(&self) -> (u32, u32) {
         (self.script_info.play_res_x, self.script_info.play_res_y)
     }

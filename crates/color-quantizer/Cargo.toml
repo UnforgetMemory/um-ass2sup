@@ -7,3 +7,6 @@ description = "Color quantization for PGS subtitle encoding (max 256 colors)"
 [dependencies]
 thiserror = "1"
 tracing = "0.1"
+
+[dev-dependencies]
+proptest = "1"

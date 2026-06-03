@@ -110,7 +110,7 @@ pub struct RenderContext {
     pub scale_y: f32,
     /// Extra letter spacing in pixels (set by `\fsp`).
     pub spacing: f32,
-    /// ASS numpad alignment 1–9 (set by `\an`, `\a`). See [`alignment_to_pos`](crate::Renderer::alignment_to_pos).
+    /// ASS numpad alignment 1–9 (set by `\an`, `\a`). See [`alignment_to_pos`](crate::alignment_to_pos).
     pub alignment: u8,
     /// Left margin override in pixels.
     pub margin_l: f32,

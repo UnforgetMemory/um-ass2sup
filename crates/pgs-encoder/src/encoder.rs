@@ -99,7 +99,7 @@ impl PgsEncoder {
 
     /// Encode a quantized frame directly to SUP binary bytes.
     ///
-    /// Convenience wrapper around [`encode_frame`] that serializes all segments
+    /// Convenience wrapper around [`encode_frame`](Self::encode_frame) that serializes all segments
     /// to bytes in one call.
     pub fn encode_frame_to_bytes(&mut self, frame: &QuantizedFrame, pts_ms: u64, duration_ms: u64) -> Vec<u8> {
         let segments = self.encode_frame(frame, pts_ms, duration_ms);

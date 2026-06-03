@@ -143,6 +143,37 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\\pos(960,540)}Centered text
     assert!(ass.events[0].has_override_tags());
 }
 
+const SSA_V4_FIXTURE: &str = include_str!("../../../tests/fixtures/ssa_v4.ass");
+
+#[test]
+fn test_parse_ssa_v4_fixture() {
+    let ass = AssFile::parse(SSA_V4_FIXTURE).expect("ssa_v4.ass should parse");
+    assert_eq!(ass.styles.len(), 1);
+    assert_eq!(ass.styles[0].name, "Default");
+    assert_eq!(ass.styles[0].font_name, "Arial");
+    assert!((ass.styles[0].font_size - 48.0).abs() < f64::EPSILON);
+    assert!(!ass.styles[0].bold);
+    assert!(!ass.styles[0].italic);
+    assert!(!ass.styles[0].underline);
+    assert!(!ass.styles[0].strikeout);
+    assert_eq!(ass.events.len(), 3);
+    assert!(ass.events.iter().all(|e| e.is_dialogue()));
+}
+
+#[test]
+fn test_parse_ssa_v4_events_text() {
+    let ass = AssFile::parse(SSA_V4_FIXTURE).expect("ssa_v4.ass should parse");
+    assert_eq!(ass.events[0].text, "SSA v4 format subtitle");
+    assert_eq!(ass.events[1].text, "Second SSA v4 event");
+    assert_eq!(ass.events[2].text, r#"With {\b1}bold{\b0} tag"#);
+}
+
+#[test]
+fn test_parse_ssa_v4_resolution() {
+    let ass = AssFile::parse(SSA_V4_FIXTURE).expect("ssa_v4.ass should parse");
+    assert_eq!(ass.resolution(), (1920, 1080));
+}
+
 #[test]
 fn test_parse_format_detection() {
     use ass_parser::SubtitleFormat;

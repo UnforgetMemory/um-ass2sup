@@ -8,21 +8,21 @@
 ///
 /// | Tag | Variant | Description |
 /// |-----|---------|-------------|
-/// | `\pos(x,y)` | [`Pos`] | Fixed screen position |
-/// | `\move(x1,y1,x2,y2,t1,t2)` | [`Move`] | Animated movement |
-/// | `\fad(in,out)` | [`Fade`] | Simple fade in/out (ms) |
-/// | `\fade(a1,a2,a3,t1,t2,t3,t4)` | [`FadeComplex`] | 3-segment alpha animation |
-/// | `\t(tag,t1,t2,accel)` | [`Transform`] | Animated attribute interpolation |
-/// | `\b1`/`\b0` | [`Bold`] | Toggle bold |
-/// | `\bN` | [`BoldWeight`] | Set font weight (100-900) |
-/// | `\i1`/`\i0` | [`Italic`] | Toggle italic |
-/// | `\fn[name]` | [`FontName`] | Change font family |
-/// | `\fs[size]` | [`FontSize`] | Change font size |
-/// | `\frz(angle)` | [`Rotation`] | Z-axis rotation (degrees) |
-/// | `\fscx(pct)`/`\fscy(pct)` | [`Scale`] | Scale X/Y (percentage) |
-/// | `\clip(x1,y1,x2,y2)` | [`Clip`] | Rectangular clip region |
-/// | `\iclip(x1,y1,x2,y2)` | [`ClipInverse`] | Inverse rectangular clip |
-/// | `\k`/`\kf`/`\ko`/`\kt` | [`Karaoke`] | Karaoke timing |
+/// | `\pos(x,y)` | [`OverrideTag::Pos`] | Fixed screen position |
+/// | `\move(x1,y1,x2,y2,t1,t2)` | [`OverrideTag::Move`] | Animated movement |
+/// | `\fad(in,out)` | [`OverrideTag::Fade`] | Simple fade in/out (ms) |
+/// | `\fade(a1,a2,a3,t1,t2,t3,t4)` | [`OverrideTag::FadeComplex`] | 3-segment alpha animation |
+/// | `\t(tag,t1,t2,accel)` | [`OverrideTag::Transform`] | Animated attribute interpolation |
+/// | `\b1`/`\b0` | [`OverrideTag::Bold`] | Toggle bold |
+/// | `\bN` | [`OverrideTag::BoldWeight`] | Set font weight (100-900) |
+/// | `\i1`/`\i0` | [`OverrideTag::Italic`] | Toggle italic |
+/// | `\fn[name]` | [`OverrideTag::FontName`] | Change font family |
+/// | `\fs[size]` | [`OverrideTag::FontSize`] | Change font size |
+/// | `\frz(angle)` | [`OverrideTag::Rotation`] | Z-axis rotation (degrees) |
+/// | `\fscx(pct)`/`\fscy(pct)` | [`OverrideTag::Scale`] | Scale X/Y (percentage) |
+/// | `\clip(x1,y1,x2,y2)` | [`OverrideTag::Clip`] | Rectangular clip region |
+/// | `\iclip(x1,y1,x2,y2)` | [`OverrideTag::ClipInverse`] | Inverse rectangular clip |
+/// | `\k`/`\kf`/`\ko`/`\kt` | Karaoke | Karaoke timing |
 ///
 /// See the [ASS specification](http://www.tcax.org/docs/ass-specs.htm) for the full tag list.
 #[derive(Debug, Clone, PartialEq)]
