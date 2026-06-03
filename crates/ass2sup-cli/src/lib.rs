@@ -22,6 +22,7 @@ use tracing::{error, info, warn};
 use walkdir::WalkDir;
 
 use ass_parser::{AssFile, SubtitleFormat};
+use bdn_xml::{BdnEvent, BdnXml};
 use color_quantizer::{quantize_with_palette, DitherMethod, Quantizer, Rgba};
 use pgs_encoder::PgsEncoder;
 use subtitle_renderer::{RenderConfig, Renderer};
@@ -130,6 +131,10 @@ pub struct Args {
     /// Convert to SRT format instead of SUP/PGS
     #[arg(long)]
     pub to_srt: bool,
+
+    /// Convert to BDN XML + PNG format (Blu-ray authoring)
+    #[arg(long, conflicts_with = "to_srt")]
+    pub to_bdn: bool,
 }
 
 #[derive(Debug)]
@@ -506,6 +511,142 @@ pub fn convert_file(
     })
 }
 
+/// Convert ASS to BDN XML + per-frame PNGs in an output directory.
+///
+/// Mirrors the structure of `convert_file` but produces:
+/// - `{stem}/BDN.xml` (BDN XML manifest referencing PNGs)
+/// - `{stem}/0001.png`, `{stem}/0002.png`, ... (one indexed PNG per dialogue event)
+pub fn convert_to_bdn(
+    input: &Path,
+    output_dir: &Path,
+    args: &Args,
+    res: &Resolution,
+) -> Result<ConversionStats, String> {
+    info!("Processing for BDN: {}", input.display());
+
+    let content = std::fs::read_to_string(input)
+        .map_err(|e| format!("Failed to read input file: {e}"))?;
+
+    let mut ass = AssFile::parse(&content)
+        .map_err(|e| format!("Failed to parse subtitle: {e}"))?;
+
+    info!(
+        "Parsed: {} styles, {} events",
+        ass.styles.len(),
+        ass.events.len()
+    );
+
+    std::fs::create_dir_all(output_dir)
+        .map_err(|e| format!("Failed to create output dir: {e}"))?;
+
+    let render_config = RenderConfig {
+        width: res.width,
+        height: res.height,
+        script_width: ass.script_info.play_res_x,
+        script_height: ass.script_info.play_res_y,
+        default_font: args.font.clone(),
+        default_font_size: args.font_size as f32,
+    };
+    let mut renderer = Renderer::new(render_config);
+
+    let font_data_list =
+        ass.load_embedded_fonts(input.parent().unwrap_or(std::path::Path::new(".")));
+    for (_font_name, font_data) in font_data_list {
+        let _id = renderer.font_manager_mut().load_font_data(font_data);
+    }
+
+    let dither_method = match args.dither.as_str() {
+        "none" => DitherMethod::None,
+        "ordered" => DitherMethod::Ordered,
+        _ => DitherMethod::FloydSteinberg,
+    };
+
+    let quantizer = Quantizer::new(args.max_colors).with_dither(dither_method);
+
+    let dialogues: Vec<_> = ass.dialogue_events().cloned().collect();
+    let total = dialogues.len() as u64;
+
+    if total == 0 {
+        warn!("No dialogue events found; emitting empty BDN XML");
+    }
+
+    let stem = input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("subtitle");
+    let mut bdn = BdnXml::new(stem, res.width, res.height);
+    bdn.frame_rate = format!("{}", args.fps);
+
+    let mut events_processed = 0u64;
+    let mut frames_encoded = 0u64;
+    let mut total_png_bytes: usize = 0;
+
+    for (i, event) in dialogues.iter().enumerate() {
+        let pts_ms = event.start.as_ms();
+        let duration_ms = event.duration_ms();
+        let out_ms = pts_ms + duration_ms;
+
+        let frame_opt = renderer.render_ass(&ass, pts_ms);
+        if let Some(frame) = frame_opt {
+            let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
+
+            // Convert quantizer Vec<Rgba> to Vec<[u8; 4]> for bdn-xml
+            let palette: Vec<[u8; 4]> = quantized.palette.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
+
+            let png_filename = format!("{:04}.png", i + 1);
+            let png_path = output_dir.join(&png_filename);
+            bdn_xml::save_frame_png(
+                &png_path,
+                &palette,
+                &quantized.indices,
+                quantized.width,
+                quantized.height,
+            )
+            .map_err(|e| format!("Failed to save PNG {}: {e}", png_filename))?;
+
+            total_png_bytes += quantized.indices.len() + palette.len() * 4;
+
+            let in_tc = bdn_xml::ms_to_timecode(pts_ms, args.fps);
+            let out_tc = bdn_xml::ms_to_timecode(out_ms, args.fps);
+
+            bdn.add_event(BdnEvent {
+                index: (i + 1) as u32,
+                in_tc,
+                out_tc,
+                graphic: png_filename,
+                x: 0,
+                y: 0,
+                width: quantized.width,
+                height: quantized.height,
+                forced: false,
+            });
+
+            frames_encoded += 1;
+        }
+        events_processed += 1;
+    }
+
+    let xml = bdn_xml::generate_xml(&bdn)
+        .map_err(|e| format!("Failed to generate BDN XML: {e}"))?;
+    let xml_path = output_dir.join("BDN.xml");
+    std::fs::write(&xml_path, &xml)
+        .map_err(|e| format!("Failed to write BDN XML: {e}"))?;
+
+    info!(
+        "BDN output: {} ({} events, {} PNGs, ~{} bytes total)",
+        output_dir.display(),
+        events_processed,
+        frames_encoded,
+        total_png_bytes + xml.len()
+    );
+
+    Ok(ConversionStats {
+        events_processed,
+        frames_encoded,
+        output_size: total_png_bytes + xml.len(),
+    })
+}
+
 /// Run the CLI conversion with parsed arguments.
 ///
 /// This function performs the full workflow:
@@ -563,6 +704,25 @@ pub fn run(args: Args) -> Result<(), CliError> {
                 .map_err(|e| CliError::Conversion(format!("Failed to write SRT: {e}")))?;
 
             info!("{} → {}", input.display(), output.display());
+        }
+        return Ok(());
+    }
+
+    // --to-bdn mode: convert ASS to BDN XML + per-frame PNGs
+    if args.to_bdn {
+        for input in &inputs {
+            let stem = input
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("subtitle");
+            let output_dir = if let Some(ref dir) = args.output_dir {
+                dir.join(stem)
+            } else {
+                PathBuf::from(stem)
+            };
+            convert_to_bdn(input, &output_dir, &args, &res)
+                .map_err(CliError::Conversion)?;
+            info!("{} → {}/", input.display(), output_dir.display());
         }
         return Ok(());
     }
