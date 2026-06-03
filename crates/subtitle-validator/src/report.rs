@@ -88,7 +88,7 @@ impl fmt::Display for ValidationStage {
 /// | [`RuleId::V011`] | Timing format (`H:MM:SS.CC`) |
 /// | [`RuleId::V012`] | Style reference validity |
 /// | [`RuleId::V013`] | Overlap detection |
-/// | [`RuleId::V014`] | Unused style detection |
+/// | [`RuleId::V014`] | Karaoke override tag consistency |
 /// | [`RuleId::V015`] | Semantic consistency |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RuleId(pub u16);

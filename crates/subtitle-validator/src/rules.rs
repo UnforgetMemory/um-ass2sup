@@ -267,11 +267,25 @@ fn validate_events(events: &[Event], styles: &[Style], report: &mut ValidationRe
 
 fn validate_semantics(ass: &AssFile, report: &mut ValidationReport) {
     // V014: Karaoke events with missing karaoke tags
-    for event in &ass.events {
+    for (i, event) in ass.events.iter().enumerate() {
         if event.has_karaoke() {
-            let _has_k_tag = event.override_tags.iter().any(|t| {
+            let has_k_tag = event.override_tags.iter().any(|t| {
                 matches!(t, OverrideTag::Karaoke { .. })
             });
+            if !has_k_tag {
+                report.add_finding(ValidationFinding {
+                    rule_id: RuleId::V014,
+                    stage: ValidationStage::Semantic,
+                    severity: Severity::Warning,
+                    line: None,
+                    column: None,
+                    message: format!(
+                        "Event #{}: karaoke segments detected without \\k override tag",
+                        i
+                    ),
+                    suggestion: Some("Add \\k<duration> override tag or remove karaoke segments".to_string()),
+                });
+            }
         }
     }
 
@@ -484,4 +498,127 @@ fn has_effects(event: &Event) -> bool {
                 | OverrideTag::Move { .. }
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
+    use ass_parser::{Effect, SubtitleFormat, Timestamp};
+
+    #[test]
+    fn test_v014_non_karaoke_no_finding() {
+        let ass = AssFile {
+            format: SubtitleFormat::Ass,
+            script_info: ScriptInfo::default(),
+            styles: vec![],
+            events: vec![Event {
+                event_type: EventType::Dialogue,
+                layer: 0,
+                start: Timestamp::ZERO,
+                end: Timestamp::from_ms(5000),
+                style_name: "Default".into(),
+                name: String::new(),
+                margin_l: 0,
+                margin_r: 0,
+                margin_v: 0,
+                effect: Effect::None,
+                text: "Hello World".into(),
+                override_tags: vec![],
+                karaoke_segments: vec![],
+                raw_override_block: String::new(),
+            }],
+            embedded_fonts: vec![],
+        };
+        let mut report = ValidationReport::new();
+        validate_semantics(&ass, &mut report);
+        let v014: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V014).collect();
+        assert!(v014.is_empty(), "Non-karaoke event should not trigger V014");
+    }
+
+    #[test]
+    fn test_v014_parsed_karaoke_no_finding() {
+        // A parsed karaoke event with {\k50} has both karaoke_segments AND
+        // OverrideTag::Karaoke — no V014 should fire (consistent state)
+        let ass = AssFile::parse(
+            "[Script Info]\n\
+             ScriptType: v4.00+\n\
+             PlayResX: 1920\n\
+             PlayResY: 1080\n\
+             \n\
+             [V4+ Styles]\n\
+             Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, \
+             OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, \
+             ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, \
+             Alignment, MarginL, MarginR, MarginV, Encoding\n\
+             Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,\
+             0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\
+             \n\
+             [Events]\n\
+             Format: Layer, Start, End, Style, Name, MarginL, MarginR, \
+             MarginV, Effect, Text\n\
+             Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\\k50}lyrics\n",
+        )
+        .unwrap();
+        let mut report = ValidationReport::new();
+        validate_semantics(&ass, &mut report);
+        let v014: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V014).collect();
+        assert!(
+            v014.is_empty(),
+            "Parsed karaoke event with \\k tag should not trigger V014: {:?}",
+            v014
+        );
+    }
+
+    #[test]
+    fn test_v014_inconsistent_karaoke_triggers_warning() {
+        // Event with karaoke_segments but no OverrideTag::Karaoke => V014
+        let ass = AssFile {
+            format: SubtitleFormat::Ass,
+            script_info: ScriptInfo::default(),
+            styles: vec![],
+            events: vec![Event {
+                event_type: EventType::Dialogue,
+                layer: 0,
+                start: Timestamp::ZERO,
+                end: Timestamp::from_ms(1000),
+                style_name: "Default".into(),
+                name: String::new(),
+                margin_l: 0,
+                margin_r: 0,
+                margin_v: 0,
+                effect: Effect::None,
+                text: "inconsistent".into(),
+                override_tags: vec![], // deliberately missing OverrideTag::Karaoke
+                karaoke_segments: vec![KaraokeSegment::new(
+                    KaraokeStyle::Instant,
+                    500,
+                    "ly".into(),
+                    0,
+                )],
+                raw_override_block: String::new(),
+            }],
+            embedded_fonts: vec![],
+        };
+        let mut report = ValidationReport::new();
+        validate_semantics(&ass, &mut report);
+        let v014: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V014).collect();
+        assert_eq!(v014.len(), 1, "Should trigger exactly one V014 warning");
+        assert_eq!(v014[0].severity, Severity::Warning);
+        assert_eq!(v014[0].stage, ValidationStage::Semantic);
+        assert!(
+            v014[0].message.contains("karaoke segments detected"),
+            "Message should mention karaoke segments: {}",
+            v014[0].message
+        );
+        assert!(v014[0].suggestion.is_some());
+        assert!(
+            v014[0]
+                .suggestion
+                .as_ref()
+                .unwrap()
+                .contains("\\k<duration>"),
+            "Suggestion should mention \\k<duration>"
+        );
+    }
 }
