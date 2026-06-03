@@ -128,6 +128,8 @@ pub enum OverrideTag {
     Shear { x: f64, y: f64 },
     /// Unrecognized override tag (preserved as raw string).
     Unknown(String),
+    /// `\!` — suppresses \t animations, forces end state immediately.
+    AnimationSkip,
 }
 
 /// Splits a string by commas that are NOT inside parentheses.
@@ -155,6 +157,9 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
     let s = s.trim();
     if s.is_empty() {
         return None;
+    }
+    if s == "!" {
+        return Some(OverrideTag::AnimationSkip);
     }
     if s.starts_with("pos(") {
         let inner = s.trim_start_matches("pos(").trim_end_matches(')');

@@ -161,6 +161,8 @@ pub struct RenderContext {
     pub drawing_mode: u8,
     /// ASS border style: 1 = outline+drop shadow, 3 = opaque box.
     pub border_style: u8,
+    /// If true, \t animations snap to end state immediately (set by `\!`).
+    pub animation_skip: bool,
 }
 
 impl Default for RenderContext {
@@ -215,6 +217,7 @@ impl Default for RenderContext {
             baseline_offset: 0.0,
             drawing_mode: 0,
             border_style: 1,
+            animation_skip: false,
         }
     }
 }

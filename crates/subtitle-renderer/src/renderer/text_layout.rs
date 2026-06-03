@@ -20,6 +20,36 @@ pub fn alignment_to_pos(alignment: u8) -> (f32, f32) {
     }
 }
 
+pub(super) fn remap_alignment_vertical(alignment: u8, writing_mode: u8) -> u8 {
+    match writing_mode {
+        2 => match alignment {
+            1 => 3,
+            2 => 6,
+            3 => 9,
+            4 => 2,
+            5 => 5,
+            6 => 8,
+            7 => 1,
+            8 => 4,
+            9 => 7,
+            _ => alignment,
+        },
+        3 => match alignment {
+            1 => 7,
+            2 => 4,
+            3 => 1,
+            4 => 8,
+            5 => 5,
+            6 => 2,
+            7 => 9,
+            8 => 6,
+            9 => 3,
+            _ => alignment,
+        },
+        _ => alignment,
+    }
+}
+
 /// Removes ASS override blocks (`{...}`) from text, returning plain text for rendering.
 pub fn strip_override_blocks(text: &str) -> String {
     let mut result = String::new();
@@ -130,6 +160,30 @@ pub(super) fn wrap_text(
             result
         }
     }
+}
+
+pub(super) fn wrap_text_vertical(
+    text: &str,
+    available_height: f32,
+    line_height: f32,
+) -> Vec<String> {
+    let chars: Vec<char> = text.chars().filter(|c| *c != '\n').collect();
+    if chars.is_empty() {
+        return Vec::new();
+    }
+
+    let chars_per_column = (available_height / line_height).floor().max(1.0) as usize;
+    let mut columns = Vec::new();
+    let mut i = 0;
+
+    while i < chars.len() {
+        let end = (i + chars_per_column).min(chars.len());
+        let column: String = chars[i..end].iter().collect();
+        columns.push(column);
+        i = end;
+    }
+
+    columns
 }
 
 #[cfg(test)]

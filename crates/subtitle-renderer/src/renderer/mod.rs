@@ -15,7 +15,7 @@ use crate::transform::AffineTransform;
 use animation::{interpolate_move, compute_fad_alpha, compute_fade_complex, apply_transform_tag, parse_override_block};
 use compositing::{apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_subregion, compute_tight_bbox};
 use drawing::{DrawingCommand, parse_drawing_level, parse_drawing_commands};
-use text_layout::wrap_text;
+use text_layout::{wrap_text, wrap_text_vertical, remap_alignment_vertical};
 
 mod animation;
 pub mod compositing;
@@ -387,6 +387,7 @@ impl Renderer {
                         ctx.border_style = s.border_style;
                         ctx.perspective_x = 0.0;
                         ctx.perspective_y = 0.0;
+                        ctx.animation_skip = false;
                     }
                 }
                 OverrideTag::ResetAll => {
@@ -405,6 +406,7 @@ impl Renderer {
                     ctx.baseline_offset = 0.0;
                     ctx.perspective_x = 0.0;
                     ctx.perspective_y = 0.0;
+                    ctx.animation_skip = false;
                 }
                 OverrideTag::WritingMode(mode) => {
                     ctx.writing_mode = *mode;
@@ -414,6 +416,9 @@ impl Renderer {
                 }
                 OverrideTag::DrawingMode(level) => {
                     ctx.drawing_mode = *level;
+                }
+                OverrideTag::AnimationSkip => {
+                    ctx.animation_skip = true;
                 }
                 OverrideTag::Unknown(tag) => {
                     tracing::warn!(tag = %tag, "unrecognized override tag ignored");
@@ -494,7 +499,12 @@ impl Renderer {
 
         let drawing_level = parse_drawing_level(&event.text);
 
-        if drawing_level > 0 {
+        // \p4: drawing commands used as clip mask for text.
+        // We render text normally first, then apply the drawing as a clip mask afterward.
+        // Store the flag here; the clip mask is applied after Phase 7 compositing.
+        let is_p4_clip = drawing_level == 4;
+
+        if drawing_level > 0 && !is_p4_clip {
             self.render_drawing(pixmap, &plain_text, &ctx, drawing_level);
             return;
         }
@@ -502,11 +512,240 @@ impl Renderer {
         let shaper = Shaper::new(&self.font_manager);
 
         let available_width = self.config.width as f32 - ctx.margin_l - ctx.margin_r;
-        let lines = wrap_text(&plain_text, ctx.wrap_style, &shaper, font_id, ctx.font_size, ctx.spacing, available_width);
+        let available_height = self.config.height as f32 - ctx.margin_v * 2.0;
         let line_height = ctx.font_size * 1.2;
 
         let w = pixmap.width();
         let h = pixmap.height();
+
+        let is_vertical = ctx.writing_mode == 2 || ctx.writing_mode == 3;
+
+        if is_vertical {
+            let columns = wrap_text_vertical(&plain_text, available_height, line_height);
+            if columns.is_empty() {
+                return;
+            }
+
+            let mut shaped_lines: Vec<ShapedLine> = Vec::new();
+            let remapped_alignment = remap_alignment_vertical(ctx.alignment, ctx.writing_mode);
+            let align_col = remapped_alignment % 3;
+
+            let total_width = columns.len() as f32 * line_height;
+            let x_base = match align_col {
+                2 => ctx.x + (available_width - total_width) / 2.0,
+                0 => ctx.x + available_width - total_width,
+                _ => ctx.x,
+            };
+
+            for (col_idx, column) in columns.iter().enumerate() {
+                let col_x = if ctx.writing_mode == 2 {
+                    x_base + (columns.len() - 1 - col_idx) as f32 * line_height
+                } else {
+                    x_base + col_idx as f32 * line_height
+                };
+
+                for (char_idx, ch) in column.chars().enumerate() {
+                    let ch_str = ch.to_string();
+                    let shaped = match shaper.shape(&ch_str, font_id, ctx.font_size) {
+                        Ok(s) => s,
+                        Err(_) => continue,
+                    };
+                    let char_y = ctx.y + char_idx as f32 * line_height;
+                    let x_start = col_x;
+                    shaped_lines.push(ShapedLine { shaped, line_y: char_y, x_start });
+                }
+            }
+
+            if shaped_lines.is_empty() {
+                return;
+            }
+
+            let can_sub = ctx.rotation == 0.0
+                && ctx.shear_x == 0.0
+                && ctx.shear_y == 0.0
+                && ctx.perspective_x == 0.0
+                && ctx.perspective_y == 0.0
+                && !ctx.clip_enabled
+                && ctx.clip_drawing_commands.is_none();
+
+            let sub_bbox = if can_sub {
+                compute_tight_bbox(&shaped_lines, &shaper, font_id, ctx.font_size, &ctx)
+            } else {
+                None
+            };
+
+            let (pad_border, pad_shadow) = if ctx.border_style == 3 {
+                (0.0, 0.0)
+            } else {
+                let border = ctx.outline_width.max(ctx.outline_x_width).max(ctx.outline_y_width);
+                let shadow = ctx.shadow_depth.max(ctx.shadow_x).max(ctx.shadow_y);
+                (border * 2.0, shadow)
+            };
+            let (ox, oy, lw, lh, use_sub) = if let Some((min_x, min_y, max_x, max_y)) = sub_bbox {
+                let pad = (pad_border + pad_shadow + ctx.blur).max(20.0);
+                let ox = (min_x - pad).floor().max(0.0) as u32;
+                let oy = (min_y - pad).floor().max(0.0) as u32;
+                let lw = ((max_x - min_x) + pad * 2.0).ceil().max(1.0) as u32;
+                let lh = ((max_y - min_y) + pad * 2.0).ceil().max(1.0) as u32;
+                let lw = lw.min(w.saturating_sub(ox)).max(1);
+                let lh = lh.min(h.saturating_sub(oy)).max(1);
+                (ox, oy, lw, lh, true)
+            } else {
+                (0, 0, w, h, false)
+            };
+
+            let mut layer = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+            let oxf = ox as f32;
+            let oyf = oy as f32;
+
+            let render_ctx = if ctx.border_style == 3 {
+                let mut bg_paint = Paint::default();
+                bg_paint.set_color_rgba8(
+                    ctx.shadow_color[0],
+                    ctx.shadow_color[1],
+                    ctx.shadow_color[2],
+                    255,
+                );
+                if lw > 0 && lh > 0 {
+                    if let Some(rect) = Rect::from_xywh(0.0, 0.0, lw as f32, lh as f32) {
+                        let mut pb = PathBuilder::new();
+                        pb.push_rect(rect);
+                        if let Some(path) = pb.finish() {
+                            layer.fill_path(&path, &bg_paint, FillRule::Winding, SkiaTransform::identity(), None);
+                        }
+                    }
+                }
+                let mut render_ctx = ctx.clone();
+                render_ctx.outline_width = 0.0;
+                render_ctx.outline_x_width = 0.0;
+                render_ctx.outline_y_width = 0.0;
+                render_ctx
+            } else {
+                ctx.clone()
+            };
+
+            for sl in &shaped_lines {
+                for glyph in &sl.shaped.glyphs {
+                    let x = sl.x_start + glyph.x_offset - oxf;
+                    let y = sl.line_y + glyph.y_offset - oyf;
+                    Rasterizer::rasterize_glyph(&mut layer, &self.font_manager, font_id, glyph, x, y, &render_ctx);
+                }
+
+                if render_ctx.underline {
+                    let uy = sl.line_y + ctx.font_size * 0.1 - oyf;
+                    let x0 = sl.x_start - oxf;
+                    let x1 = x0 + sl.shaped.total_advance;
+                    let line_thickness = ctx.font_size * 0.05;
+                    let mut pb = tiny_skia::PathBuilder::new();
+                    pb.move_to(x0, uy);
+                    pb.line_to(x1, uy);
+                    pb.close();
+                    if let Some(path) = pb.finish() {
+                        let mut paint = Paint::default();
+                        paint.set_color_rgba8(
+                            render_ctx.primary_color[0],
+                            render_ctx.primary_color[1],
+                            render_ctx.primary_color[2],
+                            render_ctx.primary_color[3],
+                        );
+                        let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
+                        layer.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                    }
+                }
+
+                if render_ctx.strikeout {
+                    let sy = sl.line_y - ctx.font_size * 0.35 - oyf;
+                    let x0 = sl.x_start - oxf;
+                    let x1 = x0 + sl.shaped.total_advance;
+                    let line_thickness = ctx.font_size * 0.05;
+                    let mut pb = tiny_skia::PathBuilder::new();
+                    pb.move_to(x0, sy);
+                    pb.line_to(x1, sy);
+                    pb.close();
+                    if let Some(path) = pb.finish() {
+                        let mut paint = Paint::default();
+                        paint.set_color_rgba8(
+                            render_ctx.primary_color[0],
+                            render_ctx.primary_color[1],
+                            render_ctx.primary_color[2],
+                            render_ctx.primary_color[3],
+                        );
+                        let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
+                        layer.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                    }
+                }
+            }
+
+            if ctx.border_style != 3 && ctx.blur > 0.0 {
+                effects::apply_gaussian_blur(&mut layer, ctx.blur);
+            }
+
+            if ctx.border_style != 3 && ctx.shadow_depth > 0.0 {
+                let layer_data = layer.data().to_vec();
+                let shadow_layer = effects::apply_shadow(
+                    &layer_data,
+                    lw,
+                    lh,
+                    if ctx.shadow_x != 0.0 { ctx.shadow_x } else { ctx.shadow_depth },
+                    if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
+                    ctx.blur,
+                    ctx.shadow_color,
+                );
+                let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+                shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
+                effects::composite_over(layer.data_mut(), shadow_pixmap.data(), lw, lh);
+                self.pixmap_pool.lock().unwrap().put(shadow_pixmap);
+            }
+
+            if use_sub {
+                if ctx.alpha_multiplier < 0.999 {
+                    apply_alpha_multiplier(layer.data_mut(), ctx.alpha_multiplier);
+                }
+                composite_subregion(pixmap.data_mut(), layer.data(), w, h, ox, oy, lw, lh);
+            } else {
+                let transform = AffineTransform::identity();
+
+                let final_data = if transform.is_identity() && ctx.perspective_x == 0.0 && ctx.perspective_y == 0.0 {
+                    layer.data().to_vec()
+                } else if ctx.perspective_x != 0.0 || ctx.perspective_y != 0.0 {
+                    transform.apply_with_perspective(
+                        layer.data(), w, h, w, h,
+                        ctx.perspective_x, ctx.perspective_y,
+                        ctx.origin_x, ctx.origin_y,
+                    )
+                } else {
+                    transform.apply_to_pixmap(layer.data(), w, h, w, h)
+                };
+
+                if ctx.clip_enabled {
+                    let mut clipped = final_data;
+                    if ctx.clip_drawing_commands.is_some() {
+                        let sx = self.config.width as f32 / self.config.script_width as f32;
+                        let sy = self.config.height as f32 / self.config.script_height as f32;
+                        apply_drawing_clip_mask(&mut clipped, w, h, &ctx, sx, sy);
+                    } else {
+                        apply_clip_mask(&mut clipped, w, h, &ctx);
+                    }
+                    if ctx.alpha_multiplier < 0.999 {
+                        apply_alpha_multiplier(&mut clipped, ctx.alpha_multiplier);
+                    }
+                    effects::composite_over(pixmap.data_mut(), &clipped, w, h);
+                } else {
+                    if ctx.alpha_multiplier < 0.999 {
+                        let mut alpha_data = final_data;
+                        apply_alpha_multiplier(&mut alpha_data, ctx.alpha_multiplier);
+                        effects::composite_over(pixmap.data_mut(), &alpha_data, w, h);
+                    } else {
+                        effects::composite_over(pixmap.data_mut(), &final_data, w, h);
+                    }
+                }
+            }
+
+            self.pixmap_pool.lock().unwrap().put(layer);
+            return;
+        }
+
+        let lines = wrap_text(&plain_text, ctx.wrap_style, &shaper, font_id, ctx.font_size, ctx.spacing, available_width);
         let align_col = ctx.alignment % 3;
 
         // Phase 1: Shape all lines, store results for bbox computation and rendering.
@@ -694,15 +933,9 @@ impl Renderer {
             composite_subregion(pixmap.data_mut(), layer.data(), w, h, ox, oy, lw, lh);
         } else {
             // Full-frame path: apply transform, clip, alpha — identical to original.
-            let mut transform = AffineTransform::rotate_at(ctx.rotation, ctx.origin_x, ctx.origin_y)
+            let transform = AffineTransform::rotate_at(ctx.rotation, ctx.origin_x, ctx.origin_y)
                 .then(&AffineTransform::scale(ctx.scale_x / 100.0, ctx.scale_y / 100.0))
                 .then(&AffineTransform::shear(ctx.shear_x, ctx.shear_y));
-
-            if ctx.writing_mode == 2 {
-                transform = transform.then(&AffineTransform::rotate_at(-90.0, ctx.x, ctx.y));
-            } else if ctx.writing_mode == 3 {
-                transform = transform.then(&AffineTransform::rotate_at(90.0, ctx.x, ctx.y));
-            }
 
             let final_data = if transform.is_identity() && ctx.perspective_x == 0.0 && ctx.perspective_y == 0.0 {
                 layer.data().to_vec()
@@ -742,6 +975,48 @@ impl Renderer {
 
         // Return layer pixmap to pool.
         self.pixmap_pool.lock().unwrap().put(layer);
+
+        // \p4: Apply drawing commands as clip mask on the final pixmap.
+        if is_p4_clip {
+            let clip_commands = parse_drawing_commands(&plain_text);
+            let scale = 1.0 / (1u32 << (4 - 1)) as f32; // \p4 → scale = 1/8
+            let mut clip_pixmap = Pixmap::new(w, h).unwrap();
+            let mut path_builder = PathBuilder::new();
+            for cmd in &clip_commands {
+                match cmd {
+                    DrawingCommand::MoveTo(x, y) => {
+                        path_builder.move_to(x * scale + ctx.x, y * scale + ctx.y + ctx.baseline_offset as f32);
+                    }
+                    DrawingCommand::LineTo(x, y) => {
+                        path_builder.line_to(x * scale + ctx.x, y * scale + ctx.y + ctx.baseline_offset as f32);
+                    }
+                    DrawingCommand::BezierTo(x1, y1, x2, y2, x3, y3) => {
+                        path_builder.cubic_to(
+                            x1 * scale + ctx.x, y1 * scale + ctx.y + ctx.baseline_offset as f32,
+                            x2 * scale + ctx.x, y2 * scale + ctx.y + ctx.baseline_offset as f32,
+                            x3 * scale + ctx.x, y3 * scale + ctx.y + ctx.baseline_offset as f32,
+                        );
+                    }
+                    DrawingCommand::Close => { path_builder.close(); }
+                }
+            }
+            if let Some(clip_path) = path_builder.finish() {
+                let mut clip_paint = Paint::default();
+                clip_paint.set_color_rgba8(255, 255, 255, 255);
+                clip_pixmap.fill_path(&clip_path, &clip_paint, FillRule::Winding, SkiaTransform::identity(), None);
+            }
+            let data = pixmap.data_mut();
+            let mask_data = clip_pixmap.data();
+            for i in 0..(w * h) as usize {
+                let idx = i * 4;
+                if mask_data[idx + 3] == 0 {
+                    data[idx] = 0;
+                    data[idx + 1] = 0;
+                    data[idx + 2] = 0;
+                    data[idx + 3] = 0;
+                }
+            }
+        }
     }
 
     fn render_karaoke(
@@ -1015,21 +1290,21 @@ impl Renderer {
             match cmd {
                 DrawingCommand::MoveTo(x, y) => {
                     let px = x * scale + ctx.x;
-                    let py = y * scale + ctx.y;
+                    let py = y * scale + ctx.y + ctx.baseline_offset as f32;
                     current_path.move_to(px, py);
                 }
                 DrawingCommand::LineTo(x, y) => {
                     let px = x * scale + ctx.x;
-                    let py = y * scale + ctx.y;
+                    let py = y * scale + ctx.y + ctx.baseline_offset as f32;
                     current_path.line_to(px, py);
                 }
                 DrawingCommand::BezierTo(x1, y1, x2, y2, x3, y3) => {
                     let cx1 = x1 * scale + ctx.x;
-                    let cy1 = y1 * scale + ctx.y;
+                    let cy1 = y1 * scale + ctx.y + ctx.baseline_offset as f32;
                     let cx2 = x2 * scale + ctx.x;
-                    let cy2 = y2 * scale + ctx.y;
+                    let cy2 = y2 * scale + ctx.y + ctx.baseline_offset as f32;
                     let ex = x3 * scale + ctx.x;
-                    let ey = y3 * scale + ctx.y;
+                    let ey = y3 * scale + ctx.y + ctx.baseline_offset as f32;
                     current_path.cubic_to(cx1, cy1, cx2, cy2, ex, ey);
                 }
                 DrawingCommand::Close => {

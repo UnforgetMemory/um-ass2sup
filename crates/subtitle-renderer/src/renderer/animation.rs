@@ -76,7 +76,9 @@ pub(super) fn apply_transform_tag(
         t.clamp(0.0, 1.0)
     };
 
-    let p = if accel == 1.0 {
+    let p = if ctx.animation_skip {
+        1.0
+    } else if accel == 1.0 {
         progress
     } else {
         progress.powf(accel as f32)
@@ -209,6 +211,51 @@ pub(super) fn apply_transform_tag(
                 let target_y = *y as f32 * scale_y;
                 ctx.x = ctx.x + (target_x - ctx.x) * p;
                 ctx.y = ctx.y + (target_y - ctx.y) * p;
+            }
+            OverrideTag::Clip { x1, y1, x2, y2 } => {
+                let tx1 = *x1 as f32 * scale_x;
+                let ty1 = *y1 as f32 * scale_y;
+                let tx2 = *x2 as f32 * scale_x;
+                let ty2 = *y2 as f32 * scale_y;
+                ctx.clip_x1 = ctx.clip_x1 + (tx1 - ctx.clip_x1) * p;
+                ctx.clip_y1 = ctx.clip_y1 + (ty1 - ctx.clip_y1) * p;
+                ctx.clip_x2 = ctx.clip_x2 + (tx2 - ctx.clip_x2) * p;
+                ctx.clip_y2 = ctx.clip_y2 + (ty2 - ctx.clip_y2) * p;
+                ctx.clip_enabled = true;
+                ctx.clip_inverse = false;
+            }
+            OverrideTag::ClipInverse { x1, y1, x2, y2 } => {
+                let tx1 = *x1 as f32 * scale_x;
+                let ty1 = *y1 as f32 * scale_y;
+                let tx2 = *x2 as f32 * scale_x;
+                let ty2 = *y2 as f32 * scale_y;
+                ctx.clip_x1 = ctx.clip_x1 + (tx1 - ctx.clip_x1) * p;
+                ctx.clip_y1 = ctx.clip_y1 + (ty1 - ctx.clip_y1) * p;
+                ctx.clip_x2 = ctx.clip_x2 + (tx2 - ctx.clip_x2) * p;
+                ctx.clip_y2 = ctx.clip_y2 + (ty2 - ctx.clip_y2) * p;
+                ctx.clip_enabled = true;
+                ctx.clip_inverse = true;
+            }
+            OverrideTag::ClipDrawing { scale, commands }
+                if p >= 0.5 => {
+                    ctx.clip_drawing_commands = Some(commands.clone());
+                    ctx.clip_drawing_scale = *scale;
+                    ctx.clip_drawing_inverse = false;
+                    ctx.clip_enabled = true;
+                }
+            OverrideTag::ClipInverseDrawing { scale, commands }
+                if p >= 0.5 => {
+                    ctx.clip_drawing_commands = Some(commands.clone());
+                    ctx.clip_drawing_scale = *scale;
+                    ctx.clip_drawing_inverse = true;
+                    ctx.clip_enabled = true;
+                }
+            OverrideTag::DrawingMode(level)
+                if p >= 0.5 => {
+                    ctx.drawing_mode = *level;
+                }
+            OverrideTag::BaselineOffset(offset) => {
+                ctx.baseline_offset = ctx.baseline_offset + (*offset - ctx.baseline_offset) * p as f64;
             }
             _ => {}
         }
