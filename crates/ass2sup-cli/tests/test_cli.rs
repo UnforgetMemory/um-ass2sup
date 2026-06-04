@@ -182,3 +182,49 @@ fn test_cli_parallel_flag() {
     assert!(sup1.exists(), "first output should exist");
     assert!(sup2.exists(), "second output should exist");
 }
+
+// ──────────────────────────────────────────────
+// 9. SRT→SRT self-check: --to-srt roundtrips losslessly on valid SRT
+// ──────────────────────────────────────────────
+#[test]
+fn test_cli_srt_to_srt_self_check() {
+    let tmp = TempDir::new().unwrap();
+    let input = fixtures_dir().join("basic.srt");
+    let output = tmp.path().join("out.srt");
+
+    Command::cargo_bin("ass2sup")
+        .unwrap()
+        .arg(&input)
+        .arg("--to-srt")
+        .arg("-o")
+        .arg(&output)
+        .arg("--quiet")
+        .assert()
+        .success();
+
+    assert!(output.exists(), "output should have been created");
+    assert!(
+        output.metadata().unwrap().len() > 0,
+        "output should not be empty"
+    );
+
+    // SRT parser/serializer must roundtrip losslessly
+    let in_text = std::fs::read_to_string(&input).unwrap();
+    let out_text = std::fs::read_to_string(&output).unwrap();
+    assert_eq!(in_text, out_text, "SRT→SRT roundtrip must be lossless");
+}
+
+// ──────────────────────────────────────────────
+// 10. --check on SRT input: now actually validates SRT (was silent buggy pass)
+// ──────────────────────────────────────────────
+#[test]
+fn test_cli_check_on_srt() {
+    let input = fixtures_dir().join("chinese.srt");
+    Command::cargo_bin("ass2sup")
+        .unwrap()
+        .arg("--check")
+        .arg(&input)
+        .arg("--quiet")
+        .assert()
+        .success();
+}

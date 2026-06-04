@@ -755,20 +755,20 @@ pub fn run(args: Args) -> Result<(), CliError> {
     // --check mode: parse + validate only
     if args.check {
         for input in &inputs {
-            let content = std::fs::read_to_string(input)
-                .map_err(|e| CliError::ReadError(input.display().to_string(), e.to_string()))?;
-            AssFile::parse(&content)
+            AssFile::parse_file(input)
                 .map_err(|e| CliError::ParseError(input.display().to_string(), e.to_string()))?;
         }
         return Ok(());
     }
 
-    // --to-srt mode: convert ASS to SRT format
+    // --to-srt mode: convert ASS/SSA/SRT to SRT format
+    //
+    // Also serves as a parse+reserialize self-check: `ass2sup in.srt --to-srt -o out.srt`
+    // followed by `diff in.srt out.srt` validates that the SRT parser/serializer
+    // roundtrips correctly.
     if args.to_srt {
         for input in &inputs {
-            let content = std::fs::read_to_string(input)
-                .map_err(|e| CliError::ReadError(input.display().to_string(), e.to_string()))?;
-            let ass = AssFile::parse(&content)
+            let ass = AssFile::parse_file(input)
                 .map_err(|e| CliError::ParseError(input.display().to_string(), e.to_string()))?;
             let srt_content = ass.to_srt();
 
