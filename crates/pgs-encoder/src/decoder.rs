@@ -334,7 +334,7 @@ fn parse_wds_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
     let mut off = 1;
 
     for _ in 0..num_windows {
-        if off + 8 > data.len() {
+        if off + 9 > data.len() {
             break;
         }
         windows.push(WindowDef {
@@ -344,7 +344,7 @@ fn parse_wds_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
             width: read_be16(data, off + 5),
             height: read_be16(data, off + 7),
         });
-        off += 8;
+        off += 9;
     }
 
     Ok(ParsedPayload::WindowDefinition { windows })
@@ -577,6 +577,25 @@ mod tests {
             &sets[0].segments[0].payload,
             ParsedPayload::PresentationComposition { width: 1920, height: 1080, objects, .. } if objects.len() == 1
         ));
+    }
+
+    #[test]
+    fn test_decode_wds_payload_off_by_one_oom() {
+        let mut data = vec![0u8; 13];
+        data[0] = 0x50;
+        data[1] = 0x47;
+        data[10] = 0x17;
+        let mut payload = vec![6u8];
+        payload.extend(std::iter::repeat(0u8).take(48));
+        data[11] = ((payload.len() >> 8) & 0xFF) as u8;
+        data[12] = (payload.len() & 0xFF) as u8;
+        data.extend_from_slice(&payload);
+
+        let result = decode_sup(&data);
+        assert!(
+            result.is_ok() || matches!(result, Err(DecodeError::TruncatedPayload)),
+            "WDS with adversarial layout must not panic. Got: {result:?}"
+        );
     }
 
     #[test]
