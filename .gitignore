@@ -1,49 +1,68 @@
-# Rust build artifacts
+# ── Rust build artifacts ────────────────────────────────────────────
 target/
+**/target/
 
-# OpenCode internal
+# Cargo.lock in fuzz subprojects (each fuzz crate has its own dep tree,
+# resolved automatically; not part of workspace lockfile)
+crates/*/fuzz/Cargo.lock
+
+# ── Generated / machine-local indexes ───────────────────────────────
+# CodeGraph MCP AST index (per-machine)
+.codegraph/
+# OhMyOpenCode agent state
 .sisyphus/
+# OhMyOpenCode planning dir
 .omo/
 
-# Agent/plan generated files
+# ── Test framework artifacts ───────────────────────────────────────
+# proptest crash/regression storage
+**/proptest-regressions/
+# cargo-fuzz crash inputs / corpus deltas
+**/fuzz/artifacts/
+# (also covered by target/ above, kept for clarity)
+**/fuzz/target/
+
+# ── Coverage reports (regenerable) ────────────────────────────────
+coverage/
+
+# ── Repo-level build/test outputs ──────────────────────────────────
+# any .sup file anywhere
+*.sup
+# root-level .sup (test artifacts)
+/*.sup
+
+# ── Agent / planning docs (ephemeral, regenerate per phase) ───────
 phase*-plan.md
 phase*-spec.md
 phase*-spec.html
 ass2sup-spec.html
+easyavs2bdnxml-analysis-report.html
 
-# Environment
-.env
-.env.local
-
-# IDE
+# ── Editor / IDE state ─────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
+*.swn
 *~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Temporary files
-*.tmp
+# emacs autosave (escape # to match literal hashes)
+\#*#
+# emacs lockfile (escape # to match literal hash)
+.\#*
 *.bak
 
-# proptest regression artifacts (test framework internal)
-**/proptest-regressions/
+# ── Patch / merge artifacts ───────────────────────────────────────
+*.orig
+*.rej
+*.patch
 
-# CodeGraph local index (per-machine, regenerable)
-.codegraph/
+# ── Environment files ──────────────────────────────────────────────
+.env
+.env.local
+# direnv
+.envrc
 
-# Fuzz crash artifacts (machine-generated)
-**/fuzz/artifacts/
-
-# Code coverage reports (regenerable)
-coverage/
-
-# Root-level build outputs
-/*.sup
+# ── OS metadata ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
