@@ -3,6 +3,7 @@ name = "ass2sup-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 description = "CLI tool for converting ASS/SRT subtitles to SUP/PGS format"
 
 [[bin]]

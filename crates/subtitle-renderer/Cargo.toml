@@ -3,6 +3,7 @@ name = "subtitle-renderer"
 version.workspace = true
 edition = "2021"
 rust-version.workspace = true
+license.workspace = true
 description = "ASS/SRT subtitle rendering to RGBA bitmaps with font management, text shaping, and effects"
 
 [dependencies]

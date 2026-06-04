@@ -3,6 +3,7 @@ name = "subtitle-validator"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 description = "Subtitle syntax validation and overlap detection"
 
 [dependencies]
