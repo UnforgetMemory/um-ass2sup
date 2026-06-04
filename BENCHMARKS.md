@@ -153,3 +153,48 @@ cargo clippy --workspace --all-targets -- -D warnings
 - Quantize step parallelized without changing semantics: **PASS** (output identical)
 - Encoder state preserved (composition/object IDs monotonic): **PASS** (encode stays sequential)
 - Opt-in only, no default behavior change: **PASS** (flag-gated)
+
+---
+
+# Phase 27 — W2 profile investigation (2026-06-04): NO-OP
+
+After W1, the remaining wall time is 0.270s for the 30-event stress
+test. Breakdown of where that time goes:
+
+| Step                    | Wall time | Parallel? | Notes |
+| ----------------------- | --------- | --------- | ----- |
+| Render (font shaping)   | bulk      | yes (`par_iter` at lib.rs:444) | text → RGBA bitmap |
+| Quantize                | ~0s       | yes (W1)  | k-d tree, ~170ns/pixel |
+| Encode (PGS segments)   | bulk      | **no**    | `PgsEncoder::encode_frame(&mut self, …)` is stateful |
+| Progress bar / I/O      | minor     | n/a       | indicatif + file write |
+
+The PGS encode step is the remaining single-threaded bottleneck. It
+is inherently sequential: each call mutates `composition_number`,
+`object_id`, `object_version`, and `frame_count` to keep segment
+identifiers monotonic across the output stream (required by the PGS
+spec — muxers and authoring tools rely on monotonic IDs for
+incremental parsing).
+
+## Why no SIMD or arena allocation is warranted
+
+- **SIMD**: the encode step is dominated by `HashMap` lookups for
+  palette/object/frame tracking, not tight numeric loops. The hot
+  loops (RLE compression, palette building) are already simple integer
+  ops that LLVM vectorizes where profitable. No remaining inner loop
+  has SIMD-friendly structure.
+- **Arena allocation**: segment output is already a `Vec<Segment>` per
+  call that gets extended into a single `all_segments` buffer. No
+  short-lived temporaries that would benefit from arena bump
+  allocation. The renderer allocates per-frame bitmaps, but those
+  outlive encode and would need an arena-per-frame refactor for
+  marginal gain.
+
+## Conclusion
+
+P27 W2 is a **no-op**. The 1.36x speedup from W1 is the practical
+ceiling for this pipeline at the current resolution (1080p). Further
+gains would require an architectural change to the encoder (e.g.
+batched frame state, two-pass encoding) which is out of scope for the
+Phase 25-29 quality improvement plan.
+
+**W2 status: skipped, documented, closed.**
