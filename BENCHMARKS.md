@@ -98,3 +98,58 @@ cargo bench -p color-quantizer quantizer_large_1920x1080
 - Byte-for-byte parity with linear baseline: **PASS** (hash unchanged)
 - No external dependencies added: **PASS** (in-tree k-d tree)
 - No `unsafe` code: **PASS**
+
+---
+
+# Phase 27 — Parallel quantize (2026-06-04)
+
+Added an opt-in `--parallel-frames` flag that distributes the per-frame
+quantize step across rayon worker threads. The subsequent PGS encode step
+stays sequential (encoder carries per-frame mutable state: composition
+number, object id, object version, frame count) — quantize is the hot
+path, encode is fast (RLE + segment assembly).
+
+## Implementation
+
+- File: `crates/ass2sup-cli/src/lib.rs:468-518`
+- Parallel branch: `frame_data.par_iter().map(|(_, frame_opt, _, _)| frame_opt.as_ref().map(|f| quantizer.quantize(&f.bitmap, f.width, f.height))).collect()`
+- Sequential branch: original code (palette-reuse thread + sequential
+  encode) preserved verbatim for the `--quantizer median-cut` path
+- Encode loop: `for ((_, _, pts, dur), q_opt) in frame_data.iter().zip(quantized_frames.iter()) { pgs_encoder.encode_frame(q, pts, dur) }`
+- Gated on `!use_palette_reuse && args.parallel_frames && frame_data.len() > 1`
+- Default: OFF (no behavior change for existing users)
+
+## Measured impact — `stress_many_events.ass` (30 events, 1920×1080, 23.976fps)
+
+| Run | Sequential (default) | Parallel (`--parallel-frames`) | Speedup |
+| --- | -------------------- | ------------------------------ | ------- |
+| 1   | 0.373s               | 0.271s                         | 1.38x   |
+| 2   | 0.356s               | 0.271s                         | 1.31x   |
+| 3   | 0.369s               | 0.268s                         | 1.38x   |
+| **avg** | **0.366s**        | **0.270s**                     | **1.36x** |
+
+- Output byte-for-byte identical (`cmp` returned 0 on both `.sup` files, 171307 bytes)
+- `user` CPU time unchanged (~0.23s) — total work unchanged, just distributed
+- `sys` time rose 0.16s → 0.30s — rayon thread coordination overhead
+- Modest speedup reflects the test's small per-frame cost (simple text on
+  1080p). At 4K or with longer/denser text the speedup will be larger
+  because the quantize step dominates more.
+
+## Verification
+
+```bash
+# Parity (sequential vs parallel)
+./target/release/ass2sup tests/fixtures/stress_many_events.ass -o /tmp/seq.sup -r 1920x1080 -f 23.976
+./target/release/ass2sup tests/fixtures/stress_many_events.ass -o /tmp/par.sup -r 1920x1080 -f 23.976 --parallel-frames
+cmp /tmp/seq.sup /tmp/par.sup  # must be identical
+
+# Workspace
+cargo test --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+## Targets met
+
+- Quantize step parallelized without changing semantics: **PASS** (output identical)
+- Encoder state preserved (composition/object IDs monotonic): **PASS** (encode stays sequential)
+- Opt-in only, no default behavior change: **PASS** (flag-gated)

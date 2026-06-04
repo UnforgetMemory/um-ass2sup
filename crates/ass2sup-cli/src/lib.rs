@@ -466,33 +466,53 @@ pub fn convert_file(
     };
 
     let mut all_segments = Vec::new();
-    let mut prev_palette: Option<Vec<Rgba>> = None;
 
-    for (_event, frame_opt, pts_ms, duration_ms) in &frame_data {
-        if let Some(frame) = frame_opt {
-            let quantized = if use_palette_reuse {
-                let prev = prev_palette.as_deref();
-                let q = quantize_with_palette(
-                    &frame.bitmap,
-                    frame.width,
-                    frame.height,
-                    prev,
-                    args.max_colors,
-                    dither_method,
-                );
-                prev_palette = Some(q.palette.clone());
-                q
-            } else {
-                let q = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
-                prev_palette = Some(q.palette.clone());
-                q
-            };
+    let quantized_frames: Vec<Option<color_quantizer::QuantizedFrame>> =
+        if !use_palette_reuse && args.parallel_frames && frame_data.len() > 1 {
+            frame_data
+                .par_iter()
+                .map(|(_event, frame_opt, _pts, _dur)| {
+                    frame_opt.as_ref().map(|frame| {
+                        quantizer.quantize(&frame.bitmap, frame.width, frame.height)
+                    })
+                })
+                .collect()
+        } else {
+            let mut prev_palette: Option<Vec<Rgba>> = None;
+            frame_data
+                .iter()
+                .map(|(_event, frame_opt, _pts, _dur)| {
+                    frame_opt.as_ref().map(|frame| {
+                        if use_palette_reuse {
+                            let prev = prev_palette.as_deref();
+                            let q = quantize_with_palette(
+                                &frame.bitmap,
+                                frame.width,
+                                frame.height,
+                                prev,
+                                args.max_colors,
+                                dither_method,
+                            );
+                            prev_palette = Some(q.palette.clone());
+                            q
+                        } else {
+                            let q = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
+                            prev_palette = Some(q.palette.clone());
+                            q
+                        }
+                    })
+                })
+                .collect()
+        };
 
-            let segments = pgs_encoder.encode_frame(&quantized, *pts_ms, *duration_ms);
+    for ((_event, _frame_opt, pts_ms, duration_ms), q_opt) in
+        frame_data.iter().zip(quantized_frames.iter())
+    {
+        if let Some(q) = q_opt {
+            let segments = pgs_encoder.encode_frame(q, *pts_ms, *duration_ms);
             all_segments.extend(segments);
             frames_encoded += 1;
         }
-
         pb.inc(1);
     }
 
