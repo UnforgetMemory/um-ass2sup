@@ -67,7 +67,7 @@ jobs:
           set -e
           for crate in crates/*/Cargo.toml; do
             echo "=== $crate ==="
-            cargo publish --dry-run --locked --no-verify -manifest-path "$crate"
+            cargo publish --dry-run --locked --no-verify --manifest-path "$crate"
           done
 
   upload-binary:
