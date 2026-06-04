@@ -32,10 +32,10 @@ pub fn floyd_steinberg_dither(
 
     for i in 0..n {
         let base = i * 4;
-        err_r[i] = rgba[base] as f64;
-        err_g[i] = rgba[base + 1] as f64;
-        err_b[i] = rgba[base + 2] as f64;
-        err_a[i] = rgba[base + 3] as f64;
+        err_r[i] = f64::from(rgba[base]);
+        err_g[i] = f64::from(rgba[base + 1]);
+        err_b[i] = f64::from(rgba[base + 2]);
+        err_a[i] = f64::from(rgba[base + 3]);
     }
 
     let mut indices = vec![transparent_index; n];
@@ -53,10 +53,10 @@ pub fn floyd_steinberg_dither(
             indices[idx] = nearest_idx;
 
             let chosen = &palette[nearest_idx as usize];
-            let qe_r = old_r - chosen.r as f64;
-            let qe_g = old_g - chosen.g as f64;
-            let qe_b = old_b - chosen.b as f64;
-            let qe_a = old_a - chosen.a as f64;
+            let qe_r = old_r - f64::from(chosen.r);
+            let qe_g = old_g - f64::from(chosen.g);
+            let qe_b = old_b - f64::from(chosen.b);
+            let qe_a = old_a - f64::from(chosen.a);
 
             let distribute = |err_buf: &mut [f64], dx: usize, dy: usize, factor: f64, qe: f64| {
                 let nx = x as isize + dx as isize;
@@ -119,10 +119,10 @@ pub fn ordered_dither(
             let base = idx * 4;
             let threshold = BAYER_4X4[y % 4][x % 4] * 255.0;
 
-            let r = (rgba[base] as f64 + threshold).min(255.0) as u8;
-            let g = (rgba[base + 1] as f64 + threshold).min(255.0) as u8;
-            let b = (rgba[base + 2] as f64 + threshold).min(255.0) as u8;
-            let a = (rgba[base + 3] as f64 + threshold).min(255.0) as u8;
+            let r = (f64::from(rgba[base]) + threshold).min(255.0) as u8;
+            let g = (f64::from(rgba[base + 1]) + threshold).min(255.0) as u8;
+            let b = (f64::from(rgba[base + 2]) + threshold).min(255.0) as u8;
+            let a = (f64::from(rgba[base + 3]) + threshold).min(255.0) as u8;
 
             let target = Rgba::new(r, g, b, a);
             indices[idx] = super::median_cut::find_nearest_index(&target, palette);

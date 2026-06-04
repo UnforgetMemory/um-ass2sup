@@ -109,14 +109,14 @@ impl<'a> Shaper<'a> {
     ) -> Option<GlyphBBox> {
         let data = self.font_manager.get_font_data(font_id)?;
         let face = ttf_parser::Face::parse(&data, 0).ok()?;
-        let scale = font_size / face.units_per_em() as f32;
+        let scale = font_size / f32::from(face.units_per_em());
         let bbox = face.glyph_bounding_box(ttf_parser::GlyphId(glyph_id as u16))?;
 
         Some(GlyphBBox {
-            x_min: bbox.x_min as f32 * scale,
-            y_min: bbox.y_min as f32 * scale,
-            x_max: bbox.x_max as f32 * scale,
-            y_max: bbox.y_max as f32 * scale,
+            x_min: f32::from(bbox.x_min) * scale,
+            y_min: f32::from(bbox.y_min) * scale,
+            x_max: f32::from(bbox.x_max) * scale,
+            y_max: f32::from(bbox.y_max) * scale,
         })
     }
 }

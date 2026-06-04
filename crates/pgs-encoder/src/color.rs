@@ -2,9 +2,9 @@ use color_quantizer::Rgba;
 use crate::types::PaletteEntry;
 
 pub fn rgba_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
-    let r = r as f64;
-    let g = g as f64;
-    let b = b as f64;
+    let r = f64::from(r);
+    let g = f64::from(g);
+    let b = f64::from(b);
 
     let y  = ( 0.299 * r + 0.587 * g + 0.114 * b).round().clamp(0.0, 255.0) as u8;
     let cb = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0).round().clamp(0.0, 255.0) as u8;

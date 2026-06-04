@@ -28,7 +28,7 @@ impl Timestamp {
 
     /// Creates a timestamp from hours, minutes, seconds, and milliseconds.
     pub fn from_hms(h: u32, m: u32, s: u32, ms: u32) -> Self {
-        Self((h as u64 * 3600 + m as u64 * 60 + s as u64) * 1000 + ms as u64)
+        Self((u64::from(h) * 3600 + u64::from(m) * 60 + u64::from(s)) * 1000 + u64::from(ms))
     }
 
     /// Parses an ASS time string in format `H:MM:SS.CS`.

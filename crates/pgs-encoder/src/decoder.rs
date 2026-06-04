@@ -160,8 +160,8 @@ pub fn decode_segment(data: &[u8], offset: usize) -> Result<(ParsedSegment, usiz
 
     // Parse header fields (big-endian)
     // PTS and DTS are 32-bit at 90kHz (bytes 2-5 and 6-9)
-    let pts = read_be32(data, offset + 2) as u64;
-    let dts = read_be32(data, offset + 6) as u64;
+    let pts = u64::from(read_be32(data, offset + 2));
+    let dts = u64::from(read_be32(data, offset + 6));
     let segment_type = data[offset + 10];
     let payload_size = read_be16(data, offset + 11) as usize;
 

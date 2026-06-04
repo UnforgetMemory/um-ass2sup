@@ -107,7 +107,7 @@ impl Rasterizer {
             Err(_) => return,
         };
 
-        let scale = ctx.font_size / face.units_per_em() as f32;
+        let scale = ctx.font_size / f32::from(face.units_per_em());
         let gx = x + glyph.x_offset;
         let gy = y + glyph.y_offset;
 
@@ -123,10 +123,10 @@ impl Rasterizer {
 
         if !has_outline {
             if let Some(bbox) = face.glyph_bounding_box(glyph_id) {
-                let rx = gx + bbox.x_min as f32 * scale;
-                let ry = gy + bbox.y_min as f32 * scale;
-                let rw = (bbox.x_max - bbox.x_min) as f32 * scale;
-                let rh = (bbox.y_max - bbox.y_min) as f32 * scale;
+                let rx = gx + f32::from(bbox.x_min) * scale;
+                let ry = gy + f32::from(bbox.y_min) * scale;
+                let rw = f32::from(bbox.x_max - bbox.x_min) * scale;
+                let rh = f32::from(bbox.y_max - bbox.y_min) * scale;
 
                 if let Some(rect) = Rect::from_xywh(rx, ry, rw, rh) {
                     builder.push_rect(rect);
@@ -255,19 +255,19 @@ pub(crate) fn apply_anisotropic_outline(
         let da = dilated_data[di + 3];
 
         if da > fa {
-            let out_frac = (da as f32 - fa as f32) / 255.0;
+            let out_frac = (f32::from(da) - f32::from(fa)) / 255.0;
             if out_frac > 1.0 / 256.0 {
-                let dst_a = pix_data[di + 3] as f32 / 255.0;
+                let dst_a = f32::from(pix_data[di + 3]) / 255.0;
                 let res_a = out_frac + dst_a * (1.0 - out_frac);
                 debug_assert!(res_a > 0.0);
                 pix_data[di] =
-                    ((outline_color[0] as f32 * out_frac + pix_data[di] as f32 * dst_a * (1.0 - out_frac))
+                    ((f32::from(outline_color[0]) * out_frac + f32::from(pix_data[di]) * dst_a * (1.0 - out_frac))
                         / res_a) as u8;
                 pix_data[di + 1] =
-                    ((outline_color[1] as f32 * out_frac + pix_data[di + 1] as f32 * dst_a * (1.0 - out_frac))
+                    ((f32::from(outline_color[1]) * out_frac + f32::from(pix_data[di + 1]) * dst_a * (1.0 - out_frac))
                         / res_a) as u8;
                 pix_data[di + 2] =
-                    ((outline_color[2] as f32 * out_frac + pix_data[di + 2] as f32 * dst_a * (1.0 - out_frac))
+                    ((f32::from(outline_color[2]) * out_frac + f32::from(pix_data[di + 2]) * dst_a * (1.0 - out_frac))
                         / res_a) as u8;
                 pix_data[di + 3] = (res_a * 255.0) as u8;
             }

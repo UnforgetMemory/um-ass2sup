@@ -213,10 +213,10 @@ impl AffineTransform {
                 let dst_idx = ((dy * dst_w + dx) * 4) as usize;
 
                 // SIMD: process all 4 RGBA channels in parallel with f32x4
-                let s00_v = f32x4::from([s00[0] as f32, s00[1] as f32, s00[2] as f32, s00[3] as f32]);
-                let s10_v = f32x4::from([s10[0] as f32, s10[1] as f32, s10[2] as f32, s10[3] as f32]);
-                let s01_v = f32x4::from([s01[0] as f32, s01[1] as f32, s01[2] as f32, s01[3] as f32]);
-                let s11_v = f32x4::from([s11[0] as f32, s11[1] as f32, s11[2] as f32, s11[3] as f32]);
+                let s00_v = f32x4::from([f32::from(s00[0]), f32::from(s00[1]), f32::from(s00[2]), f32::from(s00[3])]);
+                let s10_v = f32x4::from([f32::from(s10[0]), f32::from(s10[1]), f32::from(s10[2]), f32::from(s10[3])]);
+                let s01_v = f32x4::from([f32::from(s01[0]), f32::from(s01[1]), f32::from(s01[2]), f32::from(s01[3])]);
+                let s11_v = f32x4::from([f32::from(s11[0]), f32::from(s11[1]), f32::from(s11[2]), f32::from(s11[3])]);
 
                 let result = s00_v * f32x4::splat(w00)
                     + s10_v * f32x4::splat(w10)
@@ -330,13 +330,13 @@ impl AffineTransform {
                 let dst_idx = ((dy * dst_w + dx) * 4) as usize;
 
                 let s00_v =
-                    f32x4::from([s00[0] as f32, s00[1] as f32, s00[2] as f32, s00[3] as f32]);
+                    f32x4::from([f32::from(s00[0]), f32::from(s00[1]), f32::from(s00[2]), f32::from(s00[3])]);
                 let s10_v =
-                    f32x4::from([s10[0] as f32, s10[1] as f32, s10[2] as f32, s10[3] as f32]);
+                    f32x4::from([f32::from(s10[0]), f32::from(s10[1]), f32::from(s10[2]), f32::from(s10[3])]);
                 let s01_v =
-                    f32x4::from([s01[0] as f32, s01[1] as f32, s01[2] as f32, s01[3] as f32]);
+                    f32x4::from([f32::from(s01[0]), f32::from(s01[1]), f32::from(s01[2]), f32::from(s01[3])]);
                 let s11_v =
-                    f32x4::from([s11[0] as f32, s11[1] as f32, s11[2] as f32, s11[3] as f32]);
+                    f32x4::from([f32::from(s11[0]), f32::from(s11[1]), f32::from(s11[2]), f32::from(s11[3])]);
 
                 let result = s00_v * f32x4::splat(w00)
                     + s10_v * f32x4::splat(w10)
@@ -425,10 +425,10 @@ mod tests {
 
                 let dst_idx = ((dy * dst_w + dx) * 4) as usize;
                 for c in 0..4 {
-                    let val = s00[c] as f32 * w00
-                        + s10[c] as f32 * w10
-                        + s01[c] as f32 * w01
-                        + s11[c] as f32 * w11;
+                    let val = f32::from(s00[c]) * w00
+                        + f32::from(s10[c]) * w10
+                        + f32::from(s01[c]) * w01
+                        + f32::from(s11[c]) * w11;
                     dst[dst_idx + c] = val.round().clamp(0.0, 255.0) as u8;
                 }
             }

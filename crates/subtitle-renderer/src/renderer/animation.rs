@@ -32,9 +32,9 @@ pub(super) fn compute_fade_complex(
     t1: u64, t2: u64, t3: u64, t4: u64,
 ) -> f32 {
     let (a1, a2, a3) = (
-        (255 - alpha_start) as f32 / 255.0,
-        (255 - alpha_mid) as f32 / 255.0,
-        (255 - alpha_end) as f32 / 255.0,
+        f32::from(255 - alpha_start) / 255.0,
+        f32::from(255 - alpha_mid) / 255.0,
+        f32::from(255 - alpha_end) / 255.0,
     );
 
     if elapsed <= t1 {
@@ -255,7 +255,7 @@ pub(super) fn apply_transform_tag(
                     ctx.drawing_mode = *level;
                 }
             OverrideTag::BaselineOffset(offset) => {
-                ctx.baseline_offset = ctx.baseline_offset + (*offset - ctx.baseline_offset) * p as f64;
+                ctx.baseline_offset = ctx.baseline_offset + (*offset - ctx.baseline_offset) * f64::from(p);
             }
             _ => {}
         }
@@ -304,7 +304,7 @@ pub(super) fn parse_override_block(text: &str) -> Vec<OverrideTag> {
 }
 
 pub(super) fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
-    (a as f32 + (b as f32 - a as f32) * t).clamp(0.0, 255.0) as u8
+    (f32::from(a) + (f32::from(b) - f32::from(a)) * t).clamp(0.0, 255.0) as u8
 }
 
 #[cfg(test)]

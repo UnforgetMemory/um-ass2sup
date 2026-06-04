@@ -41,10 +41,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 let nx = x as i32 + dx;
                 if nx >= 0 && nx < w as i32 {
                     let idx = (y * w + nx as usize) * 4;
-                    sr += data[idx] as u32;
-                    sg += data[idx + 1] as u32;
-                    sb += data[idx + 2] as u32;
-                    sa += data[idx + 3] as u32;
+                    sr += u32::from(data[idx]);
+                    sg += u32::from(data[idx + 1]);
+                    sb += u32::from(data[idx + 2]);
+                    sa += u32::from(data[idx + 3]);
                     count += 1;
                 }
             }
@@ -63,10 +63,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
             for dx in -(r as i32)..=(r as i32) {
                 let nx = (x as i32 + dx) as usize;
                 let idx = (y * w + nx) * 4;
-                sr += data[idx] as u32;
-                sg += data[idx + 1] as u32;
-                sb += data[idx + 2] as u32;
-                sa += data[idx + 3] as u32;
+                    sr += u32::from(data[idx]);
+                    sg += u32::from(data[idx + 1]);
+                    sb += u32::from(data[idx + 2]);
+                    sa += u32::from(data[idx + 3]);
             }
             {
                 let idx = (y * w + x) * 4;
@@ -80,16 +80,16 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
             // Slide window — O(1) per pixel (subtract leaving, add entering)
             while x < interior_x_end {
                 let leave_idx = (y * w + (x - r_u - 1)) * 4;
-                sr -= data[leave_idx] as u32;
-                sg -= data[leave_idx + 1] as u32;
-                sb -= data[leave_idx + 2] as u32;
-                sa -= data[leave_idx + 3] as u32;
+                sr -= u32::from(data[leave_idx]);
+                sg -= u32::from(data[leave_idx + 1]);
+                sb -= u32::from(data[leave_idx + 2]);
+                sa -= u32::from(data[leave_idx + 3]);
 
                 let enter_idx = (y * w + (x + r_u)) * 4;
-                sr += data[enter_idx] as u32;
-                sg += data[enter_idx + 1] as u32;
-                sb += data[enter_idx + 2] as u32;
-                sa += data[enter_idx + 3] as u32;
+                sr += u32::from(data[enter_idx]);
+                sg += u32::from(data[enter_idx + 1]);
+                sb += u32::from(data[enter_idx + 2]);
+                sa += u32::from(data[enter_idx + 3]);
 
                 let idx = (y * w + x) * 4;
                 temp[idx] = (sr / count_val) as u8;
@@ -108,10 +108,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 let nx = x as i32 + dx;
                 if nx >= 0 && nx < w as i32 {
                     let idx = (y * w + nx as usize) * 4;
-                    sr += data[idx] as u32;
-                    sg += data[idx + 1] as u32;
-                    sb += data[idx + 2] as u32;
-                    sa += data[idx + 3] as u32;
+                    sr += u32::from(data[idx]);
+                    sg += u32::from(data[idx + 1]);
+                    sb += u32::from(data[idx + 2]);
+                    sa += u32::from(data[idx + 3]);
                     count += 1;
                 }
             }
@@ -136,10 +136,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 let ny = y as i32 + dy;
                 if ny >= 0 && ny < h as i32 {
                     let idx = (ny as usize * w + x) * 4;
-                    sr += data[idx] as u32;
-                    sg += data[idx + 1] as u32;
-                    sb += data[idx + 2] as u32;
-                    sa += data[idx + 3] as u32;
+                    sr += u32::from(data[idx]);
+                    sg += u32::from(data[idx + 1]);
+                    sb += u32::from(data[idx + 2]);
+                    sa += u32::from(data[idx + 3]);
                     count += 1;
                 }
             }
@@ -162,10 +162,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
             let ny = (r_u as i32 + dy) as usize;
             for x in 0..w {
                 let idx = (ny * w + x) * 4;
-                col_sum_r[x] += data[idx] as u32;
-                col_sum_g[x] += data[idx + 1] as u32;
-                col_sum_b[x] += data[idx + 2] as u32;
-                col_sum_a[x] += data[idx + 3] as u32;
+                col_sum_r[x] += u32::from(data[idx]);
+                col_sum_g[x] += u32::from(data[idx + 1]);
+                col_sum_b[x] += u32::from(data[idx + 2]);
+                col_sum_a[x] += u32::from(data[idx + 3]);
             }
         }
         // Store row at y = r_u
@@ -186,10 +186,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 let top_idx = (top_y * w + x) * 4;
                 let bot_idx = (bot_y * w + x) * 4;
 
-                col_sum_r[x] = col_sum_r[x].saturating_sub(data[top_idx] as u32) + data[bot_idx] as u32;
-                col_sum_g[x] = col_sum_g[x].saturating_sub(data[top_idx + 1] as u32) + data[bot_idx + 1] as u32;
-                col_sum_b[x] = col_sum_b[x].saturating_sub(data[top_idx + 2] as u32) + data[bot_idx + 2] as u32;
-                col_sum_a[x] = col_sum_a[x].saturating_sub(data[top_idx + 3] as u32) + data[bot_idx + 3] as u32;
+                col_sum_r[x] = col_sum_r[x].saturating_sub(u32::from(data[top_idx])) + u32::from(data[bot_idx]);
+                col_sum_g[x] = col_sum_g[x].saturating_sub(u32::from(data[top_idx + 1])) + u32::from(data[bot_idx + 1]);
+                col_sum_b[x] = col_sum_b[x].saturating_sub(u32::from(data[top_idx + 2])) + u32::from(data[bot_idx + 2]);
+                col_sum_a[x] = col_sum_a[x].saturating_sub(u32::from(data[top_idx + 3])) + u32::from(data[bot_idx + 3]);
             }
 
             for x in 0..w {
@@ -210,10 +210,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 let ny = y as i32 + dy;
                 if ny >= 0 && ny < h as i32 {
                     let idx = (ny as usize * w + x) * 4;
-                    sr += data[idx] as u32;
-                    sg += data[idx + 1] as u32;
-                    sb += data[idx + 2] as u32;
-                    sa += data[idx + 3] as u32;
+                    sr += u32::from(data[idx]);
+                    sg += u32::from(data[idx + 1]);
+                    sb += u32::from(data[idx + 2]);
+                    sa += u32::from(data[idx + 3]);
                     count += 1;
                 }
             }
@@ -258,12 +258,12 @@ pub fn apply_shadow(
     let mut shadow_data = vec![0u8; num_pixels * 4];
     for i in 0..num_pixels {
         let idx = i * 4;
-        let src_a = src[idx + 3] as u32;
+        let src_a = u32::from(src[idx + 3]);
         if src_a > 0 {
             shadow_data[idx] = shadow_color[0];
             shadow_data[idx + 1] = shadow_color[1];
             shadow_data[idx + 2] = shadow_color[2];
-            shadow_data[idx + 3] = ((shadow_color[3] as u32 * src_a) / 255) as u8;
+            shadow_data[idx + 3] = ((u32::from(shadow_color[3]) * src_a) / 255) as u8;
         }
     }
 
@@ -329,22 +329,22 @@ pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
         let idx = chunk * 16;
 
         // Deinterleave RGBA components across 4 pixels into u32x4 lanes
-        let sr = u32x4::from([src[idx] as u32, src[idx + 4] as u32,
-            src[idx + 8] as u32, src[idx + 12] as u32]);
-        let sg = u32x4::from([src[idx + 1] as u32, src[idx + 5] as u32,
-            src[idx + 9] as u32, src[idx + 13] as u32]);
-        let sb = u32x4::from([src[idx + 2] as u32, src[idx + 6] as u32,
-            src[idx + 10] as u32, src[idx + 14] as u32]);
-        let sa = u32x4::from([src[idx + 3] as u32, src[idx + 7] as u32,
-            src[idx + 11] as u32, src[idx + 15] as u32]);
-        let dr = u32x4::from([dst[idx] as u32, dst[idx + 4] as u32,
-            dst[idx + 8] as u32, dst[idx + 12] as u32]);
-        let dg = u32x4::from([dst[idx + 1] as u32, dst[idx + 5] as u32,
-            dst[idx + 9] as u32, dst[idx + 13] as u32]);
-        let db = u32x4::from([dst[idx + 2] as u32, dst[idx + 6] as u32,
-            dst[idx + 10] as u32, dst[idx + 14] as u32]);
-        let da = u32x4::from([dst[idx + 3] as u32, dst[idx + 7] as u32,
-            dst[idx + 11] as u32, dst[idx + 15] as u32]);
+        let sr = u32x4::from([u32::from(src[idx]), u32::from(src[idx + 4]),
+            u32::from(src[idx + 8]), u32::from(src[idx + 12])]);
+        let sg = u32x4::from([u32::from(src[idx + 1]), u32::from(src[idx + 5]),
+            u32::from(src[idx + 9]), u32::from(src[idx + 13])]);
+        let sb = u32x4::from([u32::from(src[idx + 2]), u32::from(src[idx + 6]),
+            u32::from(src[idx + 10]), u32::from(src[idx + 14])]);
+        let sa = u32x4::from([u32::from(src[idx + 3]), u32::from(src[idx + 7]),
+            u32::from(src[idx + 11]), u32::from(src[idx + 15])]);
+        let dr = u32x4::from([u32::from(dst[idx]), u32::from(dst[idx + 4]),
+            u32::from(dst[idx + 8]), u32::from(dst[idx + 12])]);
+        let dg = u32x4::from([u32::from(dst[idx + 1]), u32::from(dst[idx + 5]),
+            u32::from(dst[idx + 9]), u32::from(dst[idx + 13])]);
+        let db = u32x4::from([u32::from(dst[idx + 2]), u32::from(dst[idx + 6]),
+            u32::from(dst[idx + 10]), u32::from(dst[idx + 14])]);
+        let da = u32x4::from([u32::from(dst[idx + 3]), u32::from(dst[idx + 7]),
+            u32::from(dst[idx + 11]), u32::from(dst[idx + 15])]);
 
         // SIMD: all heavy multiplies
         let inv_sa = one - sa;
@@ -393,18 +393,18 @@ pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
     let remaining_start = simd_chunks * 4;
     for pix in remaining_start..n {
         let idx = pix * 4;
-        let sa = src[idx + 3] as u32;
+        let sa = u32::from(src[idx + 3]);
         if sa == 0 {
             continue;
         }
-        let da = dst[idx + 3] as u32;
+        let da = u32::from(dst[idx + 3]);
         let out_a = sa + da * (255 - sa) / 255;
         if out_a == 0 {
             continue;
         }
         for c in 0..3 {
-            let sv = src[idx + c] as u32;
-            let dv = dst[idx + c] as u32;
+            let sv = u32::from(src[idx + c]);
+            let dv = u32::from(dst[idx + c]);
             dst[idx + c] = ((sv * sa + dv * da * (255 - sa) / 255) / out_a) as u8;
         }
         dst[idx + 3] = out_a as u8;

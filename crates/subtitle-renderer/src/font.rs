@@ -137,7 +137,7 @@ impl FontManager {
                 .first()
                 .map(|(s, _)| s.as_str())
                 .unwrap_or("");
-            let weight_diff = (face.weight.0 as f32 - target_weight as f32).abs();
+            let weight_diff = (f32::from(face.weight.0) - f32::from(target_weight)).abs();
             let italic_penalty = if target_italic != (face.style == fontdb::Style::Italic) {
                 100.0
             } else {

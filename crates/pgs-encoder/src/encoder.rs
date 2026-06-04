@@ -63,7 +63,7 @@ impl PgsEncoder {
     /// 23.976/29.97/59.94 fps, simple `ms * 90` otherwise.
     pub fn ms_to_90khz(&self, ms: u64) -> u64 {
         if is_ntsc_fps(self.fps) {
-            (ms as u128 * 90000 * 1001 / 1000000) as u64
+            (u128::from(ms) * 90000 * 1001 / 1000000) as u64
         } else {
             ms * 90
         }
@@ -210,8 +210,8 @@ impl PgsEncoder {
     ) -> Vec<Segment> {
         let mut segments = Vec::new();
 
-        let obj_x = ((self.display_width as i32 - frame.width as i32) / 2).max(0) as u16;
-        let obj_y = (self.display_height as i32 - frame.height as i32 - 20).max(0) as u16;
+        let obj_x = ((i32::from(self.display_width) - frame.width as i32) / 2).max(0) as u16;
+        let obj_y = (i32::from(self.display_height) - frame.height as i32 - 20).max(0) as u16;
 
         segments.push(Segment {
             segment_type: SegmentType::Pcs,
@@ -317,7 +317,7 @@ impl PgsEncoder {
                         window_id: 0,
                         cropped: false,
                         forced: false,
-                        x: ((self.display_width as i32 - frame.width as i32) / 2).max(0) as u16,
+                        x: ((i32::from(self.display_width) - frame.width as i32) / 2).max(0) as u16,
                         y: obj1_y,
                         crop_x: 0, crop_y: 0,
                         crop_w: 0, crop_h: 0,
@@ -327,7 +327,7 @@ impl PgsEncoder {
                         window_id: 1,
                         cropped: false,
                         forced: false,
-                        x: ((self.display_width as i32 - frame.width as i32) / 2).max(0) as u16,
+                        x: ((i32::from(self.display_width) - frame.width as i32) / 2).max(0) as u16,
                         y: obj2_y,
                         crop_x: 0, crop_y: 0,
                         crop_w: 0, crop_h: 0,
@@ -344,14 +344,14 @@ impl PgsEncoder {
                 windows: vec![
                     WindowDef {
                         window_id: 0,
-                        x: ((self.display_width as i32 - frame.width as i32) / 2).max(0) as u16,
+                        x: ((i32::from(self.display_width) - frame.width as i32) / 2).max(0) as u16,
                         y: obj1_y,
                         width: frame.width as u16,
                         height: top_height,
                     },
                     WindowDef {
                         window_id: 1,
-                        x: ((self.display_width as i32 - frame.width as i32) / 2).max(0) as u16,
+                        x: ((i32::from(self.display_width) - frame.width as i32) / 2).max(0) as u16,
                         y: obj2_y,
                         width: frame.width as u16,
                         height: bottom_height,
@@ -370,10 +370,10 @@ impl PgsEncoder {
             }),
         });
 
-        let rle_top = rle_encode(&frame.indices[..(frame.width * split_row) as usize], frame.width, top_height as u32);
+        let rle_top = rle_encode(&frame.indices[..(frame.width * split_row) as usize], frame.width, u32::from(top_height));
         let rle_bottom = rle_encode(
             &frame.indices[(frame.width * split_row) as usize..],
-            frame.width, bottom_height as u32,
+            frame.width, u32::from(bottom_height),
         );
 
         for (obj_idx, (obj_rle, obj_id)) in [(rle_top, self.object_id), (rle_bottom, self.object_id + 1)].iter().enumerate() {

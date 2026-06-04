@@ -356,9 +356,9 @@ mod kdtree_parity_tests {
                 .iter()
                 .enumerate()
                 .min_by_key(|(_, p)| {
-                    let dr = q.r as i32 - p.r as i32;
-                    let dg = q.g as i32 - p.g as i32;
-                    let db = q.b as i32 - p.b as i32;
+                    let dr = i32::from(q.r) - i32::from(p.r);
+                    let dg = i32::from(q.g) - i32::from(p.g);
+                    let db = i32::from(q.b) - i32::from(p.b);
                     dr * dr + dg * dg + db * db
                 })
                 .unwrap()

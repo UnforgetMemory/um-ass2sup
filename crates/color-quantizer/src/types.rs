@@ -43,10 +43,10 @@ impl Rgba {
     /// This is used for nearest-color lookups in palette indexing. The square
     /// root is omitted since only relative ordering is needed.
     pub fn distance_sq(&self, other: &Rgba) -> u32 {
-        let dr = self.r as i32 - other.r as i32;
-        let dg = self.g as i32 - other.g as i32;
-        let db = self.b as i32 - other.b as i32;
-        let da = self.a as i32 - other.a as i32;
+        let dr = i32::from(self.r) - i32::from(other.r);
+        let dg = i32::from(self.g) - i32::from(other.g);
+        let db = i32::from(self.b) - i32::from(other.b);
+        let da = i32::from(self.a) - i32::from(other.a);
         (dr * dr + dg * dg + db * db + da * da) as u32
     }
 }

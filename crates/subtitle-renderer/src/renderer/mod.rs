@@ -1307,7 +1307,7 @@ impl Renderer {
         let w = pixmap.width();
         let h = pixmap.height();
         let mut layer = if let Some(p) = Pixmap::new(w, h) { p } else { return; };
-        let scale = 1.0 / (drawing_level as f32);
+        let scale = 1.0 / f32::from(drawing_level);
 
         let commands = parse_drawing_commands(text);
         let mut current_path = PathBuilder::new();

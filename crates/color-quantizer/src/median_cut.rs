@@ -42,10 +42,10 @@ impl BoundingBox {
     }
 
     fn longest_axis(&self) -> usize {
-        let r_range = self.r_max as u32 - self.r_min as u32;
-        let g_range = self.g_max as u32 - self.g_min as u32;
-        let b_range = self.b_max as u32 - self.b_min as u32;
-        let a_range = self.a_max as u32 - self.a_min as u32;
+        let r_range = u32::from(self.r_max) - u32::from(self.r_min);
+        let g_range = u32::from(self.g_max) - u32::from(self.g_min);
+        let b_range = u32::from(self.b_max) - u32::from(self.b_min);
+        let a_range = u32::from(self.a_max) - u32::from(self.a_min);
 
         let ranges = [r_range, g_range, b_range, a_range];
         ranges
@@ -69,10 +69,10 @@ impl Cube {
         }
         let (mut r, mut g, mut b, mut a) = (0u64, 0u64, 0u64, 0u64);
         for p in &self.pixels {
-            r += p.r as u64;
-            g += p.g as u64;
-            b += p.b as u64;
-            a += p.a as u64;
+            r += u64::from(p.r);
+            g += u64::from(p.g);
+            b += u64::from(p.b);
+            a += u64::from(p.a);
         }
         let n = self.pixels.len() as u64;
         Rgba::new((r / n) as u8, (g / n) as u8, (b / n) as u8, (a / n) as u8)
@@ -212,10 +212,10 @@ fn longest_axis_of_indices(indices: &[usize], palette: &[Rgba]) -> usize {
     }
 
     let ranges = [
-        (max_r - min_r) as u32,
-        (max_g - min_g) as u32,
-        (max_b - min_b) as u32,
-        (max_a - min_a) as u32,
+        u32::from(max_r - min_r),
+        u32::from(max_g - min_g),
+        u32::from(max_b - min_b),
+        u32::from(max_a - min_a),
     ];
 
     ranges
@@ -290,7 +290,7 @@ impl KdNode {
 
                 // Only search the far side if the plane distance might yield
                 // a better match (branch-and-bound pruning).
-                let diff = val as i32 - *threshold as i32;
+                let diff = i32::from(val) - i32::from(*threshold);
                 let plane_dist = (diff * diff) as u32;
                 if plane_dist < best.1 {
                     far.nearest(color, palette, best);

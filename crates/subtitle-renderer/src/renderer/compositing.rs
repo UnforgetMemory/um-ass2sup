@@ -25,14 +25,14 @@ pub(super) fn apply_alpha_multiplier(data: &mut [u8], alpha: f32) {
         let base = chunk * 16;
         for &offset in &[3usize, 7, 11, 15] {
             let idx = base + offset;
-            data[idx] = ((data[idx] as u32 * factor_256) >> 8) as u8;
+            data[idx] = ((u32::from(data[idx]) * factor_256) >> 8) as u8;
         }
     }
 
     // Handle remaining pixels
     let remaining_start = chunks * 16;
     for i in (remaining_start + 3..data.len()).step_by(4) {
-        data[i] = ((data[i] as u32 * factor_256) >> 8) as u8;
+        data[i] = ((u32::from(data[i]) * factor_256) >> 8) as u8;
     }
 }
 
@@ -140,7 +140,7 @@ pub(super) fn composite_subregion(
             let si = (ry * src_w + rx) as usize * 4;
             let di = (dy * dst_w + dx) as usize * 4;
 
-            let sa = src[si + 3] as u32;
+            let sa = u32::from(src[si + 3]);
             if sa == 0 {
                 continue;
             }
@@ -154,16 +154,16 @@ pub(super) fn composite_subregion(
                 continue;
             }
 
-            let da = dst[di + 3] as u32;
+            let da = u32::from(dst[di + 3]);
             let inv_sa = 255 - sa;
             let out_a = sa + da * inv_sa / 255;
             if out_a == 0 {
                 continue;
             }
 
-            dst[di]     = ((src[si]     as u32 * sa + dst[di]     as u32 * da * inv_sa / 255) / out_a) as u8;
-            dst[di + 1] = ((src[si + 1] as u32 * sa + dst[di + 1] as u32 * da * inv_sa / 255) / out_a) as u8;
-            dst[di + 2] = ((src[si + 2] as u32 * sa + dst[di + 2] as u32 * da * inv_sa / 255) / out_a) as u8;
+            dst[di]     = ((u32::from(src[si]) * sa + u32::from(dst[di]) * da * inv_sa / 255) / out_a) as u8;
+            dst[di + 1] = ((u32::from(src[si + 1]) * sa + u32::from(dst[di + 1]) * da * inv_sa / 255) / out_a) as u8;
+            dst[di + 2] = ((u32::from(src[si + 2]) * sa + u32::from(dst[di + 2]) * da * inv_sa / 255) / out_a) as u8;
             dst[di + 3] = out_a as u8;
         }
     }
