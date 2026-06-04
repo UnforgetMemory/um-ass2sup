@@ -54,6 +54,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install cross toolchain (linux-aarch64)
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -94,19 +100,21 @@ jobs:
 
       - name: Package (zip)
         if: matrix.archive == 'zip'
+        shell: pwsh
         run: |
-          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
-          NAME="ass2sup-${{ github.ref_name }}-${{ matrix.label }}"
+          $ErrorActionPreference = "Stop"
+          $BIN = "target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          $NAME = "ass2sup-${{ github.ref_name }}-${{ matrix.label }}"
           New-Item -ItemType Directory -Force -Path "$NAME" | Out-Null
-          Copy-Item "$BIN" "$NAME/"
-          Copy-Item "README.md" "$NAME/"
-          Copy-Item "README.en.md" "$NAME/"
-          Copy-Item "CHANGELOG.md" "$NAME/"
-          Copy-Item "LICENSE-MIT" "$NAME/"
-          Copy-Item "LICENSE-APACHE" "$NAME/"
-          Compress-Archive -Path "$NAME" -DestinationPath "${NAME}.zip"
+          Copy-Item "$BIN" -Destination "$NAME/"
+          Copy-Item "README.md" -Destination "$NAME/"
+          Copy-Item "README.en.md" -Destination "$NAME/"
+          Copy-Item "CHANGELOG.md" -Destination "$NAME/"
+          Copy-Item "LICENSE-MIT" -Destination "$NAME/"
+          Copy-Item "LICENSE-APACHE" -Destination "$NAME/"
+          Compress-Archive -Path "$NAME/*" -DestinationPath "${NAME}.zip" -Force
           $hash = (Get-FileHash "${NAME}.zip" -Algorithm SHA256).Hash.ToLower()
-          "${hash}  ${NAME}.zip" | Out-File -FilePath "${NAME}.zip.sha256" -Encoding ascii
+          "${hash}  ${NAME}.zip" | Out-File -FilePath "${NAME}.zip.sha256" -Encoding ascii -NoNewline
           Get-ChildItem "${NAME}.zip", "${NAME}.zip.sha256"
 
       - name: Upload artifact
