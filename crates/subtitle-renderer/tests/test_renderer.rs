@@ -2700,6 +2700,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(100,100,300,300)}{\an7}
         frame.bitmap[(250 * w + 210) * 4 + 3] > 0,
         "Pixel at (210,250) inside clip+text should be non-zero"
     );
+    // Robust region assertion: text bbox is ~30px wide/tall around (200,250)
+    // in a healthy render. Search a wide window so sub-pixel rasterization
+    // differences across fontdb / rustybuzz / harfbuzz versions don't flake.
+    let has_text_in_region =
+        (190..=290).any(|y| (180..=280).any(|x| frame.bitmap[(y * w + x) * 4 + 3] > 0));
+    assert!(
+        has_text_in_region,
+        "Expected at least one non-zero alpha pixel in the (180-280, 190-290) text region"
+    );
     assert_eq!(
         frame.bitmap[(50 * w + 50) * 4 + 3],
         0,
