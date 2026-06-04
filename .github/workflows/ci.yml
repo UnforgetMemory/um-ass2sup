@@ -51,6 +51,8 @@ jobs:
         run: cargo test --workspace --all-targets
       - name: cargo test (doc-tests)
         run: cargo test --workspace --doc
+      - name: cargo bench (compile only)
+        run: cargo bench --workspace --no-run
 
   msrv:
     name: MSRV 1.75
