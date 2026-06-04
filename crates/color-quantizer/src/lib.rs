@@ -27,9 +27,12 @@ pub use median_cut::find_nearest_index;
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use color_quantizer::{Quantizer, DitherMethod};
+///
 /// let q = Quantizer::new(256)
 ///     .with_dither(DitherMethod::FloydSteinberg);
+/// let rgba_pixels: Vec<u8> = vec![0; 1920 * 1080 * 4];
 /// let frame = q.quantize(&rgba_pixels, 1920, 1080);
 /// assert!(frame.palette_size() <= 256);
 /// ```
@@ -55,7 +58,9 @@ impl Quantizer {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
+    /// use color_quantizer::Quantizer;
+    ///
     /// let q = Quantizer::new(128); // at most 128 opaque colors
     /// ```
     pub fn new(max_colors: usize) -> Self {
@@ -87,7 +92,11 @@ impl Quantizer {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
+    /// use color_quantizer::Quantizer;
+    ///
+    /// let q = Quantizer::new(128);
+    /// let rgba_bytes: Vec<u8> = vec![0; 640 * 480 * 4];
     /// let frame = q.quantize(&rgba_bytes, 640, 480);
     /// assert_eq!(frame.width, 640);
     /// assert!(frame.palette_size() <= 256);
@@ -176,7 +185,10 @@ impl Quantizer {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use color_quantizer::quantize;
+///
+/// let rgba: Vec<u8> = vec![0; 1920 * 1080 * 4];
 /// let frame = quantize(&rgba, 1920, 1080);
 /// ```
 pub fn quantize(rgba: &[u8], width: u32, height: u32) -> QuantizedFrame {

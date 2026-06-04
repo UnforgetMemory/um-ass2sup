@@ -28,9 +28,8 @@ use crate::types::BdnXml;
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use bdn_xml::types::BdnXml;
-/// use bdn_xml::xml::generate_xml;
+/// ```no_run
+/// use bdn_xml::{BdnXml, generate_xml};
 ///
 /// let mut doc = BdnXml::new("My Movie", 1920, 1080);
 /// // ... add events ...
@@ -139,7 +138,9 @@ fn write_text_element(
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```
+/// use bdn_xml::ms_to_timecode;
+///
 /// assert_eq!(ms_to_timecode(0, 24.0), "00:00:00:00");
 /// assert_eq!(ms_to_timecode(3661000, 24.0), "01:01:01:00");
 /// ```
@@ -174,7 +175,9 @@ pub fn ms_to_timecode(ms: u64, fps: f64) -> String {
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use bdn_xml::generate_png;
+///
 /// let palette = [[255u8; 4]; 256];
 /// let indices = vec![0u8; 1920 * 1080];
 /// let png = generate_png(&palette, &indices, 1920, 1080).unwrap();

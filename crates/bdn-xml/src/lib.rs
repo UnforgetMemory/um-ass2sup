@@ -28,16 +28,23 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use bdn_xml::types::{BdnXml, BdnEvent};
-//! use bdn_xml::xml::{generate_xml, save_frame_png};
+//! ```no_run
+//! use bdn_xml::{BdnXml, BdnEvent, generate_xml};
 //!
 //! let mut doc = BdnXml::new("My Movie", 1920, 1080);
-//! doc.add_event(BdnEvent::new("00001.png", 0, 0, 1920, 1080,
-//!     "00:00:00:00", "00:00:03:00"));
+//! doc.add_event(BdnEvent {
+//!     index: 0,
+//!     in_tc: "00:00:00:00".into(),
+//!     out_tc: "00:00:03:00".into(),
+//!     graphic: "00001.png".into(),
+//!     x: 0,
+//!     y: 0,
+//!     width: 1920,
+//!     height: 1080,
+//!     forced: false,
+//! });
 //!
 //! let xml = generate_xml(&doc).expect("XML generation failed");
-//! // save_frame_png(&path, frame.palette(), frame.indices(), 1920, 1080)?;
 //! ```
 
 mod error;

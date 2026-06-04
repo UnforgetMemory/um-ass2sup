@@ -6,7 +6,9 @@
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```no_run
+/// use color_quantizer::Rgba;
+///
 /// let pixel = Rgba::new(255, 128, 0, 255); // opaque orange
 /// let transparent = Rgba::new(0, 0, 0, 0); // fully transparent
 /// ```
@@ -27,7 +29,9 @@ impl Rgba {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
+    /// use color_quantizer::Rgba;
+    ///
     /// let c = Rgba::new(255, 0, 128, 200);
     /// ```
     pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
