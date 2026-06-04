@@ -30,6 +30,13 @@ use pgs_encoder::PgsEncoder;
 use subtitle_renderer::{RenderConfig, Renderer};
 use subtitle_validator::{OverlapConfig, OverlapSeverity, Validator};
 
+/// Maximum input file size in bytes (100 MiB).
+///
+/// Subtitle files are normally < 1 MiB. Anything over 100 MiB is almost
+/// certainly a misuse (binary file, video, or attack). Refuse early with
+/// [`CliError::InputTooLarge`] rather than allocating huge buffers.
+pub const MAX_INPUT_SIZE_BYTES: u64 = 100 * 1024 * 1024;
+
 /// ASS/SRT to SUP/PGS converter
 #[derive(Parser, Debug)]
 #[command(name = "ass2sup", version, about, long_about = None)]
@@ -169,6 +176,17 @@ pub enum CliError {
         input: String,
         /// Human-readable explanation of why the value is invalid.
         message: String,
+    },
+
+    /// Input file exceeds the size limit.
+    #[error("Input '{path}' is {size} bytes which exceeds the {max} byte limit")]
+    InputTooLarge {
+        /// Path of the oversized input.
+        path: String,
+        /// Actual file size in bytes.
+        size: u64,
+        /// Maximum allowed size in bytes.
+        max: u64,
     },
 
     /// Conversion failed for a file.
@@ -750,6 +768,19 @@ pub fn run(args: Args) -> Result<(), CliError> {
     if inputs.is_empty() {
         error!("No input files found. Provide positional args or use --glob.");
         return Err(CliError::NoInputFiles);
+    }
+
+    for input in &inputs {
+        let size = std::fs::metadata(input)
+            .map_err(|e| CliError::ReadError(input.display().to_string(), e.to_string()))?
+            .len();
+        if size > MAX_INPUT_SIZE_BYTES {
+            return Err(CliError::InputTooLarge {
+                path: input.display().to_string(),
+                size,
+                max: MAX_INPUT_SIZE_BYTES,
+            });
+        }
     }
 
     // --check mode: parse + validate only

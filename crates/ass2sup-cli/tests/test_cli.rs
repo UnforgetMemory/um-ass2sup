@@ -47,7 +47,7 @@ fn test_cli_missing_file() {
         .arg("/dev/null")
         .assert()
         .failure()
-        .stdout(predicate::str::contains("Failed to read"));
+        .stderr(predicate::str::contains("Cannot read"));
 }
 
 // ──────────────────────────────────────────────
@@ -220,6 +220,58 @@ fn test_cli_srt_to_srt_self_check() {
 #[test]
 fn test_cli_check_on_srt() {
     let input = fixtures_dir().join("chinese.srt");
+    Command::cargo_bin("ass2sup")
+        .unwrap()
+        .arg("--check")
+        .arg(&input)
+        .arg("--quiet")
+        .assert()
+        .success();
+}
+
+// ──────────────────────────────────────────────
+// 11. Input size guard: refuse files > MAX_INPUT_SIZE_BYTES
+// ──────────────────────────────────────────────
+#[test]
+fn test_cli_oversized_input_rejected() {
+    use ass2sup_cli::MAX_INPUT_SIZE_BYTES;
+    use std::io::Write;
+
+    // Build a sparse file just over the limit. set_len() doesn't allocate
+    // real blocks on most filesystems, so this is instant.
+    let tmp = std::env::temp_dir().join("ass2sup_oversized.srt");
+    {
+        let mut f = std::fs::File::create(&tmp).unwrap();
+        f.set_len(MAX_INPUT_SIZE_BYTES + 1).unwrap();
+        // Must have at least one byte of real content so the file is "valid"
+        // enough to be detected before the size check would fail anyway.
+        f.write_all(b"1\n00:00:00,000 --> 00:00:01,000\nx\n")
+            .unwrap();
+    }
+
+    Command::cargo_bin("ass2sup")
+        .unwrap()
+        .arg("--check")
+        .arg(&tmp)
+        .arg("--quiet")
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("exceeds"));
+
+    let _ = std::fs::remove_file(&tmp);
+}
+
+// ──────────────────────────────────────────────
+// 12. Input size guard: a normal-sized file still passes
+// ──────────────────────────────────────────────
+#[test]
+fn test_cli_normal_sized_input_accepted() {
+    let input = fixtures_dir().join("chinese.srt");
+    let size = std::fs::metadata(&input).unwrap().len();
+    assert!(
+        size < ass2sup_cli::MAX_INPUT_SIZE_BYTES,
+        "fixture should be well under limit (was {size} bytes)"
+    );
     Command::cargo_bin("ass2sup")
         .unwrap()
         .arg("--check")

@@ -2,4 +2,4 @@
 source: crates/ass2sup-cli/tests/test_snapshots.rs
 expression: stderr.into_owned()
 ---
-
+Error: Cannot read '/nonexistent/path/to/file.ass': No such file or directory (os error 2)
