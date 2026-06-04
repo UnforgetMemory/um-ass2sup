@@ -32,3 +32,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+
+# proptest regression artifacts (test framework internal)
+**/proptest-regressions/
