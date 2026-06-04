@@ -1,0 +1,106 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.3.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-test:
+    name: Build & Test on ${{ github.ref }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.75
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --locked --workspace
+
+      - name: Run lib tests
+        run: cargo test --workspace --lib --locked
+
+      - name: Run doc tests
+        run: cargo test --workspace --doc --locked
+
+      - name: Lint with clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Verify no debug info / deterministic
+        run: |
+          strip target/release/ass2sup
+          ls -la target/release/ass2sup
+          file target/release/ass2sup
+
+  publish-dry-run:
+    name: Publish dry-run
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.75
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo publish dry-run (workspace)
+        run: |
+          set -e
+          for crate in crates/*/Cargo.toml; do
+            echo "=== $crate ==="
+            cargo publish --dry-run --locked --no-verify -manifest-path "$crate"
+          done
+
+  upload-binary:
+    name: Upload release binary
+    needs: build-test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.75
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release --locked -p ass2sup-cli
+
+      - name: Strip & package
+        run: |
+          strip target/release/ass2sup
+          tar -czf "ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz" \
+            -C target/release ass2sup
+          shasum -a 256 "ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz" \
+            > "ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz.sha256"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz
+            ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz.sha256
+          generate_release_notes: true

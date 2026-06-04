@@ -5,6 +5,36 @@ All notable changes to um-ass2sup will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-04
+
+### Added
+- Phase 25: `Renderer::try_new()` with `RendererError::NoFonts` error path (replaces panic)
+- Phase 25: `deny.toml` for cargo-deny (advisories/bans/sources/licenses)
+- Phase 25: `.github/workflows/audit.yml` (weekly Monday 06:00 + on push/PR)
+- Phase 25: `SECURITY.md` (vuln reporting policy, supported versions)
+- Phase 25: 13 external deps centralized in `[workspace.dependencies]`
+- Phase 25: `crates/bdn-xml/Cargo.toml` inherits workspace `license = "MIT OR Apache-2.0"`
+- Phase 24: 10 doc-tests converted from `#[ignore]` to `no_run` or runnable
+- Phase 24: CI step `cargo test --workspace --doc` in `.github/workflows/ci.yml`
+- Phase 24: Two new cargo-fuzz targets (`decode_pgs`, `quantize_rgba`)
+- Phase 24: Property test for test_stats_accuracy assertion
+- Phase 24: `BENCHMARKS.md` Phase-24 update (2.57x k-d tree speedup)
+
+### Changed
+- Phase 24: `Renderer::new()` now delegates to `try_new()` (panics retained for compat)
+- Phase 24: `Mutex` swapped for `parking_lot::Mutex` in renderer
+- Phase 24: Dead `charset` field removed from renderer config
+- Phase 24: Small-palette dedup uses `HashSet<u32>` (O(n²) → O(n))
+- Phase 24: `find_nearest_index` uses in-tree k-d tree (1080p 908ms → 353ms, 2.57x)
+- Phase 24: `subtitle-validator` test_stats_accuracy now asserts `karaoke_events == 1`
+- Phase 25: Workspace version bumped 0.2.0 → 0.3.0
+
+### Fixed
+- Phase 24: CLI no longer panics on malformed glob pattern (returns error)
+- Phase 24: SRT input now correctly dispatched (was always falling through to ASS parser)
+- Phase 24: 10 broken `#[ignore]` doc-tests now compile/run
+- Phase 24: `crates/bdn-xml/proptest-regressions/` artifacts gitignored
+
 ## [Unreleased] - Phase 23
 
 ### Added
