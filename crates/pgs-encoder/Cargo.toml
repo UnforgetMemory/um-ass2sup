@@ -12,7 +12,7 @@ color-quantizer = { path = "../color-quantizer" }
 
 [dev-dependencies]
 criterion.workspace = true
-proptest = "1"
+proptest.workspace = true
 
 [[bench]]
 name = "encoder"

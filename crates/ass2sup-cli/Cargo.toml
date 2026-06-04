@@ -22,10 +22,10 @@ tracing-subscriber.workspace = true
 rayon.workspace = true
 indicatif.workspace = true
 thiserror.workspace = true
-glob = "0.3"
-walkdir = "2"
+glob.workspace = true
+walkdir.workspace = true
 
 [dev-dependencies]
-assert_cmd = "2"
-predicates = "3"
-tempfile = "3"
+assert_cmd.workspace = true
+predicates.workspace = true
+tempfile.workspace = true

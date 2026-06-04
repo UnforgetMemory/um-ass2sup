@@ -6,18 +6,18 @@ rust-version.workspace = true
 description = "ASS/SRT subtitle rendering to RGBA bitmaps with font management, text shaping, and effects"
 
 [dependencies]
-thiserror = "1"
-tracing = "0.1"
-fontdb = "0.16"
-rustybuzz = "0.14"
-ttf-parser = "0.21"
-tiny-skia = "0.11"
+thiserror.workspace = true
+tracing.workspace = true
+fontdb.workspace = true
+rustybuzz.workspace = true
+ttf-parser.workspace = true
+tiny-skia.workspace = true
 ass-parser = { path = "../ass-parser" }
-wide = "0.7"
-parking_lot = "0.12"
+wide.workspace = true
+parking_lot.workspace = true
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion.workspace = true
 
 [[bench]]
 name = "renderer"
