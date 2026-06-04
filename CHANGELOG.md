@@ -5,6 +5,28 @@ All notable changes to um-ass2sup will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-06-04
+
+### Added
+- Chinese (primary) + English bilingual READMEs (`README.md` + `README.en.md`)
+- Professional doc structure: architecture, workspace table, CLI reference, library usage, benchmarks
+
+### Changed
+- MSRV bumped: 1.75 → 1.85 (ecosystem moved to edition2024; clap, rayon, proptest all require 1.80+)
+- CI workflow: `fonts-dejavu-core` installed for consistent test rasterization
+- All deps updated to latest stable (`cargo update`)
+- `release.yml` toolchain: 1.75 → 1.85 (3 jobs)
+- `.gitignore`: inline comments removed (were silently breaking patterns), emacs patterns escaped
+
+### Fixed
+- `test_clip_rect_pixels` flaky on CI rustc 1.96: exact pixel assertion replaced with region-based (190-290, 180-280) — guards font rasterization drift
+- `cargo audit --deny warnings` ignored RUSTSEC-2025-0119 (`number_prefix` unmaintained, transitive via `indicatif`)
+- Clippy 1.96 new lint `manual_repeat_n` in `pgs-encoder/src/decoder.rs:596` — `repeat(0u8).take(48)` → `repeat_n(0u8, 48)`
+
+### Removed
+- 11 non-source artifacts (phase plans, HTML specs, test output, coverage artifact)
+- 2 redundant `crates/*/fuzz/.gitignore` (consolidated to root pattern)
+
 ## [0.3.0] - 2026-06-04
 
 ### Added
