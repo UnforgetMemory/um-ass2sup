@@ -35,3 +35,15 @@ Thumbs.db
 
 # proptest regression artifacts (test framework internal)
 **/proptest-regressions/
+
+# CodeGraph local index (per-machine, regenerable)
+.codegraph/
+
+# Fuzz crash artifacts (machine-generated)
+**/fuzz/artifacts/
+
+# Code coverage reports (regenerable)
+coverage/
+
+# Root-level build outputs
+/*.sup
