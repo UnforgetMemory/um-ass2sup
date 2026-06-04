@@ -124,6 +124,7 @@ impl FontManager {
 
     /// Queries a font using a scoring algorithm that considers weight difference,
     /// italic match, and family name. Returns the best-scoring font from all loaded faces.
+    #[allow(clippy::incompatible_msrv)]
     pub fn query_with_score(&self, family: &str, bold: bool, italic: bool) -> Option<fontdb::ID> {
         let target_weight: u16 = if bold { 700 } else { 400 };
         let target_italic = italic;

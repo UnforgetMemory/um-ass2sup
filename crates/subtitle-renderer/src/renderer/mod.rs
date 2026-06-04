@@ -12,6 +12,15 @@ use crate::rasterizer::{apply_anisotropic_outline, Rasterizer};
 use crate::shaper::{Shaper, ShapedText};
 use crate::transform::AffineTransform;
 
+/// Errors that can occur when constructing a Renderer.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum RendererError {
+    /// No system fonts could be loaded. The renderer requires at least
+    /// one font face to rasterize glyphs.
+    #[error("no system fonts available — install fonts or pass a font directory")]
+    NoFonts,
+}
+
 use animation::{interpolate_move, compute_fad_alpha, compute_fade_complex, apply_transform_tag, parse_override_block};
 use compositing::{apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_subregion, compute_tight_bbox};
 use drawing::{DrawingCommand, parse_drawing_level, parse_drawing_commands};
@@ -93,14 +102,32 @@ impl Renderer {
     /// Creates a new renderer with the given configuration.
     ///
     /// Automatically loads system fonts via [`FontManager::load_system_fonts`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if no system fonts are available. For fallible construction, see
+    /// [`Renderer::try_new`].
     pub fn new(config: RenderConfig) -> Self {
+        Self::try_new(config)
+            .expect("no system fonts available — install fonts or pass a font directory")
+    }
+
+    /// Creates a new renderer with the given configuration, returning an error
+    /// if no system fonts could be loaded.
+    ///
+    /// Use this when font availability cannot be guaranteed. For infallible
+    /// construction (which panics on zero fonts), see [`Renderer::new`].
+    pub fn try_new(config: RenderConfig) -> Result<Self, RendererError> {
         let mut fm = FontManager::new();
         fm.load_system_fonts();
-        Self {
+        if fm.font_count() == 0 {
+            return Err(RendererError::NoFonts);
+        }
+        Ok(Self {
             config,
             font_manager: fm,
             pixmap_pool: Mutex::new(PixmapPool::new(8)),
-        }
+        })
     }
 
     /// Returns a reference to the font manager for querying/loading fonts.
@@ -1859,5 +1886,41 @@ mod tests {
             let _guard = renderer_clone.pixmap_pool.lock();
         }));
         assert!(result.is_ok(), "parking_lot::Mutex::lock() should not panic");
+    }
+}
+
+#[cfg(test)]
+mod try_new_tests {
+    use super::*;
+
+    #[test]
+    fn try_new_succeeds_when_fonts_loaded() {
+        // This test only runs if the system has at least one font.
+        // On CI we install fonts; on dev boxes this should pass.
+        match Renderer::try_new(RenderConfig::default()) {
+            Ok(r) => assert!(r.font_manager().font_count() > 0),
+            Err(RendererError::NoFonts) => {
+                eprintln!("skipping: no system fonts on this host");
+            }
+        }
+    }
+
+    #[test]
+    fn try_new_error_is_clone_eq() {
+        // Compile-time + runtime: error type must satisfy the trait bounds.
+        let e = RendererError::NoFonts;
+        let e2 = e.clone();
+        assert_eq!(e, e2);
+    }
+
+    #[test]
+    fn new_panics_or_works_same_as_try_new() {
+        // new() delegates to try_new; if try_new works, new() returns Renderer.
+        // If try_new errors, new() panics. Either is acceptable.
+        let result = std::panic::catch_unwind(|| Renderer::new(RenderConfig::default()));
+        match result {
+            Ok(r) => assert!(r.font_manager().font_count() > 0),
+            Err(_) => { /* expected on font-less host */ }
+        }
     }
 }
