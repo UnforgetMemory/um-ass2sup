@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 24: Two new cargo-fuzz targets (`decode_pgs`, `quantize_rgba`)
 - Phase 24: Property test for test_stats_accuracy assertion
 - Phase 24: `BENCHMARKS.md` Phase-24 update (2.57x k-d tree speedup)
+- Phase 25: `.github/workflows/release.yml` triggered on `v*` tag push
+- Phase 25: `CHANGELOG.md` 0.3.0 entry
+- Phase 25: `README.md` CI/Audit/License/Rust/Version badges
+- Phase 26: ass-parser proptest +8 tests (ASS determinism, ASS lenient recovery, 5 SRT roundtrips)
+- Phase 26: insta 1.47.2 CLI snapshot tests (5 cases for `--check`, `--to-srt`, etc.)
+- Phase 26: `cargo bench --workspace --no-run` step in CI test job
+- Phase 26: `COVERAGE.md` with 88.13% baseline (tarpaulin xml, lower bound)
+- Phase 27: `--parallel-frames` CLI flag (rayon-parallel quantize, opt-in, default off)
+- Phase 28: `#![warn(missing_docs)]` enforced in 3 crates (ass2sup-cli, color-quantizer, subtitle-validator)
+- Phase 28: 14 pub items documented across 4 files
+- Phase 28: `cast_lossless` clippy lint enforced workspace-wide (49+ fixes via `u32::from`/`u64::from`/etc.)
+- Phase 29: 3 runnable examples (`parse_ass`, `quantize_image`, `encode_sup`)
+- Phase 29: 2 ADRs in `docs/adr/` (kd-tree quantizer, parallel quantize)
+- Phase 29: 100 MiB `MAX_INPUT_SIZE_BYTES` input guard with `CliError::InputTooLarge`
+- Phase 29: `main.rs` now prints `CliError` to stderr before exit (was silent failure)
 
 ### Changed
 - Phase 24: `Renderer::new()` now delegates to `try_new()` (panics retained for compat)
@@ -28,12 +43,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 24: `find_nearest_index` uses in-tree k-d tree (1080p 908ms → 353ms, 2.57x)
 - Phase 24: `subtitle-validator` test_stats_accuracy now asserts `karaoke_events == 1`
 - Phase 25: Workspace version bumped 0.2.0 → 0.3.0
+- Phase 25: All 6 source crates inherit `license.workspace = true`
+- Phase 27: Quantize step parallelized via rayon (sequential quantize 0.366s → parallel 0.270s, 1.36x on 30-event stress test, output byte-identical)
 
 ### Fixed
 - Phase 24: CLI no longer panics on malformed glob pattern (returns error)
 - Phase 24: SRT input now correctly dispatched (was always falling through to ASS parser)
 - Phase 24: 10 broken `#[ignore]` doc-tests now compile/run
 - Phase 24: `crates/bdn-xml/proptest-regressions/` artifacts gitignored
+- Phase 26: pgs-encoder `parse_ods_payload` OOB: data length check was `< 4`, should be `< 8` (width/height at bytes 4-7)
+- Phase 26: pgs-encoder `parse_wds_payload` off-by-one: window stride was 8, should be 9 (9 bytes/window: 1 flag + 8 coords)
+- Phase 28: `--to-srt` on SRT input was silent 0-byte output (now lossless roundtrip via `parse_file` swap)
+- Phase 29: `main.rs` swallowed all errors (now prints `CliError` to stderr, fixes `test_cli_missing_file`)
 
 ## [Unreleased] - Phase 23
 

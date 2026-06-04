@@ -82,6 +82,33 @@ ass2sup input.ass -o output.sup -r 1920x1080 -f 25.0
 ass2sup input.ass -o output.sup --validate --overlap-warn
 ```
 
+### Validate only (no conversion)
+
+```bash
+ass2sup input.ass --check   # exit 0 if OK, 1 if errors
+```
+
+### Convert ASS/SSA to SRT (downgrade)
+
+```bash
+ass2sup input.ass --to-srt -o output.srt
+# SRT→SRT roundtrip is a lossless self-check:
+ass2sup input.srt --to-srt -o out.srt && diff input.srt out.srt
+```
+
+### Convert to BDN XML + per-frame PNGs (Blu-ray authoring)
+
+```bash
+ass2sup input.srt --to-bdn -d ./bdn_output/
+# produces BDN.xml + 0001.png, 0002.png, ...
+```
+
+### Parallel frame quantization (multi-core, opt-in)
+
+```bash
+ass2sup input.ass -o output.sup --parallel-frames   # rayon-parallel quantize
+```
+
 ### CLI Options
 
 | Flag | Description | Default |
@@ -96,6 +123,21 @@ ass2sup input.ass -o output.sup --validate --overlap-warn
 | `--quantizer` | Quantizer algorithm (`median-cut`) | `median-cut` |
 | `--max-colors` | Maximum palette colors (1–255) | `255` |
 | `--dither` | Dithering method (`none`/`floyd-steinberg`/`ordered`) | `floyd-steinberg` |
+| `--check` | Parse and validate only, no conversion (exit 0/1) | off |
+| `--to-srt` | Output SRT format (ASS→SRT downgrade, also SRT self-check) | off |
+| `--to-bdn` | Output BDN XML + per-frame PNGs (Blu-ray authoring) | off |
+| `--parallel-frames` | Parallel quantize via rayon (single-file mode) | off |
+| `--parallel` | Parallel file processing (batch mode) | off |
+| `--dry-run` | Parse and validate only, no write | off |
+| `--force` | Convert even if validation fails | off |
+| `--font` | Default font for SRT input | `Arial` |
+| `--font-size` | Default font size for SRT input | `48.0` |
+| `--glob` | Glob pattern for batch input | — |
+| `--recursive` | Recursive directory traversal with `--glob` | off |
+| `--max-files` | Max files processed in glob mode | unlimited |
+| `--quiet` | Suppress progress bar | off |
+| `--color` | Color output mode (`auto`/`always`/`never`) | `auto` |
+| `-v, --verbose` | Enable verbose logging | off |
 
 ## Example Pipeline
 
@@ -149,6 +191,16 @@ Input (.ass/.srt)
 ┌──────────────────────┐
 │      bdn-xml        │  Generate BDN XML + PNG assets
 └─────────────────────┘
+```
+
+## Examples
+
+Runnable examples live in each crate's `examples/` directory:
+
+```bash
+cargo run --example parse_ass       -p ass-parser
+cargo run --example quantize_image  -p color-quantizer
+cargo run --example encode_sup      -p pgs-encoder
 ```
 
 ## License
