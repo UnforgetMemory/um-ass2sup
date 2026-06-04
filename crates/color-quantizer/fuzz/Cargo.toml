@@ -1,0 +1,18 @@
+[workspace]
+
+[package]
+name = "color-quantizer-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+color-quantizer = { path = ".." }
+libfuzzer-sys = "0.4"
+
+[[bin]]
+name = "quantize_rgba"
+path = "fuzz_targets/quantize_rgba.rs"
