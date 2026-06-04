@@ -234,7 +234,7 @@ fn parse_pds_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
 
 /// Parse ODS (Object Definition Segment) payload.
 fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
-    if data.len() < 4 {
+    if data.len() < 8 {
         return Err(DecodeError::TruncatedPayload);
     }
 
@@ -424,6 +424,19 @@ mod tests {
         let data = vec![0x50, 0x47, 0x00, 0x01];
         let result = decode_sup(&data);
         assert!(matches!(result, Err(DecodeError::DataTooShort)));
+    }
+
+    #[test]
+    fn test_decode_ods_payload_too_short_for_dimensions() {
+        let data: &[u8] = &[
+            0x50, 0x47, 0x47, 0x47, 0x47, 0x47, 0xf9, 0x47, 0xaa, 0xab, 0x15, 0x00, 0x05, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x7d, 0x50, 0x14, 0x47, 0x02, 0x24, 0x50, 0x0a,
+        ];
+        let result = decode_sup(data);
+        assert!(
+            matches!(result, Err(DecodeError::TruncatedPayload)),
+            "ODS payload shorter than width/height fields must return TruncatedPayload, not panic. Got: {result:?}"
+        );
     }
 
     #[test]
