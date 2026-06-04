@@ -38,7 +38,9 @@ jobs:
         run: cargo install cargo-deny --locked
 
       - name: cargo audit
-        run: cargo audit --deny warnings
+        # RUSTSEC-2025-0119 (number_prefix unmaintained) ignored: transitive
+        # via indicatif 0.17.11. Tracked in SECURITY.md; awaiting upstream fix.
+        run: cargo audit --deny warnings --ignore RUSTSEC-2025-0119
 
       - name: cargo deny check
         run: cargo deny check
