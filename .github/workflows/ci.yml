@@ -55,10 +55,10 @@ jobs:
         run: cargo bench --workspace --no-run
 
   msrv:
-    name: MSRV 1.75
-    runs-on: ubuntu-latest
+    name: MSRV 1.85
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75.0
+      - uses: dtolnay/rust-toolchain@1.85.0
       - name: cargo check MSRV
         run: cargo check --workspace --all-targets

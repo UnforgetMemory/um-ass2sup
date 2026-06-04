@@ -882,14 +882,12 @@ impl Renderer {
                         apply_alpha_multiplier(&mut clipped, ctx.alpha_multiplier);
                     }
                     effects::composite_over(pixmap.data_mut(), &clipped, w, h);
+                } else if ctx.alpha_multiplier < 0.999 {
+                    let mut alpha_data = final_data;
+                    apply_alpha_multiplier(&mut alpha_data, ctx.alpha_multiplier);
+                    effects::composite_over(pixmap.data_mut(), &alpha_data, w, h);
                 } else {
-                    if ctx.alpha_multiplier < 0.999 {
-                        let mut alpha_data = final_data;
-                        apply_alpha_multiplier(&mut alpha_data, ctx.alpha_multiplier);
-                        effects::composite_over(pixmap.data_mut(), &alpha_data, w, h);
-                    } else {
-                        effects::composite_over(pixmap.data_mut(), &final_data, w, h);
-                    }
+                    effects::composite_over(pixmap.data_mut(), &final_data, w, h);
                 }
             }
 
@@ -1173,14 +1171,12 @@ impl Renderer {
                     apply_alpha_multiplier(&mut clipped, ctx.alpha_multiplier);
                 }
                 effects::composite_over(pixmap.data_mut(), &clipped, w, h);
+            } else if ctx.alpha_multiplier < 0.999 {
+                let mut alpha_data = final_data;
+                apply_alpha_multiplier(&mut alpha_data, ctx.alpha_multiplier);
+                effects::composite_over(pixmap.data_mut(), &alpha_data, w, h);
             } else {
-                if ctx.alpha_multiplier < 0.999 {
-                    let mut alpha_data = final_data;
-                    apply_alpha_multiplier(&mut alpha_data, ctx.alpha_multiplier);
-                    effects::composite_over(pixmap.data_mut(), &alpha_data, w, h);
-                } else {
-                    effects::composite_over(pixmap.data_mut(), &final_data, w, h);
-                }
+                effects::composite_over(pixmap.data_mut(), &final_data, w, h);
             }
         }
 

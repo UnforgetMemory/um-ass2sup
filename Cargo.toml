@@ -14,7 +14,7 @@ members = [
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/UnforgetMemory/um-ass2sup"
 description = "ASS/SSA/SRT to Blu-ray SUP/PGS subtitle converter written in Rust"
@@ -32,7 +32,7 @@ pgs-encoder = { path = "crates/pgs-encoder" }
 thiserror = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
-clap = { version = "4", features = ["derive"] }
+clap = { version = ">=4.0, <4.6", features = ["derive"] }
 rayon = "1"
 indicatif = "0.17"
 glob = "0.3"
