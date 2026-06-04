@@ -152,7 +152,6 @@ pub struct RenderContext {
     pub strikeout: bool,
     /// Alpha multiplier for fade effects (1.0 = fully opaque, 0.0 = fully transparent)
     pub alpha_multiplier: f32,
-    pub charset: u8,
     /// Vertical text writing mode (set by `\writing_mode`). 0/1=horizontal, 2=vertical right-to-left, 3=vertical left-to-right.
     pub writing_mode: u8,
     /// Baseline offset in pixels for drawing mode (set by `\pbo`).
@@ -212,7 +211,6 @@ impl Default for RenderContext {
             underline: false,
             strikeout: false,
             alpha_multiplier: 1.0,
-            charset: 0,
             writing_mode: 0,
             baseline_offset: 0.0,
             drawing_mode: 0,

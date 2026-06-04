@@ -220,7 +220,7 @@ pub(crate) fn apply_anisotropic_outline(
     }
 
     // ── Build the fill alpha mask ──────────────────────────────────────
-    let mut mask = Pixmap::new(w as u32, h as u32).unwrap();
+    let mut mask = if let Some(p) = Pixmap::new(w as u32, h as u32) { p } else { return; };
     let mut white = Paint::default();
     white.set_color_rgba8(255, 255, 255, 255);
     white.anti_alias = true;

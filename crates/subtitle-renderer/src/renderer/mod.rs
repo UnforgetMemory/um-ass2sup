@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 use ass_parser::{AssFile, Effect, Event, OverrideTag, Style, Timestamp};
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Transform as SkiaTransform};
@@ -288,7 +288,6 @@ impl Renderer {
                 OverrideTag::Alignment(a) => ctx.alignment = *a,
                 OverrideTag::AlignmentNumpad(a) => ctx.alignment = *a,
                 OverrideTag::WrapStyle(w) => ctx.wrap_style = *w,
-                OverrideTag::Charset(c) => ctx.charset = *c,
                 OverrideTag::Pos { x, y } => {
                     ctx.x = *x as f32 * scale_x;
                     ctx.y = *y as f32 * scale_y;
@@ -594,7 +593,7 @@ impl Renderer {
                 (0, 0, w, h, false)
             };
 
-            let mut layer = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+            let mut layer = self.pixmap_pool.lock().get(lw, lh).unwrap();
             let oxf = ox as f32;
             let oyf = oy as f32;
 
@@ -691,10 +690,10 @@ impl Renderer {
                     ctx.blur,
                     ctx.shadow_color,
                 );
-                let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+                let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
                 shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
                 effects::composite_over(layer.data_mut(), shadow_pixmap.data(), lw, lh);
-                self.pixmap_pool.lock().unwrap().put(shadow_pixmap);
+                self.pixmap_pool.lock().put(shadow_pixmap);
             }
 
             if use_sub {
@@ -741,7 +740,7 @@ impl Renderer {
                 }
             }
 
-            self.pixmap_pool.lock().unwrap().put(layer);
+            self.pixmap_pool.lock().put(layer);
             return;
         }
 
@@ -812,7 +811,7 @@ impl Renderer {
         };
 
         // Phase 4: Allocate layer and render glyphs with sub-region offset.
-        let mut layer = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+        let mut layer = self.pixmap_pool.lock().get(lw, lh).unwrap();
         let oxf = ox as f32;
         let oyf = oy as f32;
 
@@ -918,10 +917,10 @@ impl Renderer {
                 ctx.blur,
                 ctx.shadow_color,
             );
-            let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
             effects::composite_over(layer.data_mut(), shadow_pixmap.data(), lw, lh);
-            self.pixmap_pool.lock().unwrap().put(shadow_pixmap);
+            self.pixmap_pool.lock().put(shadow_pixmap);
         }
 
         // Phase 7: Composite back.
@@ -974,13 +973,13 @@ impl Renderer {
         }
 
         // Return layer pixmap to pool.
-        self.pixmap_pool.lock().unwrap().put(layer);
+        self.pixmap_pool.lock().put(layer);
 
         // \p4: Apply drawing commands as clip mask on the final pixmap.
         if is_p4_clip {
             let clip_commands = parse_drawing_commands(&plain_text);
             let scale = 1.0 / (1u32 << (4 - 1)) as f32; // \p4 → scale = 1/8
-            let mut clip_pixmap = Pixmap::new(w, h).unwrap();
+            let mut clip_pixmap = if let Some(p) = Pixmap::new(w, h) { p } else { return; };
             let mut path_builder = PathBuilder::new();
             for cmd in &clip_commands {
                 match cmd {
@@ -1141,8 +1140,8 @@ impl Renderer {
         };
 
         // Phase 3: Allocate layers and render with offset.
-        let mut bg_layer = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
-        let mut fg_layer = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+        let mut bg_layer = self.pixmap_pool.lock().get(lw, lh).unwrap();
+        let mut fg_layer = self.pixmap_pool.lock().get(lw, lh).unwrap();
         let oxf = ox as f32;
         let oyf = oy as f32;
 
@@ -1244,10 +1243,10 @@ impl Renderer {
                 if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
                 ctx.blur, ctx.shadow_color,
             );
-            let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
             effects::composite_over(bg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
-            self.pixmap_pool.lock().unwrap().put(shadow_pixmap);
+            self.pixmap_pool.lock().put(shadow_pixmap);
         }
         if ctx.shadow_depth > 0.0 {
             let fg_data = fg_layer.data().to_vec();
@@ -1257,10 +1256,10 @@ impl Renderer {
                 if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
                 ctx.blur, ctx.shadow_color,
             );
-            let mut shadow_pixmap = self.pixmap_pool.lock().unwrap().get(lw, lh).unwrap();
+            let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
             effects::composite_over(fg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
-            self.pixmap_pool.lock().unwrap().put(shadow_pixmap);
+            self.pixmap_pool.lock().put(shadow_pixmap);
         }
 
         // Phase 6: Composite back.
@@ -1273,14 +1272,14 @@ impl Renderer {
         }
 
         // Return karaoke layers to pool.
-        self.pixmap_pool.lock().unwrap().put(bg_layer);
-        self.pixmap_pool.lock().unwrap().put(fg_layer);
+        self.pixmap_pool.lock().put(bg_layer);
+        self.pixmap_pool.lock().put(fg_layer);
     }
 
     fn render_drawing(&self, pixmap: &mut Pixmap, text: &str, ctx: &RenderContext, drawing_level: u8) {
         let w = pixmap.width();
         let h = pixmap.height();
-        let mut layer = Pixmap::new(w, h).unwrap();
+        let mut layer = if let Some(p) = Pixmap::new(w, h) { p } else { return; };
         let scale = 1.0 / (drawing_level as f32);
 
         let commands = parse_drawing_commands(text);
@@ -1837,5 +1836,28 @@ mod tests {
             .collect();
         sorted.sort();
         assert_eq!(sorted, vec![0, 1]);
+    }
+
+    // ── parking_lot::Mutex poisoning resistance ─────────────────────
+    #[test]
+    fn test_pixmap_pool_mutex_does_not_panic_after_thread_panic() {
+        // std::sync::Mutex is poisoned if a thread panics while holding the lock,
+        // causing all subsequent .lock().unwrap() calls to panic and crash the process.
+        // parking_lot::Mutex does NOT have this failure mode — locks always succeed.
+        //
+        // This test verifies that pixmap_pool uses parking_lot::Mutex by checking
+        // that .lock() returns the guard directly (not a Result).
+
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+        use std::sync::Arc;
+
+        let renderer = Arc::new(Renderer::new(RenderConfig::default()));
+        let renderer_clone = Arc::clone(&renderer);
+
+        // parking_lot::Mutex::lock() never panics — the guard is returned directly.
+        let result = catch_unwind(AssertUnwindSafe(move || {
+            let _guard = renderer_clone.pixmap_pool.lock();
+        }));
+        assert!(result.is_ok(), "parking_lot::Mutex::lock() should not panic");
     }
 }

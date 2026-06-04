@@ -269,7 +269,10 @@ pub fn apply_shadow(
 
     // Step 2: Apply gaussian blur to the shadow layer
     if blur_radius > 0.0 {
-        let mut shadow_pixmap = Pixmap::new(width, height).unwrap();
+        let mut shadow_pixmap = match Pixmap::new(width, height) {
+            Some(p) => p,
+            None => return src.to_vec(),
+        };
         shadow_pixmap
             .data_mut()
             .copy_from_slice(&shadow_data);

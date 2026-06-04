@@ -87,7 +87,7 @@ pub(super) fn apply_drawing_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &Ren
     }
 
     if let Some(path) = pb.finish() {
-        let mut mask = Pixmap::new(w, h).unwrap();
+        let mut mask = if let Some(p) = Pixmap::new(w, h) { p } else { return; };
         let mut paint = Paint::default();
         paint.set_color_rgba8(255, 255, 255, 255);
         paint.anti_alias = true;
