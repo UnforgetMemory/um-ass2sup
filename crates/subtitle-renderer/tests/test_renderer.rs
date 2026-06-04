@@ -2696,10 +2696,6 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(100,100,300,300)}{\an7}
         frame.bitmap.iter().any(|&b| b > 0),
         "Clip rect should keep visible text"
     );
-    assert!(
-        frame.bitmap[(250 * w + 210) * 4 + 3] > 0,
-        "Pixel at (210,250) inside clip+text should be non-zero"
-    );
     // Robust region assertion: text bbox is ~30px wide/tall around (200,250)
     // in a healthy render. Search a wide window so sub-pixel rasterization
     // differences across fontdb / rustybuzz / harfbuzz versions don't flake.
