@@ -1,5 +1,5 @@
+use color_quantizer::{DitherMethod, Quantizer};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use color_quantizer::{Quantizer, DitherMethod};
 
 fn make_test_image(width: u32, height: u32, color_count: usize) -> Vec<u8> {
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);

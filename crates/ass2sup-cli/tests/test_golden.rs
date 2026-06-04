@@ -1,8 +1,8 @@
 use ass_parser::AssFile;
 use color_quantizer::Quantizer;
 use pgs_encoder::PgsEncoder;
-use subtitle_renderer::{FontManager, RenderConfig, Renderer};
 use std::path::PathBuf;
+use subtitle_renderer::{FontManager, RenderConfig, Renderer};
 
 fn test_config() -> RenderConfig {
     let font_name = find_any_font();
@@ -18,7 +18,11 @@ fn test_config() -> RenderConfig {
 
 fn find_any_font() -> String {
     let candidates = [
-        "Arial", "Liberation Sans", "DejaVu Sans", "Noto Sans", "Helvetica",
+        "Arial",
+        "Liberation Sans",
+        "DejaVu Sans",
+        "Noto Sans",
+        "Helvetica",
     ];
     let mut fm = FontManager::default();
     fm.load_system_fonts();
@@ -60,13 +64,25 @@ fn parse_sup_segments(bytes: &[u8]) -> Vec<(u32, u32, u8, usize)> {
     let mut segments = Vec::new();
     let mut offset = 0;
     while offset + 13 <= bytes.len() {
-        let pts = u32::from_be_bytes([bytes[offset+2], bytes[offset+3], bytes[offset+4], bytes[offset+5]]);
-        let dts = u32::from_be_bytes([bytes[offset+6], bytes[offset+7], bytes[offset+8], bytes[offset+9]]);
+        let pts = u32::from_be_bytes([
+            bytes[offset + 2],
+            bytes[offset + 3],
+            bytes[offset + 4],
+            bytes[offset + 5],
+        ]);
+        let dts = u32::from_be_bytes([
+            bytes[offset + 6],
+            bytes[offset + 7],
+            bytes[offset + 8],
+            bytes[offset + 9],
+        ]);
         let seg_type = bytes[offset + 10];
         let seg_size = u16::from_be_bytes([bytes[offset + 11], bytes[offset + 12]]) as usize;
         segments.push((pts, dts, seg_type, seg_size));
         offset += 13 + seg_size;
-        if offset > bytes.len() { break; }
+        if offset > bytes.len() {
+            break;
+        }
     }
     segments
 }
@@ -81,14 +97,31 @@ fn test_golden_sup_structure() {
     while offset + 13 <= bytes.len() {
         assert_eq!(bytes[offset], b'P', "segment should start with PG");
         assert_eq!(bytes[offset + 1], b'G');
-        let pts = u32::from_be_bytes([bytes[offset+2], bytes[offset+3], bytes[offset+4], bytes[offset+5]]);
-        let dts = u32::from_be_bytes([bytes[offset+6], bytes[offset+7], bytes[offset+8], bytes[offset+9]]);
+        let pts = u32::from_be_bytes([
+            bytes[offset + 2],
+            bytes[offset + 3],
+            bytes[offset + 4],
+            bytes[offset + 5],
+        ]);
+        let dts = u32::from_be_bytes([
+            bytes[offset + 6],
+            bytes[offset + 7],
+            bytes[offset + 8],
+            bytes[offset + 9],
+        ]);
         let seg_type = bytes[offset + 10];
         let seg_size = u16::from_be_bytes([bytes[offset + 11], bytes[offset + 12]]) as usize;
 
-        assert!(pts > 0 || segment_count == 0, "PTS should be non-zero for seg {}", segment_count);
+        assert!(
+            pts > 0 || segment_count == 0,
+            "PTS should be non-zero for seg {}",
+            segment_count
+        );
         assert!(dts <= pts, "DTS should be <= PTS");
-        assert!(seg_size > 0 || seg_type == 0x80, "segment size should be >0 for non-END");
+        assert!(
+            seg_size > 0 || seg_type == 0x80,
+            "segment size should be >0 for non-END"
+        );
 
         offset += 13 + seg_size;
         segment_count += 1;
@@ -97,7 +130,10 @@ fn test_golden_sup_structure() {
             break;
         }
     }
-    assert!(segment_count >= 3, "should have PCS+WDS+PDS+ODS+END at minimum");
+    assert!(
+        segment_count >= 3,
+        "should have PCS+WDS+PDS+ODS+END at minimum"
+    );
 }
 
 #[test]
@@ -123,7 +159,10 @@ fn test_golden_ntsc_pts() {
     assert!(!bytes.is_empty());
 
     let segments = parse_sup_segments(&bytes);
-    assert!(!segments.is_empty(), "NTSC pipeline should produce segments");
+    assert!(
+        !segments.is_empty(),
+        "NTSC pipeline should produce segments"
+    );
     let has_nonzero = segments.iter().any(|&(pts, _, _, _)| pts > 0);
     assert!(has_nonzero, "at least one segment should have PTS > 0");
 }
@@ -159,17 +198,30 @@ fn test_golden_different_resolutions() {
                 any_rendered = true;
             }
         }
-        assert!(any_rendered, "should render at least one frame at {}x{}", w, h);
+        assert!(
+            any_rendered,
+            "should render at least one frame at {}x{}",
+            w, h
+        );
     }
 }
 
 #[test]
 fn test_golden_all_fixtures_produce_output() {
-    let fixtures = ["simple.ass", "effects_chain.ass", "karaoke_advanced.ass", "batch_mode.ass"];
+    let fixtures = [
+        "simple.ass",
+        "effects_chain.ass",
+        "karaoke_advanced.ass",
+        "batch_mode.ass",
+    ];
 
     for fixture in &fixtures {
         let bytes = run_pipeline(fixture, 24.0);
-        assert!(!bytes.is_empty(), "fixture '{}' should produce SUP output", fixture);
+        assert!(
+            !bytes.is_empty(),
+            "fixture '{}' should produce SUP output",
+            fixture
+        );
         assert!(bytes.len() >= 13, "fixture '{}' output too small", fixture);
         assert_eq!(bytes[0], b'P', "fixture '{}' should start with PG", fixture);
         assert_eq!(bytes[1], b'G', "fixture '{}' should start with PG", fixture);

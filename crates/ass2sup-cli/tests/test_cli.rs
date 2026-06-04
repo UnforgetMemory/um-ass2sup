@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 fn fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
 }
 
 fn simple_fixture() -> PathBuf {

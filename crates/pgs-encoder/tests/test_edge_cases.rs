@@ -14,7 +14,13 @@ use pgs_encoder::PgsEncoder;
 
 // ─────────────────────── Helpers ───────────────────────
 
-fn make_frame(width: u32, height: u32, palette: Vec<Rgba>, indices: Vec<u8>, transparent_index: u8) -> QuantizedFrame {
+fn make_frame(
+    width: u32,
+    height: u32,
+    palette: Vec<Rgba>,
+    indices: Vec<u8>,
+    transparent_index: u8,
+) -> QuantizedFrame {
     QuantizedFrame {
         width,
         height,
@@ -40,13 +46,7 @@ fn make_single_color_frame(width: u32, height: u32, color: Rgba) -> QuantizedFra
 #[test]
 fn test_encode_transparent_frame() {
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);
-    let frame = make_frame(
-        4,
-        2,
-        vec![Rgba::new(0, 0, 0, 0)],
-        vec![0; 8],
-        0,
-    );
+    let frame = make_frame(4, 2, vec![Rgba::new(0, 0, 0, 0)], vec![0; 8], 0);
 
     let sup_data = enc.encode_frame_to_bytes(&frame, 0, 1000);
     assert!(sup_data.len() >= 2);
@@ -97,7 +97,11 @@ fn test_rle_all_same_color_maximum_compression() {
 
     // Should be very compact: color byte + run length encoding
     // 100 > 63, so it's a long run: 3 bytes
-    assert_eq!(encoded.len(), 3, "All same color should produce minimal RLE output");
+    assert_eq!(
+        encoded.len(),
+        3,
+        "All same color should produce minimal RLE output"
+    );
     assert_eq!(encoded[0], 5, "First byte should be the color");
 }
 
@@ -113,7 +117,11 @@ fn test_rle_alternating_colors_minimum_compression() {
     let encoded = rle_encode(&indices, width, height);
 
     // Each non-transparent pixel of length 1 = 1 byte (just the color)
-    assert_eq!(encoded.len(), 10, "Alternating colors should produce 1 byte per pixel");
+    assert_eq!(
+        encoded.len(),
+        10,
+        "Alternating colors should produce 1 byte per pixel"
+    );
 }
 
 // ─────────────────────── RLE: Long Run >63 ───────────────────────
@@ -187,7 +195,12 @@ fn test_rle_multi_row_row_separator() {
 fn test_palette_exactly_256_colors() {
     let mut palette = Vec::with_capacity(256);
     for i in 0..256u16 {
-        palette.push(Rgba::new((i % 256) as u8, ((i * 2) % 256) as u8, ((i * 3) % 256) as u8, 255));
+        palette.push(Rgba::new(
+            (i % 256) as u8,
+            ((i * 2) % 256) as u8,
+            ((i * 3) % 256) as u8,
+            255,
+        ));
     }
 
     let entries = build_palette(&palette);
@@ -220,15 +233,15 @@ fn test_palette_single_color() {
 fn test_ycbcr_roundtrip_accuracy() {
     // Test known colors and verify the conversion is within rounding tolerance
     let test_colors = [
-        (0u8, 0u8, 0u8),       // black
-        (255, 255, 255),       // white
-        (255, 0, 0),           // red
-        (0, 255, 0),           // green
-        (0, 0, 255),           // blue
-        (128, 128, 128),       // gray
-        (255, 255, 0),         // yellow
-        (0, 255, 255),         // cyan
-        (255, 0, 255),         // magenta
+        (0u8, 0u8, 0u8), // black
+        (255, 255, 255), // white
+        (255, 0, 0),     // red
+        (0, 255, 0),     // green
+        (0, 0, 255),     // blue
+        (128, 128, 128), // gray
+        (255, 255, 0),   // yellow
+        (0, 255, 255),   // cyan
+        (255, 0, 255),   // magenta
     ];
 
     for (r, g, b) in test_colors {
@@ -332,7 +345,11 @@ fn test_multiple_frames_composition_number_increments() {
         let segments = enc.encode_frame(&frame, i * 1000, 1000);
         // PCS segment should have composition_number == i
         if let pgs_encoder::types::SegmentPayload::Pcs(ref pcs) = segments[0].payload {
-            assert_eq!(pcs.composition_number, i as u16, "Frame {} composition_number", i);
+            assert_eq!(
+                pcs.composition_number, i as u16,
+                "Frame {} composition_number",
+                i
+            );
         } else {
             panic!("First segment should be PCS");
         }
@@ -364,7 +381,10 @@ fn test_sup_binary_header_structure() {
     let sup_data = enc.encode_frame_to_bytes(&frame, 1000, 2000);
 
     // First segment header: "PG" (2) + PTS (4) + DTS (4) + type (1) + size (2) = 13 bytes
-    assert!(sup_data.len() >= 13, "SUP should have at least one full header");
+    assert!(
+        sup_data.len() >= 13,
+        "SUP should have at least one full header"
+    );
 
     // Magic bytes
     assert_eq!(sup_data[0], b'P');
@@ -419,7 +439,11 @@ fn test_sup_end_segment_has_no_payload() {
 
     let end_bytes = end_segment.to_bytes();
     // END segment: header (13 bytes) + 0 payload = 13 bytes
-    assert_eq!(end_bytes.len(), 13, "END segment should be header-only (13 bytes)");
+    assert_eq!(
+        end_bytes.len(),
+        13,
+        "END segment should be header-only (13 bytes)"
+    );
     assert_eq!(end_bytes[10], 0x80, "END segment type byte");
     // Payload size should be 0
     let size = u16::from_be_bytes([end_bytes[11], end_bytes[12]]);
@@ -452,12 +476,18 @@ fn test_ods_payload_structure() {
     let segments = enc.encode_frame(&frame, 0, 1000);
 
     // Find the ODS segment
-    let ods_segment = segments.iter().find(|s| s.segment_type == SegmentType::Ods).unwrap();
+    let ods_segment = segments
+        .iter()
+        .find(|s| s.segment_type == SegmentType::Ods)
+        .unwrap();
     let ods_bytes = ods_segment.to_bytes();
 
     // Header: 13 bytes
     // ODS payload: object_id(2) + version(1) + flags(1) + width(2) + height(2) + data_len(4) + rle_data
-    assert!(ods_bytes.len() >= 13 + 12, "ODS should have header + fixed payload fields");
+    assert!(
+        ods_bytes.len() >= 13 + 12,
+        "ODS should have header + fixed payload fields"
+    );
 
     // Verify ODS type byte
     assert_eq!(ods_bytes[10], 0x15, "ODS segment type");
@@ -550,9 +580,9 @@ fn test_rle_transparent_long_run() {
 #[test]
 fn test_build_palette_alpha_variations() {
     let palette = vec![
-        Rgba::new(255, 0, 0, 255),   // fully opaque red
-        Rgba::new(255, 0, 0, 128),   // half-transparent red
-        Rgba::new(255, 0, 0, 0),     // fully transparent red
+        Rgba::new(255, 0, 0, 255), // fully opaque red
+        Rgba::new(255, 0, 0, 128), // half-transparent red
+        Rgba::new(255, 0, 0, 0),   // fully transparent red
     ];
 
     let entries = build_palette(&palette);

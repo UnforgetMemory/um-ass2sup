@@ -7,10 +7,10 @@ use crate::context::{RenderConfig, RenderContext, RenderedFrame};
 use crate::effects;
 use crate::font::FontManager;
 use crate::karaoke::{KaraokePhase, KaraokeRenderer};
-use ass_parser::karaoke::KaraokeStyle;
 use crate::rasterizer::{apply_anisotropic_outline, Rasterizer};
-use crate::shaper::{Shaper, ShapedText};
+use crate::shaper::{ShapedText, Shaper};
 use crate::transform::AffineTransform;
+use ass_parser::karaoke::KaraokeStyle;
 
 /// Errors that can occur when constructing a Renderer.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -21,10 +21,16 @@ pub enum RendererError {
     NoFonts,
 }
 
-use animation::{interpolate_move, compute_fad_alpha, compute_fade_complex, apply_transform_tag, parse_override_block};
-use compositing::{apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_subregion, compute_tight_bbox};
-use drawing::{DrawingCommand, parse_drawing_level, parse_drawing_commands};
-use text_layout::{wrap_text, wrap_text_vertical, remap_alignment_vertical};
+use animation::{
+    apply_transform_tag, compute_fad_alpha, compute_fade_complex, interpolate_move,
+    parse_override_block,
+};
+use compositing::{
+    apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_subregion,
+    compute_tight_bbox,
+};
+use drawing::{parse_drawing_commands, parse_drawing_level, DrawingCommand};
+use text_layout::{remap_alignment_vertical, wrap_text, wrap_text_vertical};
 
 mod animation;
 pub mod compositing;
@@ -69,12 +75,19 @@ struct PixmapPool {
 
 impl PixmapPool {
     fn new(max_cached: usize) -> Self {
-        Self { pool: Vec::new(), max_cached }
+        Self {
+            pool: Vec::new(),
+            max_cached,
+        }
     }
 
     /// Retrieves a pixmap of the given size from the pool, or allocates a new one.
     fn get(&mut self, w: u32, h: u32) -> Option<Pixmap> {
-        if let Some(pos) = self.pool.iter().position(|p| p.width() == w && p.height() == h) {
+        if let Some(pos) = self
+            .pool
+            .iter()
+            .position(|p| p.width() == w && p.height() == h)
+        {
             let mut p = self.pool.remove(pos);
             p.data_mut().fill(0);
             return Some(p);
@@ -161,7 +174,10 @@ impl Renderer {
             .unwrap_or(0);
 
         for event in events {
-            let style = ass.find_style(&event.style_name).cloned().unwrap_or_default();
+            let style = ass
+                .find_style(&event.style_name)
+                .cloned()
+                .unwrap_or_default();
             let event_start = event.start.as_ms();
             let event_end = event.end.as_ms();
             let ctx = self.build_context(event, &style, ass, timestamp_ms, event_start, event_end);
@@ -320,7 +336,14 @@ impl Renderer {
                     ctx.y = *y as f32 * scale_y;
                     has_pos = true;
                 }
-                OverrideTag::Move { x1, y1, x2, y2, t1, t2 } => {
+                OverrideTag::Move {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    t1,
+                    t2,
+                } => {
                     ctx.x = *x1 as f32 * scale_x;
                     ctx.y = *y1 as f32 * scale_y;
                     move_x2 = *x2 as f32 * scale_x;
@@ -330,12 +353,23 @@ impl Renderer {
                     has_move = true;
                     has_pos = true;
                 }
-                OverrideTag::Fade { duration_in, duration_out } => {
+                OverrideTag::Fade {
+                    duration_in,
+                    duration_out,
+                } => {
                     fad_in = *duration_in;
                     fad_out = *duration_out;
                     has_fad = true;
                 }
-                OverrideTag::FadeComplex { alpha_start, alpha_mid, alpha_end, t1, t2, t3, t4 } => {
+                OverrideTag::FadeComplex {
+                    alpha_start,
+                    alpha_mid,
+                    alpha_end,
+                    t1,
+                    t2,
+                    t3,
+                    t4,
+                } => {
                     fade_params = (*alpha_start, *alpha_mid, *alpha_end, *t1, *t2, *t3, *t4);
                     has_fade_complex = true;
                 }
@@ -368,22 +402,37 @@ impl Renderer {
                     ctx.clip_drawing_inverse = true;
                     ctx.clip_enabled = true;
                 }
-                OverrideTag::Transform { tag: inner_tag, t1, t2, accel } => {
+                OverrideTag::Transform {
+                    tag: inner_tag,
+                    t1,
+                    t2,
+                    accel,
+                } => {
                     // If the inner tag contains \pos, initialize ctx position to
                     // the alignment-derived values so the transform lerps FROM
                     // the correct starting point (not from 0,0).
                     let parsed_inner = parse_override_block(inner_tag);
-                    if parsed_inner.iter().any(|t| matches!(t, OverrideTag::Pos { .. })) {
+                    if parsed_inner
+                        .iter()
+                        .any(|t| matches!(t, OverrideTag::Pos { .. }))
+                    {
                         let (_ax, ay) = alignment_to_pos(ctx.alignment);
                         ctx.x = ctx.margin_l;
-                        ctx.y = ctx.margin_v + ay * (self.config.height as f32 - ctx.margin_v * 2.0);
+                        ctx.y =
+                            ctx.margin_v + ay * (self.config.height as f32 - ctx.margin_v * 2.0);
                         has_pos = true;
                     }
                     apply_transform_tag(
-                        &mut ctx, inner_tag,
-                        *t1, *t2, *accel,
-                        timestamp_ms, event_start_ms, event_end_ms,
-                        scale_x, scale_y,
+                        &mut ctx,
+                        inner_tag,
+                        *t1,
+                        *t2,
+                        *accel,
+                        timestamp_ms,
+                        event_start_ms,
+                        event_end_ms,
+                        scale_x,
+                        scale_y,
                     );
                 }
                 OverrideTag::Reset(style_name) => {
@@ -455,10 +504,8 @@ impl Renderer {
 
         if has_move {
             let elapsed = timestamp_ms.saturating_sub(event_start_ms);
-            let (nx, ny) = interpolate_move(
-                ctx.x, ctx.y, move_x2, move_y2,
-                move_t1, move_t2, elapsed,
-            );
+            let (nx, ny) =
+                interpolate_move(ctx.x, ctx.y, move_x2, move_y2, move_t1, move_t2, elapsed);
             ctx.x = nx;
             ctx.y = ny;
         }
@@ -482,11 +529,22 @@ impl Renderer {
         ctx
     }
 
-    fn render_event(&self, pixmap: &mut Pixmap, event: &Event, ctx: &RenderContext, timestamp_ms: u64, event_start_ms: u64) {
+    fn render_event(
+        &self,
+        pixmap: &mut Pixmap,
+        event: &Event,
+        ctx: &RenderContext,
+        timestamp_ms: u64,
+        event_start_ms: u64,
+    ) {
         // Apply Banner/Scroll effect offset before text positioning
         let mut ctx = ctx.clone();
         match &event.effect {
-            Effect::Banner { delay_per_pixel, left_to_right, .. } if *delay_per_pixel > 0 => {
+            Effect::Banner {
+                delay_per_pixel,
+                left_to_right,
+                ..
+            } if *delay_per_pixel > 0 => {
                 let elapsed = timestamp_ms.saturating_sub(event_start_ms);
                 let x_offset = elapsed as f32 / *delay_per_pixel as f32;
                 if *left_to_right {
@@ -495,12 +553,20 @@ impl Renderer {
                     ctx.x -= x_offset;
                 }
             }
-            Effect::ScrollUp { delay_per_row, bottom_offset, .. } if *delay_per_row > 0 => {
+            Effect::ScrollUp {
+                delay_per_row,
+                bottom_offset,
+                ..
+            } if *delay_per_row > 0 => {
                 let elapsed = timestamp_ms.saturating_sub(event_start_ms);
                 let y_offset = elapsed as f32 / *delay_per_row as f32;
                 ctx.y = self.config.height as f32 - *bottom_offset as f32 - y_offset;
             }
-            Effect::ScrollDown { delay_per_row, top_offset, .. } if *delay_per_row > 0 => {
+            Effect::ScrollDown {
+                delay_per_row,
+                top_offset,
+                ..
+            } if *delay_per_row > 0 => {
                 let elapsed = timestamp_ms.saturating_sub(event_start_ms);
                 let y_offset = elapsed as f32 / *delay_per_row as f32;
                 ctx.y = *top_offset as f32 + y_offset;
@@ -513,10 +579,14 @@ impl Renderer {
             return;
         }
 
-        let font_id = match self.font_manager.query_with_fallback(&ctx.font_name, ctx.bold, ctx.italic) {
-            Some(id) => id,
-            None => return,
-        };
+        let font_id =
+            match self
+                .font_manager
+                .query_with_fallback(&ctx.font_name, ctx.bold, ctx.italic)
+            {
+                Some(id) => id,
+                None => return,
+            };
 
         if event.has_karaoke() && !event.karaoke_segments.is_empty() {
             self.render_karaoke(pixmap, event, &ctx, font_id, timestamp_ms, event_start_ms);
@@ -578,7 +648,11 @@ impl Renderer {
                     };
                     let char_y = ctx.y + char_idx as f32 * line_height;
                     let x_start = col_x;
-                    shaped_lines.push(ShapedLine { shaped, line_y: char_y, x_start });
+                    shaped_lines.push(ShapedLine {
+                        shaped,
+                        line_y: char_y,
+                        x_start,
+                    });
                 }
             }
 
@@ -603,7 +677,10 @@ impl Renderer {
             let (pad_border, pad_shadow) = if ctx.border_style == 3 {
                 (0.0, 0.0)
             } else {
-                let border = ctx.outline_width.max(ctx.outline_x_width).max(ctx.outline_y_width);
+                let border = ctx
+                    .outline_width
+                    .max(ctx.outline_x_width)
+                    .max(ctx.outline_y_width);
                 let shadow = ctx.shadow_depth.max(ctx.shadow_x).max(ctx.shadow_y);
                 (border * 2.0, shadow)
             };
@@ -637,7 +714,13 @@ impl Renderer {
                         let mut pb = PathBuilder::new();
                         pb.push_rect(rect);
                         if let Some(path) = pb.finish() {
-                            layer.fill_path(&path, &bg_paint, FillRule::Winding, SkiaTransform::identity(), None);
+                            layer.fill_path(
+                                &path,
+                                &bg_paint,
+                                FillRule::Winding,
+                                SkiaTransform::identity(),
+                                None,
+                            );
                         }
                     }
                 }
@@ -654,7 +737,15 @@ impl Renderer {
                 for glyph in &sl.shaped.glyphs {
                     let x = sl.x_start + glyph.x_offset - oxf;
                     let y = sl.line_y + glyph.y_offset - oyf;
-                    Rasterizer::rasterize_glyph(&mut layer, &self.font_manager, font_id, glyph, x, y, &render_ctx);
+                    Rasterizer::rasterize_glyph(
+                        &mut layer,
+                        &self.font_manager,
+                        font_id,
+                        glyph,
+                        x,
+                        y,
+                        &render_ctx,
+                    );
                 }
 
                 if render_ctx.underline {
@@ -674,8 +765,17 @@ impl Renderer {
                             render_ctx.primary_color[2],
                             render_ctx.primary_color[3],
                         );
-                        let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
-                        layer.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                        let stroke = tiny_skia::Stroke {
+                            width: line_thickness,
+                            ..Default::default()
+                        };
+                        layer.stroke_path(
+                            &path,
+                            &paint,
+                            &stroke,
+                            tiny_skia::Transform::identity(),
+                            None,
+                        );
                     }
                 }
 
@@ -696,8 +796,17 @@ impl Renderer {
                             render_ctx.primary_color[2],
                             render_ctx.primary_color[3],
                         );
-                        let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
-                        layer.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                        let stroke = tiny_skia::Stroke {
+                            width: line_thickness,
+                            ..Default::default()
+                        };
+                        layer.stroke_path(
+                            &path,
+                            &paint,
+                            &stroke,
+                            tiny_skia::Transform::identity(),
+                            None,
+                        );
                     }
                 }
             }
@@ -712,8 +821,16 @@ impl Renderer {
                     &layer_data,
                     lw,
                     lh,
-                    if ctx.shadow_x != 0.0 { ctx.shadow_x } else { ctx.shadow_depth },
-                    if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
+                    if ctx.shadow_x != 0.0 {
+                        ctx.shadow_x
+                    } else {
+                        ctx.shadow_depth
+                    },
+                    if ctx.shadow_y != 0.0 {
+                        ctx.shadow_y
+                    } else {
+                        ctx.shadow_depth
+                    },
                     ctx.blur,
                     ctx.shadow_color,
                 );
@@ -731,13 +848,22 @@ impl Renderer {
             } else {
                 let transform = AffineTransform::identity();
 
-                let final_data = if transform.is_identity() && ctx.perspective_x == 0.0 && ctx.perspective_y == 0.0 {
+                let final_data = if transform.is_identity()
+                    && ctx.perspective_x == 0.0
+                    && ctx.perspective_y == 0.0
+                {
                     layer.data().to_vec()
                 } else if ctx.perspective_x != 0.0 || ctx.perspective_y != 0.0 {
                     transform.apply_with_perspective(
-                        layer.data(), w, h, w, h,
-                        ctx.perspective_x, ctx.perspective_y,
-                        ctx.origin_x, ctx.origin_y,
+                        layer.data(),
+                        w,
+                        h,
+                        w,
+                        h,
+                        ctx.perspective_x,
+                        ctx.perspective_y,
+                        ctx.origin_x,
+                        ctx.origin_y,
                     )
                 } else {
                     transform.apply_to_pixmap(layer.data(), w, h, w, h)
@@ -771,7 +897,15 @@ impl Renderer {
             return;
         }
 
-        let lines = wrap_text(&plain_text, ctx.wrap_style, &shaper, font_id, ctx.font_size, ctx.spacing, available_width);
+        let lines = wrap_text(
+            &plain_text,
+            ctx.wrap_style,
+            &shaper,
+            font_id,
+            ctx.font_size,
+            ctx.spacing,
+            available_width,
+        );
         let align_col = ctx.alignment % 3;
 
         // Phase 1: Shape all lines, store results for bbox computation and rendering.
@@ -791,7 +925,11 @@ impl Renderer {
                 0 => ctx.x + available_width - text_width,
                 _ => ctx.x,
             };
-            shaped_lines.push(ShapedLine { shaped, line_y, x_start });
+            shaped_lines.push(ShapedLine {
+                shaped,
+                line_y,
+                x_start,
+            });
         }
 
         if shaped_lines.is_empty() {
@@ -820,7 +958,10 @@ impl Renderer {
         let (pad_border, pad_shadow) = if ctx.border_style == 3 {
             (0.0, 0.0)
         } else {
-            let border = ctx.outline_width.max(ctx.outline_x_width).max(ctx.outline_y_width);
+            let border = ctx
+                .outline_width
+                .max(ctx.outline_x_width)
+                .max(ctx.outline_y_width);
             let shadow = ctx.shadow_depth.max(ctx.shadow_x).max(ctx.shadow_y);
             (border * 2.0, shadow)
         };
@@ -858,7 +999,13 @@ impl Renderer {
                     let mut pb = PathBuilder::new();
                     pb.push_rect(rect);
                     if let Some(path) = pb.finish() {
-                        layer.fill_path(&path, &bg_paint, FillRule::Winding, SkiaTransform::identity(), None);
+                        layer.fill_path(
+                            &path,
+                            &bg_paint,
+                            FillRule::Winding,
+                            SkiaTransform::identity(),
+                            None,
+                        );
                     }
                 }
             }
@@ -908,8 +1055,17 @@ impl Renderer {
                     pb.line_to(x1, uy);
                     pb.close();
                     if let Some(path) = pb.finish() {
-                        let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
-                        layer.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                        let stroke = tiny_skia::Stroke {
+                            width: line_thickness,
+                            ..Default::default()
+                        };
+                        layer.stroke_path(
+                            &path,
+                            &paint,
+                            &stroke,
+                            tiny_skia::Transform::identity(),
+                            None,
+                        );
                     }
                 }
 
@@ -920,8 +1076,17 @@ impl Renderer {
                     pb.line_to(x1, sy);
                     pb.close();
                     if let Some(path) = pb.finish() {
-                        let stroke = tiny_skia::Stroke { width: line_thickness, ..Default::default() };
-                        layer.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                        let stroke = tiny_skia::Stroke {
+                            width: line_thickness,
+                            ..Default::default()
+                        };
+                        layer.stroke_path(
+                            &path,
+                            &paint,
+                            &stroke,
+                            tiny_skia::Transform::identity(),
+                            None,
+                        );
                     }
                 }
             }
@@ -939,8 +1104,16 @@ impl Renderer {
                 &layer_data,
                 lw,
                 lh,
-                if ctx.shadow_x != 0.0 { ctx.shadow_x } else { ctx.shadow_depth },
-                if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
+                if ctx.shadow_x != 0.0 {
+                    ctx.shadow_x
+                } else {
+                    ctx.shadow_depth
+                },
+                if ctx.shadow_y != 0.0 {
+                    ctx.shadow_y
+                } else {
+                    ctx.shadow_depth
+                },
                 ctx.blur,
                 ctx.shadow_color,
             );
@@ -960,16 +1133,28 @@ impl Renderer {
         } else {
             // Full-frame path: apply transform, clip, alpha — identical to original.
             let transform = AffineTransform::rotate_at(ctx.rotation, ctx.origin_x, ctx.origin_y)
-                .then(&AffineTransform::scale(ctx.scale_x / 100.0, ctx.scale_y / 100.0))
+                .then(&AffineTransform::scale(
+                    ctx.scale_x / 100.0,
+                    ctx.scale_y / 100.0,
+                ))
                 .then(&AffineTransform::shear(ctx.shear_x, ctx.shear_y));
 
-            let final_data = if transform.is_identity() && ctx.perspective_x == 0.0 && ctx.perspective_y == 0.0 {
+            let final_data = if transform.is_identity()
+                && ctx.perspective_x == 0.0
+                && ctx.perspective_y == 0.0
+            {
                 layer.data().to_vec()
             } else if ctx.perspective_x != 0.0 || ctx.perspective_y != 0.0 {
                 transform.apply_with_perspective(
-                    layer.data(), w, h, w, h,
-                    ctx.perspective_x, ctx.perspective_y,
-                    ctx.origin_x, ctx.origin_y,
+                    layer.data(),
+                    w,
+                    h,
+                    w,
+                    h,
+                    ctx.perspective_x,
+                    ctx.perspective_y,
+                    ctx.origin_x,
+                    ctx.origin_y,
                 )
             } else {
                 transform.apply_to_pixmap(layer.data(), w, h, w, h)
@@ -1006,30 +1191,51 @@ impl Renderer {
         if is_p4_clip {
             let clip_commands = parse_drawing_commands(&plain_text);
             let scale = 1.0 / (1u32 << (4 - 1)) as f32; // \p4 → scale = 1/8
-            let mut clip_pixmap = if let Some(p) = Pixmap::new(w, h) { p } else { return; };
+            let mut clip_pixmap = if let Some(p) = Pixmap::new(w, h) {
+                p
+            } else {
+                return;
+            };
             let mut path_builder = PathBuilder::new();
             for cmd in &clip_commands {
                 match cmd {
                     DrawingCommand::MoveTo(x, y) => {
-                        path_builder.move_to(x * scale + ctx.x, y * scale + ctx.y + ctx.baseline_offset as f32);
+                        path_builder.move_to(
+                            x * scale + ctx.x,
+                            y * scale + ctx.y + ctx.baseline_offset as f32,
+                        );
                     }
                     DrawingCommand::LineTo(x, y) => {
-                        path_builder.line_to(x * scale + ctx.x, y * scale + ctx.y + ctx.baseline_offset as f32);
+                        path_builder.line_to(
+                            x * scale + ctx.x,
+                            y * scale + ctx.y + ctx.baseline_offset as f32,
+                        );
                     }
                     DrawingCommand::BezierTo(x1, y1, x2, y2, x3, y3) => {
                         path_builder.cubic_to(
-                            x1 * scale + ctx.x, y1 * scale + ctx.y + ctx.baseline_offset as f32,
-                            x2 * scale + ctx.x, y2 * scale + ctx.y + ctx.baseline_offset as f32,
-                            x3 * scale + ctx.x, y3 * scale + ctx.y + ctx.baseline_offset as f32,
+                            x1 * scale + ctx.x,
+                            y1 * scale + ctx.y + ctx.baseline_offset as f32,
+                            x2 * scale + ctx.x,
+                            y2 * scale + ctx.y + ctx.baseline_offset as f32,
+                            x3 * scale + ctx.x,
+                            y3 * scale + ctx.y + ctx.baseline_offset as f32,
                         );
                     }
-                    DrawingCommand::Close => { path_builder.close(); }
+                    DrawingCommand::Close => {
+                        path_builder.close();
+                    }
                 }
             }
             if let Some(clip_path) = path_builder.finish() {
                 let mut clip_paint = Paint::default();
                 clip_paint.set_color_rgba8(255, 255, 255, 255);
-                clip_pixmap.fill_path(&clip_path, &clip_paint, FillRule::Winding, SkiaTransform::identity(), None);
+                clip_pixmap.fill_path(
+                    &clip_path,
+                    &clip_paint,
+                    FillRule::Winding,
+                    SkiaTransform::identity(),
+                    None,
+                );
             }
             let data = pixmap.data_mut();
             let mask_data = clip_pixmap.data();
@@ -1101,7 +1307,9 @@ impl Renderer {
                 // Track glyph ink extents for bounding box.
                 let mut sx = syllable_x;
                 for glyph in &shaped.glyphs {
-                    if let Some(bbox) = shaper.get_glyph_bbox(font_id, glyph.glyph_id, ctx.font_size) {
+                    if let Some(bbox) =
+                        shaper.get_glyph_bbox(font_id, glyph.glyph_id, ctx.font_size)
+                    {
                         any_glyph = true;
                         let gx = sx + glyph.x_offset;
                         let gy = ctx.y + glyph.y_offset;
@@ -1115,7 +1323,8 @@ impl Renderer {
 
                 // Track karaoke fill clip region extent for active syllables.
                 if is_active && matches!(syllable.style, KaraokeStyle::Fill) {
-                    let clip_x = syllable_x + KaraokeRenderer::get_fill_clip_x(progress, syllable_width);
+                    let clip_x =
+                        syllable_x + KaraokeRenderer::get_fill_clip_x(progress, syllable_width);
                     let clip_y_max = ctx.y + ctx.font_size * 1.5;
                     min_x = min_x.min(clip_x);
                     max_x = max_x.max(syllable_x + syllable_width);
@@ -1152,7 +1361,10 @@ impl Renderer {
             && ctx.clip_drawing_commands.is_none();
 
         let (ox, oy, lw, lh, use_sub) = if can_sub && any_glyph {
-            let border = ctx.outline_width.max(ctx.outline_x_width).max(ctx.outline_y_width);
+            let border = ctx
+                .outline_width
+                .max(ctx.outline_x_width)
+                .max(ctx.outline_y_width);
             let shadow = ctx.shadow_depth.max(ctx.shadow_x).max(ctx.shadow_y);
             let pad = (border * 2.0 + shadow + ctx.blur).max(20.0);
             let ox = (min_x - pad).floor().max(0.0) as u32;
@@ -1207,7 +1419,10 @@ impl Renderer {
                         sy_ctx.primary_color = ctx.primary_color;
                     }
                 }
-            } else if matches!(syllable.phase, KaraokePhase::Done | KaraokePhase::Active { .. }) {
+            } else if matches!(
+                syllable.phase,
+                KaraokePhase::Done | KaraokePhase::Active { .. }
+            ) {
                 sy_ctx.primary_color = ctx.primary_color;
             } else {
                 sy_ctx.primary_color = ctx.secondary_color;
@@ -1265,10 +1480,21 @@ impl Renderer {
         if ctx.shadow_depth > 0.0 {
             let bg_data = bg_layer.data().to_vec();
             let shadow_data = effects::apply_shadow(
-                &bg_data, lw, lh,
-                if ctx.shadow_x != 0.0 { ctx.shadow_x } else { ctx.shadow_depth },
-                if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
-                ctx.blur, ctx.shadow_color,
+                &bg_data,
+                lw,
+                lh,
+                if ctx.shadow_x != 0.0 {
+                    ctx.shadow_x
+                } else {
+                    ctx.shadow_depth
+                },
+                if ctx.shadow_y != 0.0 {
+                    ctx.shadow_y
+                } else {
+                    ctx.shadow_depth
+                },
+                ctx.blur,
+                ctx.shadow_color,
             );
             let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
@@ -1278,10 +1504,21 @@ impl Renderer {
         if ctx.shadow_depth > 0.0 {
             let fg_data = fg_layer.data().to_vec();
             let shadow_data = effects::apply_shadow(
-                &fg_data, lw, lh,
-                if ctx.shadow_x != 0.0 { ctx.shadow_x } else { ctx.shadow_depth },
-                if ctx.shadow_y != 0.0 { ctx.shadow_y } else { ctx.shadow_depth },
-                ctx.blur, ctx.shadow_color,
+                &fg_data,
+                lw,
+                lh,
+                if ctx.shadow_x != 0.0 {
+                    ctx.shadow_x
+                } else {
+                    ctx.shadow_depth
+                },
+                if ctx.shadow_y != 0.0 {
+                    ctx.shadow_y
+                } else {
+                    ctx.shadow_depth
+                },
+                ctx.blur,
+                ctx.shadow_color,
             );
             let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
@@ -1303,10 +1540,20 @@ impl Renderer {
         self.pixmap_pool.lock().put(fg_layer);
     }
 
-    fn render_drawing(&self, pixmap: &mut Pixmap, text: &str, ctx: &RenderContext, drawing_level: u8) {
+    fn render_drawing(
+        &self,
+        pixmap: &mut Pixmap,
+        text: &str,
+        ctx: &RenderContext,
+        drawing_level: u8,
+    ) {
         let w = pixmap.width();
         let h = pixmap.height();
-        let mut layer = if let Some(p) = Pixmap::new(w, h) { p } else { return; };
+        let mut layer = if let Some(p) = Pixmap::new(w, h) {
+            p
+        } else {
+            return;
+        };
         let scale = 1.0 / f32::from(drawing_level);
 
         let commands = parse_drawing_commands(text);
@@ -1341,12 +1588,22 @@ impl Renderer {
 
         if let Some(path) = current_path.finish() {
             let mut paint = Paint::default();
-            paint.set_color_rgba8(ctx.primary_color[0], ctx.primary_color[1], ctx.primary_color[2], ctx.primary_color[3]);
+            paint.set_color_rgba8(
+                ctx.primary_color[0],
+                ctx.primary_color[1],
+                ctx.primary_color[2],
+                ctx.primary_color[3],
+            );
             paint.anti_alias = true;
 
             if ctx.outline_width > 0.0 {
                 let mut outline_paint = Paint::default();
-                outline_paint.set_color_rgba8(ctx.outline_color[0], ctx.outline_color[1], ctx.outline_color[2], ctx.outline_color[3]);
+                outline_paint.set_color_rgba8(
+                    ctx.outline_color[0],
+                    ctx.outline_color[1],
+                    ctx.outline_color[2],
+                    ctx.outline_color[3],
+                );
                 outline_paint.anti_alias = true;
                 apply_anisotropic_outline(
                     &mut layer,
@@ -1358,7 +1615,13 @@ impl Renderer {
                 );
             }
 
-            layer.fill_path(&path, &paint, FillRule::Winding, SkiaTransform::identity(), None);
+            layer.fill_path(
+                &path,
+                &paint,
+                FillRule::Winding,
+                SkiaTransform::identity(),
+                None,
+            );
         }
 
         if ctx.blur > 0.0 {
@@ -1384,59 +1647,85 @@ mod tests {
     use super::*;
     use ass_parser::Effect;
 
-
-
     // ── ass_parser::parse_override_tag ─────────────────────────────────
     #[test]
     fn test_parse_single_tag_fs() {
-        assert!(matches!(ass_parser::parse_override_tag("fs48"), Some(OverrideTag::FontSize(v)) if v == 48.0));
+        assert!(
+            matches!(ass_parser::parse_override_tag("fs48"), Some(OverrideTag::FontSize(v)) if v == 48.0)
+        );
     }
 
     #[test]
     fn test_parse_single_tag_fn() {
-        assert!(matches!(ass_parser::parse_override_tag("fnArial"), Some(OverrideTag::FontName(n)) if n == "Arial"));
+        assert!(
+            matches!(ass_parser::parse_override_tag("fnArial"), Some(OverrideTag::FontName(n)) if n == "Arial")
+        );
     }
 
     #[test]
     fn test_parse_single_tag_bold() {
-        assert!(matches!(ass_parser::parse_override_tag("b1"), Some(OverrideTag::Bold(true))));
-        assert!(matches!(ass_parser::parse_override_tag("b0"), Some(OverrideTag::Bold(false))));
+        assert!(matches!(
+            ass_parser::parse_override_tag("b1"),
+            Some(OverrideTag::Bold(true))
+        ));
+        assert!(matches!(
+            ass_parser::parse_override_tag("b0"),
+            Some(OverrideTag::Bold(false))
+        ));
     }
 
     #[test]
     fn test_parse_single_tag_italic() {
-        assert!(matches!(ass_parser::parse_override_tag("i1"), Some(OverrideTag::Italic(true))));
-        assert!(matches!(ass_parser::parse_override_tag("i0"), Some(OverrideTag::Italic(false))));
+        assert!(matches!(
+            ass_parser::parse_override_tag("i1"),
+            Some(OverrideTag::Italic(true))
+        ));
+        assert!(matches!(
+            ass_parser::parse_override_tag("i0"),
+            Some(OverrideTag::Italic(false))
+        ));
     }
 
     #[test]
     fn test_parse_single_tag_bord() {
-        assert!(matches!(ass_parser::parse_override_tag("bord3"), Some(OverrideTag::Border(v)) if v == 3.0));
+        assert!(
+            matches!(ass_parser::parse_override_tag("bord3"), Some(OverrideTag::Border(v)) if v == 3.0)
+        );
     }
 
     #[test]
     fn test_parse_single_tag_shad() {
-        assert!(matches!(ass_parser::parse_override_tag("shad5"), Some(OverrideTag::Shadow(v)) if v == 5.0));
+        assert!(
+            matches!(ass_parser::parse_override_tag("shad5"), Some(OverrideTag::Shadow(v)) if v == 5.0)
+        );
     }
 
     #[test]
     fn test_parse_single_tag_fscx() {
-        assert!(matches!(ass_parser::parse_override_tag("fscx150"), Some(OverrideTag::Scale { x, y: 100.0 }) if x == 150.0));
+        assert!(
+            matches!(ass_parser::parse_override_tag("fscx150"), Some(OverrideTag::Scale { x, y: 100.0 }) if x == 150.0)
+        );
     }
 
     #[test]
     fn test_parse_single_tag_fscy() {
-        assert!(matches!(ass_parser::parse_override_tag("fscy80"), Some(OverrideTag::Scale { x: 100.0, y }) if y == 80.0));
+        assert!(
+            matches!(ass_parser::parse_override_tag("fscy80"), Some(OverrideTag::Scale { x: 100.0, y }) if y == 80.0)
+        );
     }
 
     #[test]
     fn test_parse_single_tag_frz() {
-        assert!(matches!(ass_parser::parse_override_tag("frz45"), Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z }) if z == 45.0));
+        assert!(
+            matches!(ass_parser::parse_override_tag("frz45"), Some(OverrideTag::Rotation { x: 0.0, y: 0.0, z }) if z == 45.0)
+        );
     }
 
     #[test]
     fn test_parse_single_tag_an() {
-        assert!(matches!(ass_parser::parse_override_tag("an8"), Some(OverrideTag::AlignmentNumpad(v)) if v == 8));
+        assert!(
+            matches!(ass_parser::parse_override_tag("an8"), Some(OverrideTag::AlignmentNumpad(v)) if v == 8)
+        );
     }
 
     #[test]
@@ -1448,8 +1737,6 @@ mod tests {
     fn test_parse_single_tag_empty() {
         assert!(ass_parser::parse_override_tag("").is_none());
     }
-
-
 
     // ── build_context loads style properties ──────────────────
 
@@ -1493,7 +1780,11 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_scale() {
-        let style = Style { scale_x: 120.0, scale_y: 80.0, ..Default::default() };
+        let style = Style {
+            scale_x: 120.0,
+            scale_y: 80.0,
+            ..Default::default()
+        };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1504,7 +1795,10 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_spacing() {
-        let style = Style { spacing: 5.0, ..Default::default() };
+        let style = Style {
+            spacing: 5.0,
+            ..Default::default()
+        };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1514,7 +1808,10 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_underline() {
-        let style = Style { underline: true, ..Default::default() };
+        let style = Style {
+            underline: true,
+            ..Default::default()
+        };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1524,7 +1821,10 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_strikeout() {
-        let style = Style { strikeout: true, ..Default::default() };
+        let style = Style {
+            strikeout: true,
+            ..Default::default()
+        };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1534,7 +1834,10 @@ mod tests {
 
     #[test]
     fn test_build_context_loads_style_rotation() {
-        let style = Style { angle: 45.0, ..Default::default() };
+        let style = Style {
+            angle: 45.0,
+            ..Default::default()
+        };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1610,7 +1913,11 @@ mod tests {
         let mut ass = make_test_ass();
         ass.events.push(make_test_event_with_effect(
             "BannerTest",
-            Effect::Banner { delay_per_pixel: 10, left_to_right: true, fadeaway_width: 0.0 },
+            Effect::Banner {
+                delay_per_pixel: 10,
+                left_to_right: true,
+                fadeaway_width: 0.0,
+            },
         ));
         let frame = renderer.render_ass(&ass, 500);
         assert!(frame.is_some());
@@ -1622,7 +1929,11 @@ mod tests {
         let mut ass = make_test_ass();
         ass.events.push(make_test_event_with_effect(
             "BannerRTL",
-            Effect::Banner { delay_per_pixel: 10, left_to_right: false, fadeaway_width: 0.0 },
+            Effect::Banner {
+                delay_per_pixel: 10,
+                left_to_right: false,
+                fadeaway_width: 0.0,
+            },
         ));
         let frame = renderer.render_ass(&ass, 500);
         assert!(frame.is_some());
@@ -1634,7 +1945,11 @@ mod tests {
         let mut ass = make_test_ass();
         ass.events.push(make_test_event_with_effect(
             "ScrollUpTest",
-            Effect::ScrollUp { delay_per_row: 50, top_offset: 10.0, bottom_offset: 50.0 },
+            Effect::ScrollUp {
+                delay_per_row: 50,
+                top_offset: 10.0,
+                bottom_offset: 50.0,
+            },
         ));
         let frame = renderer.render_ass(&ass, 500);
         assert!(frame.is_some());
@@ -1646,13 +1961,15 @@ mod tests {
         let mut ass = make_test_ass();
         ass.events.push(make_test_event_with_effect(
             "ScrollDownTest",
-            Effect::ScrollDown { delay_per_row: 50, top_offset: 10.0, bottom_offset: 50.0 },
+            Effect::ScrollDown {
+                delay_per_row: 50,
+                top_offset: 10.0,
+                bottom_offset: 50.0,
+            },
         ));
         let frame = renderer.render_ass(&ass, 500);
         assert!(frame.is_some());
     }
-
-
 
     // ── Issue 4: duration_ms in RenderedFrame ─────────────────
 
@@ -1708,7 +2025,10 @@ mod tests {
         assert!(frame.is_some());
         let frame = frame.unwrap();
         // Max duration across both visible events is 8000ms
-        assert_eq!(frame.duration_ms, 8000, "duration should be 8000ms (max of all events)");
+        assert_eq!(
+            frame.duration_ms, 8000,
+            "duration should be 8000ms (max of all events)"
+        );
     }
 
     #[test]
@@ -1748,7 +2068,10 @@ mod tests {
 
     #[test]
     fn test_build_context_border_style_opaque_box() {
-        let style = Style { border_style: 3, ..Default::default() };
+        let style = Style {
+            border_style: 3,
+            ..Default::default()
+        };
         let event = make_test_event("Hello");
         let renderer = make_test_renderer();
         let ass = make_test_ass();
@@ -1885,7 +2208,10 @@ mod tests {
         let result = catch_unwind(AssertUnwindSafe(move || {
             let _guard = renderer_clone.pixmap_pool.lock();
         }));
-        assert!(result.is_ok(), "parking_lot::Mutex::lock() should not panic");
+        assert!(
+            result.is_ok(),
+            "parking_lot::Mutex::lock() should not panic"
+        );
     }
 }
 

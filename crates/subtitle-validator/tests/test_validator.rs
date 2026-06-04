@@ -1,5 +1,8 @@
 use ass_parser::AssFile;
-use subtitle_validator::{validate, validate_strict, report::{OverlapConfig, RuleId}};
+use subtitle_validator::{
+    report::{OverlapConfig, RuleId},
+    validate, validate_strict,
+};
 
 fn parse_ass(input: &str) -> AssFile {
     AssFile::parse(input).unwrap()
@@ -28,7 +31,11 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Hello World
 fn test_valid_ass() {
     let ass = parse_ass(minimal_ass());
     let report = validate(&ass);
-    assert!(report.is_valid, "Valid ASS should pass. Errors: {:?}", report.errors());
+    assert!(
+        report.is_valid,
+        "Valid ASS should pass. Errors: {:?}",
+        report.errors()
+    );
 }
 
 #[test]
@@ -50,8 +57,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test
     let ass = parse_ass(input);
     let report = validate(&ass);
     // Should have V001 warning about script type
-    let v001: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V001).collect();
-    assert!(!v001.is_empty(), "Should have V001 warning for v3.00 script type");
+    let v001: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V001)
+        .collect();
+    assert!(
+        !v001.is_empty(),
+        "Should have V001 warning for v3.00 script type"
+    );
 }
 
 #[test]
@@ -72,8 +86,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    let v002: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V002).collect();
-    assert!(!v002.is_empty(), "Should have V002 error for zero resolution");
+    let v002: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V002)
+        .collect();
+    assert!(
+        !v002.is_empty(),
+        "Should have V002 error for zero resolution"
+    );
 }
 
 #[test]
@@ -93,7 +114,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    let v003: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V003).collect();
+    let v003: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V003)
+        .collect();
     assert!(!v003.is_empty(), "Should have V003 error for no events");
 }
 
@@ -111,7 +136,11 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    let v004: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V004).collect();
+    let v004: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V004)
+        .collect();
     assert!(!v004.is_empty(), "Should have V004 warning for no styles");
 }
 
@@ -133,8 +162,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    let v006: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V006).collect();
-    assert!(!v006.is_empty(), "Should have V006 warning for negative font size");
+    let v006: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V006)
+        .collect();
+    assert!(
+        !v006.is_empty(),
+        "Should have V006 warning for negative font size"
+    );
 }
 
 #[test]
@@ -155,8 +191,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    let v008: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V008).collect();
-    assert!(!v008.is_empty(), "Should have V008 error for invalid alignment 15");
+    let v008: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V008)
+        .collect();
+    assert!(
+        !v008.is_empty(),
+        "Should have V008 error for invalid alignment 15"
+    );
 }
 
 #[test]
@@ -177,8 +220,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Nonexistent,,0,0,0,,Test
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    let v009: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V009).collect();
-    assert!(!v009.is_empty(), "Should have V009 warning for undefined style");
+    let v009: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V009)
+        .collect();
+    assert!(
+        !v009.is_empty(),
+        "Should have V009 warning for undefined style"
+    );
 }
 
 #[test]
@@ -199,7 +249,11 @@ Dialogue: 0,0:00:10.00,0:00:01.00,Default,,0,0,0,,Backwards
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    let v011: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V011).collect();
+    let v011: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V011)
+        .collect();
     assert!(!v011.is_empty(), "Should have V011 error for start >= end");
 }
 
@@ -221,8 +275,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\\b1 unmatched
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    let v013: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V013).collect();
-    assert!(!v013.is_empty(), "Should have V013 error for unmatched braces");
+    let v013: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V013)
+        .collect();
+    assert!(
+        !v013.is_empty(),
+        "Should have V013 error for unmatched braces"
+    );
 }
 
 // ===== Overlap Detection Tests =====
@@ -246,7 +307,10 @@ Dialogue: 0,0:00:06.00,0:00:10.00,Default,,0,0,0,,Second
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    assert!(report.overlaps.is_empty(), "Non-overlapping events should have no overlaps");
+    assert!(
+        report.overlaps.is_empty(),
+        "Non-overlapping events should have no overlaps"
+    );
 }
 
 #[test]
@@ -268,7 +332,10 @@ Dialogue: 0,0:00:03.00,0:00:08.00,Default,,0,0,0,,Second
 "#;
     let ass = parse_ass(input);
     let report = validate(&ass);
-    assert!(!report.overlaps.is_empty(), "Overlapping events should be detected");
+    assert!(
+        !report.overlaps.is_empty(),
+        "Overlapping events should be detected"
+    );
 }
 
 #[test]
@@ -293,7 +360,9 @@ Dialogue: 0,0:00:03.00,0:00:08.00,Default,,0,0,0,,{\\pos(1000,900)}Bottom right
     // Overlap exists but visual overlap should be false (different positions)
     if !report.overlaps.is_empty() {
         assert!(
-            !report.overlaps[0].visual_overlap || report.overlaps[0].severity != subtitle_validator::report::OverlapSeverity::Critical,
+            !report.overlaps[0].visual_overlap
+                || report.overlaps[0].severity
+                    != subtitle_validator::report::OverlapSeverity::Critical,
             "Different positions should not be Critical severity"
         );
     }
@@ -317,13 +386,13 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,First
 Dialogue: 0,0:00:01.05,0:00:05.00,Default,,0,0,0,,Almost same time
 "#;
     let ass = parse_ass(input);
-    
+
     // Lenient mode (default) - 50ms overlap below 100ms threshold
     let report_lenient = validate(&ass);
-    
+
     // Strict mode - 0ms threshold
     let report_strict = validate_strict(&ass);
-    
+
     // Strict mode should detect more overlaps
     assert!(
         report_strict.overlaps.len() >= report_lenient.overlaps.len(),
@@ -366,7 +435,7 @@ fn test_overlap_config_custom() {
         position_threshold: 100.0,
         max_simultaneous_same_pos: 1,
     };
-    
+
     let input = r#"[Script Info]
 Title: Custom Config
 ScriptType: v4.00+
@@ -386,5 +455,8 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Simultaneous
     let validator = subtitle_validator::Validator::new().with_overlap_config(config);
     let report = validator.validate(&ass);
     // Exact same time range = critical overlap
-    assert!(!report.overlaps.is_empty(), "Exact same time range should be detected as overlap");
+    assert!(
+        !report.overlaps.is_empty(),
+        "Exact same time range should be detected as overlap"
+    );
 }

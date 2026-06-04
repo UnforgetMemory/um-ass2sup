@@ -1,10 +1,10 @@
-use super::timestamp::Timestamp;
+use super::color::AssColor;
 use super::effect::Effect;
 use super::event::{Event, EventType};
-use super::color::AssColor;
 use super::style::Style;
-use super::{AssFile, ScriptInfo, SubtitleFormat};
+use super::timestamp::Timestamp;
 use super::ParseError;
+use super::{AssFile, ScriptInfo, SubtitleFormat};
 
 /// Parses an SRT (SubRip) subtitle file into an [`AssFile`].
 ///
@@ -80,17 +80,27 @@ fn parse_srt_timecodes(line: &str) -> Result<(Timestamp, Timestamp), ParseError>
 }
 
 fn parse_srt_timecode(s: &str) -> Result<Timestamp, ParseError> {
-    let s = s.split_once(',').or_else(|| s.split_once('.')).unwrap_or((s, "0"));
+    let s = s
+        .split_once(',')
+        .or_else(|| s.split_once('.'))
+        .unwrap_or((s, "0"));
     let time = s.0;
     let ms: u64 = s.1.parse().unwrap_or(0);
     let parts: Vec<&str> = time.split(':').collect();
     if parts.len() != 3 {
         return Err(ParseError::InvalidTimestamp(s.0.to_string()));
     }
-    let h: u64 = parts[0].parse().map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
-    let m: u64 = parts[1].parse().map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
-    let sec: u64 = parts[2].parse().map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
-    let ms_total = h.saturating_mul(3_600_000)
+    let h: u64 = parts[0]
+        .parse()
+        .map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
+    let m: u64 = parts[1]
+        .parse()
+        .map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
+    let sec: u64 = parts[2]
+        .parse()
+        .map_err(|_| ParseError::InvalidTimestamp(s.0.to_string()))?;
+    let ms_total = h
+        .saturating_mul(3_600_000)
         .saturating_add(m.saturating_mul(60_000))
         .saturating_add(sec.saturating_mul(1000))
         .saturating_add(ms);
@@ -163,9 +173,7 @@ fn format_srt_time(ts: Timestamp) -> String {
 
 impl AssFile {
     pub fn to_srt(&self) -> String {
-        let mut events: Vec<&Event> = self.events.iter()
-            .filter(|e| e.is_dialogue())
-            .collect();
+        let mut events: Vec<&Event> = self.events.iter().filter(|e| e.is_dialogue()).collect();
 
         events.sort_by_key(|e| (e.start, e.layer));
 
@@ -236,7 +244,9 @@ mod tests {
             end: Timestamp::from_ms(5000),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "Hello World".to_string(),
             override_tags: Vec::new(),
@@ -259,7 +269,9 @@ mod tests {
             end: Timestamp::from_ms(10000),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "Second".to_string(),
             override_tags: Vec::new(),
@@ -273,7 +285,9 @@ mod tests {
             end: Timestamp::from_ms(5000),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "First".to_string(),
             override_tags: Vec::new(),
@@ -296,7 +310,9 @@ mod tests {
             end: Timestamp::from_ms(3000),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "{\\b1}Bold{\\b0} and {\\i1}Italic{\\i0}".to_string(),
             override_tags: Vec::new(),
@@ -319,7 +335,9 @@ mod tests {
             end: Timestamp::from_ms(3000),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "Line one\\NLine two".to_string(),
             override_tags: Vec::new(),
@@ -341,7 +359,9 @@ mod tests {
             end: Timestamp::from_ms(3000),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "Comment".to_string(),
             override_tags: Vec::new(),
@@ -355,7 +375,9 @@ mod tests {
             end: Timestamp::from_ms(2000),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "Visible".to_string(),
             override_tags: Vec::new(),
@@ -385,7 +407,9 @@ mod tests {
             end: Timestamp::from_hms(2, 0, 0, 0),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "Timestamps".to_string(),
             override_tags: Vec::new(),
@@ -415,7 +439,10 @@ mod tests {
         let result = parse_srt(&input);
         // If this passed without panic, the crasher is stale (no actual bug remains).
         // If it panicked, the fix made it return Err instead.
-        assert!(result.is_err(), "expected Err for malformed SRT timestamp, got Ok");
+        assert!(
+            result.is_err(),
+            "expected Err for malformed SRT timestamp, got Ok"
+        );
     }
 
     #[test]
@@ -461,7 +488,9 @@ mod tests {
             end: Timestamp::from_ms(3000),
             style_name: "Default".to_string(),
             name: String::new(),
-            margin_l: 0, margin_r: 0, margin_v: 0,
+            margin_l: 0,
+            margin_r: 0,
+            margin_v: 0,
             effect: Effect::None,
             text: "{\\pos(100,200)}Positioned{\\move(0,0,100,100)} text".to_string(),
             override_tags: Vec::new(),

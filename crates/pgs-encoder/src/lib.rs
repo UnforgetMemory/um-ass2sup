@@ -1,9 +1,9 @@
-pub mod types;
-pub mod rle;
 pub mod color;
-pub mod encoder;
 pub mod decoder;
+pub mod encoder;
+pub mod rle;
+pub mod types;
 
+pub use decoder::{decode_sup, verify_roundtrip, DisplaySet, ParsedPayload, ParsedSegment};
+pub use encoder::{timecode_to_ms, PgsEncoder};
 pub use types::*;
-pub use encoder::{PgsEncoder, timecode_to_ms};
-pub use decoder::{decode_sup, verify_roundtrip, DisplaySet, ParsedSegment, ParsedPayload};

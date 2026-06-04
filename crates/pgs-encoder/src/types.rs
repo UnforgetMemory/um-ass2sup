@@ -260,8 +260,8 @@ impl PcsPayload {
             // Window ID
             output.push(comp.window_id);
             // Object cropped flag (1 bit) + forced flag (1 bit) + reserved (6 bits)
-            let flags = if comp.cropped { 0x80 } else { 0x00 }
-                | if comp.forced { 0x40 } else { 0x00 };
+            let flags =
+                if comp.cropped { 0x80 } else { 0x00 } | if comp.forced { 0x40 } else { 0x00 };
             output.push(flags);
             // Composition X (u16 BE)
             output.extend_from_slice(&comp.x.to_be_bytes());

@@ -1,31 +1,32 @@
-use proptest::prelude::*;
-use pgs_encoder::*;
 use color_quantizer::{QuantizedFrame, Rgba};
+use pgs_encoder::*;
+use proptest::prelude::*;
 
 /// Generate a random QuantizedFrame for testing.
 fn arb_quantized_frame() -> impl Strategy<Value = QuantizedFrame> {
     let width = 1u32..=32;
     let height = 1u32..=32;
-    (width, height).prop_flat_map(|(w, h)| {
-        let pixel_count = (w * h) as usize;
-        let palette_size = 2usize..=8;
-        let palette = proptest::collection::vec(
-            (any::<u8>(), any::<u8>(), any::<u8>(), any::<u8>())
-                .prop_map(|(r, g, b, a)| Rgba::new(r, g, b, a)),
-            palette_size,
-        );
-        let indices = proptest::collection::vec(any::<u8>(), pixel_count);
-        (Just(w), Just(h), palette, indices, any::<u8>())
-    })
-    .prop_map(|(width, height, palette, indices, transparent_index)| {
-        QuantizedFrame {
-            width,
-            height,
-            palette,
-            indices,
-            transparent_index,
-        }
-    })
+    (width, height)
+        .prop_flat_map(|(w, h)| {
+            let pixel_count = (w * h) as usize;
+            let palette_size = 2usize..=8;
+            let palette = proptest::collection::vec(
+                (any::<u8>(), any::<u8>(), any::<u8>(), any::<u8>())
+                    .prop_map(|(r, g, b, a)| Rgba::new(r, g, b, a)),
+                palette_size,
+            );
+            let indices = proptest::collection::vec(any::<u8>(), pixel_count);
+            (Just(w), Just(h), palette, indices, any::<u8>())
+        })
+        .prop_map(
+            |(width, height, palette, indices, transparent_index)| QuantizedFrame {
+                width,
+                height,
+                palette,
+                indices,
+                transparent_index,
+            },
+        )
 }
 
 // ============================================================

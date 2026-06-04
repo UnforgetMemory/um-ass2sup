@@ -251,11 +251,18 @@ fn test_apply_to_pixmap_scale_2x() {
 
     // Interior pixel (3,3) maps to (1.25, 1.25) in source — fully inside the 2x2 block
     let check_idx = ((3 * dst_w + 3) * 4) as usize;
-    assert_eq!(dst[check_idx + 3], 255, "interior scaled pixel at (3,3) should be fully opaque");
+    assert_eq!(
+        dst[check_idx + 3],
+        255,
+        "interior scaled pixel at (3,3) should be fully opaque"
+    );
 
     // Edge pixel (2,2) is blended with transparent neighbors — partial alpha
     let edge_idx = ((2 * dst_w + 2) * 4) as usize;
-    assert!(dst[edge_idx + 3] > 0, "edge pixel at (2,2) should have some alpha from interpolation");
+    assert!(
+        dst[edge_idx + 3] > 0,
+        "edge pixel at (2,2) should have some alpha from interpolation"
+    );
 
     // Corner pixel at (0,0) should be transparent
     assert_eq!(dst[3], 0, "corner should be transparent");

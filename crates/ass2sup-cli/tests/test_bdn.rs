@@ -3,8 +3,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 fn fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
 }
 
 fn simple_fixture() -> PathBuf {
@@ -14,7 +13,10 @@ fn simple_fixture() -> PathBuf {
 /// The BDN output is written to `<out_dir>/<stem>/`, where stem is the
 /// input filename without extension.  This helper returns that subdirectory.
 fn bdn_output_dir(out_dir: &std::path::Path, input: &std::path::Path) -> PathBuf {
-    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("subtitle");
+    let stem = input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("subtitle");
     out_dir.join(stem)
 }
 
@@ -48,8 +50,14 @@ fn test_bdn_conversion() {
 
     // BDN.xml should start with <?xml
     let xml_content = std::fs::read_to_string(&xml_path).expect("Failed to read BDN.xml");
-    assert!(xml_content.starts_with("<?xml"), "BDN.xml should start with <?xml");
-    assert!(xml_content.contains("<BDN"), "BDN.xml should contain <BDN element");
+    assert!(
+        xml_content.starts_with("<?xml"),
+        "BDN.xml should start with <?xml"
+    );
+    assert!(
+        xml_content.contains("<BDN"),
+        "BDN.xml should contain <BDN element"
+    );
 }
 
 // ──────────────────────────────────────────────
@@ -91,7 +99,11 @@ fn test_bdn_custom_resolution() {
 
     let bdn_dir = bdn_output_dir(&out_dir, &simple_fixture());
     let xml_path = bdn_dir.join("BDN.xml");
-    assert!(xml_path.exists(), "BDN.xml should exist for 720p at {:?}", xml_path);
+    assert!(
+        xml_path.exists(),
+        "BDN.xml should exist for 720p at {:?}",
+        xml_path
+    );
 }
 
 // ──────────────────────────────────────────────

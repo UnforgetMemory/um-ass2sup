@@ -20,10 +20,10 @@
 //! `outline_x_width` / `outline_y_width` (including values smaller than the
 //! reference `outline_width`) and behaves correctly at anti-aliased edges.
 
-use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
-use crate::shaper::ShapedGlyph;
 use crate::context::RenderContext;
 use crate::font::FontManager;
+use crate::shaper::ShapedGlyph;
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
 
 /// Adapter that converts ttf-parser glyph outline commands into tiny-skia path
 /// commands, applying font-unit-to-pixel scaling and screen-space translation.
@@ -36,11 +36,17 @@ struct OutlineAdapter<'a> {
 
 impl ttf_parser::OutlineBuilder for OutlineAdapter<'_> {
     fn move_to(&mut self, x: f32, y: f32) {
-        self.builder.move_to(self.offset_x + x * self.scale, self.offset_y + y * self.scale);
+        self.builder.move_to(
+            self.offset_x + x * self.scale,
+            self.offset_y + y * self.scale,
+        );
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
-        self.builder.line_to(self.offset_x + x * self.scale, self.offset_y + y * self.scale);
+        self.builder.line_to(
+            self.offset_x + x * self.scale,
+            self.offset_y + y * self.scale,
+        );
     }
 
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
@@ -114,12 +120,17 @@ impl Rasterizer {
         let mut builder = PathBuilder::new();
         let glyph_id = ttf_parser::GlyphId(glyph.glyph_id as u16);
 
-        let has_outline = face.outline_glyph(glyph_id, &mut OutlineAdapter {
-            builder: &mut builder,
-            scale,
-            offset_x: gx,
-            offset_y: gy,
-        }).is_some();
+        let has_outline = face
+            .outline_glyph(
+                glyph_id,
+                &mut OutlineAdapter {
+                    builder: &mut builder,
+                    scale,
+                    offset_x: gx,
+                    offset_y: gy,
+                },
+            )
+            .is_some();
 
         if !has_outline {
             if let Some(bbox) = face.glyph_bounding_box(glyph_id) {
@@ -136,7 +147,12 @@ impl Rasterizer {
 
         if let Some(path) = builder.finish() {
             let mut paint = Paint::default();
-            paint.set_color_rgba8(ctx.primary_color[0], ctx.primary_color[1], ctx.primary_color[2], ctx.primary_color[3]);
+            paint.set_color_rgba8(
+                ctx.primary_color[0],
+                ctx.primary_color[1],
+                ctx.primary_color[2],
+                ctx.primary_color[3],
+            );
             paint.anti_alias = true;
 
             pixmap.fill_path(
@@ -149,7 +165,12 @@ impl Rasterizer {
 
             if ctx.outline_width > 0.0 {
                 let mut outline_paint = Paint::default();
-                outline_paint.set_color_rgba8(ctx.outline_color[0], ctx.outline_color[1], ctx.outline_color[2], ctx.outline_color[3]);
+                outline_paint.set_color_rgba8(
+                    ctx.outline_color[0],
+                    ctx.outline_color[1],
+                    ctx.outline_color[2],
+                    ctx.outline_color[3],
+                );
                 outline_paint.anti_alias = true;
 
                 apply_anisotropic_outline(
@@ -200,9 +221,7 @@ pub(crate) fn apply_anisotropic_outline(
     };
 
     // Fast path: uniform outline → standard stroke.
-    if (ox - outline_width).abs() <= f32::EPSILON
-        && (oy - outline_width).abs() <= f32::EPSILON
-    {
+    if (ox - outline_width).abs() <= f32::EPSILON && (oy - outline_width).abs() <= f32::EPSILON {
         let stroke = Stroke {
             width: outline_width * 2.0,
             ..Default::default()
@@ -220,17 +239,15 @@ pub(crate) fn apply_anisotropic_outline(
     }
 
     // ── Build the fill alpha mask ──────────────────────────────────────
-    let mut mask = if let Some(p) = Pixmap::new(w as u32, h as u32) { p } else { return; };
+    let mut mask = if let Some(p) = Pixmap::new(w as u32, h as u32) {
+        p
+    } else {
+        return;
+    };
     let mut white = Paint::default();
     white.set_color_rgba8(255, 255, 255, 255);
     white.anti_alias = true;
-    mask.fill_path(
-        path,
-        &white,
-        FillRule::Winding,
-        Transform::identity(),
-        None,
-    );
+    mask.fill_path(path, &white, FillRule::Winding, Transform::identity(), None);
 
     // Save the original (pre-dilation) per-pixel alpha for comparison.
     let orig_alpha: Vec<u8> = (0..w * h).map(|i| mask.data()[i * 4 + 3]).collect();
@@ -260,15 +277,15 @@ pub(crate) fn apply_anisotropic_outline(
                 let dst_a = f32::from(pix_data[di + 3]) / 255.0;
                 let res_a = out_frac + dst_a * (1.0 - out_frac);
                 debug_assert!(res_a > 0.0);
-                pix_data[di] =
-                    ((f32::from(outline_color[0]) * out_frac + f32::from(pix_data[di]) * dst_a * (1.0 - out_frac))
-                        / res_a) as u8;
-                pix_data[di + 1] =
-                    ((f32::from(outline_color[1]) * out_frac + f32::from(pix_data[di + 1]) * dst_a * (1.0 - out_frac))
-                        / res_a) as u8;
-                pix_data[di + 2] =
-                    ((f32::from(outline_color[2]) * out_frac + f32::from(pix_data[di + 2]) * dst_a * (1.0 - out_frac))
-                        / res_a) as u8;
+                pix_data[di] = ((f32::from(outline_color[0]) * out_frac
+                    + f32::from(pix_data[di]) * dst_a * (1.0 - out_frac))
+                    / res_a) as u8;
+                pix_data[di + 1] = ((f32::from(outline_color[1]) * out_frac
+                    + f32::from(pix_data[di + 1]) * dst_a * (1.0 - out_frac))
+                    / res_a) as u8;
+                pix_data[di + 2] = ((f32::from(outline_color[2]) * out_frac
+                    + f32::from(pix_data[di + 2]) * dst_a * (1.0 - out_frac))
+                    / res_a) as u8;
                 pix_data[di + 3] = (res_a * 255.0) as u8;
             }
         }
@@ -280,13 +297,7 @@ pub(crate) fn apply_anisotropic_outline(
 /// Reads original alpha values from `orig_src` (flat per-pixel alpha,
 /// one byte per pixel, row-major), writes the windowed max into `data`'s
 /// alpha byte at the corresponding position.
-fn dilate_alpha_horizontal(
-    data: &mut [u8],
-    w: usize,
-    h: usize,
-    radius: usize,
-    orig_src: &[u8],
-) {
+fn dilate_alpha_horizontal(data: &mut [u8], w: usize, h: usize, radius: usize, orig_src: &[u8]) {
     for y in 0..h {
         for x in 0..w {
             let mut max_a = 0u8;
@@ -327,5 +338,3 @@ fn dilate_alpha_vertical(data: &mut [u8], w: usize, h: usize, radius: usize) {
         }
     }
 }
-
-

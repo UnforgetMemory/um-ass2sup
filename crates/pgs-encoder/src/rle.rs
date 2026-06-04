@@ -24,10 +24,7 @@ pub fn rle_encode(palette_indices: &[u8], width: u32, height: u32) -> Vec<u8> {
             let color = row[x];
             let mut run_length: usize = 1;
 
-            while x + run_length < w
-                && row[x + run_length] == color
-                && run_length < 0x3FFF
-            {
+            while x + run_length < w && row[x + run_length] == color && run_length < 0x3FFF {
                 run_length += 1;
             }
 

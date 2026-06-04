@@ -173,5 +173,10 @@ fn srt_resolution_default_when_missing() {
     let srt = "1\n00:00:00,000 --> 00:00:01,000\nHi\n";
     let file = ass_parser::AssFile::parse(srt).expect("SRT");
     let (w, h) = file.resolution();
-    assert!(w > 0 && h > 0, "SRT should default to non-zero resolution, got {}x{}", w, h);
+    assert!(
+        w > 0 && h > 0,
+        "SRT should default to non-zero resolution, got {}x{}",
+        w,
+        h
+    );
 }

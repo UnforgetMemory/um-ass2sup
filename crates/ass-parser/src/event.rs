@@ -1,7 +1,7 @@
 use super::effect::{parse_effect, Effect};
-use super::timestamp::Timestamp;
-use super::override_tag::OverrideTag;
 use super::karaoke::{KaraokeSegment, KaraokeStyle};
+use super::override_tag::OverrideTag;
+use super::timestamp::Timestamp;
 
 /// ASS/SSA event type (first field of an event line).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -94,11 +94,15 @@ impl Event {
     ///
     /// Returns [`ParseError::InvalidEvent`](crate::ParseError::InvalidEvent) if fewer than 10 fields are present,
     /// or [`ParseError::InvalidTimestamp`](crate::ParseError::InvalidTimestamp) if start/end timecodes are malformed.
-    pub fn parse_from_line(event_type: EventType, data: &str) -> Result<Self, super::error::ParseError> {
+    pub fn parse_from_line(
+        event_type: EventType,
+        data: &str,
+    ) -> Result<Self, super::error::ParseError> {
         let parts: Vec<&str> = data.splitn(10, ',').collect();
         if parts.len() < 10 {
             return Err(super::error::ParseError::InvalidEvent(format!(
-                "expected 10 fields, got {}", parts.len()
+                "expected 10 fields, got {}",
+                parts.len()
             )));
         }
         let layer: u32 = parts[0].trim().parse().unwrap_or(0);
@@ -245,26 +249,46 @@ fn parse_text_with_tags(text: &str) -> (Vec<OverrideTag>, Vec<KaraokeSegment>, S
 }
 
 fn parse_hex_u8(s: &str) -> Result<u8, std::num::ParseIntError> {
-    let s = s.trim().trim_start_matches("H").trim_start_matches("h").trim_end_matches('&');
+    let s = s
+        .trim()
+        .trim_start_matches("H")
+        .trim_start_matches("h")
+        .trim_end_matches('&');
     u8::from_str_radix(s, 16)
 }
 
 fn parse_ass_color(s: &str) -> Result<super::color::AssColor, ()> {
-    let s = s.trim().trim_start_matches("H").trim_start_matches("h").trim_end_matches('&');
-    if s.len() < 6 { return Err(()); }
-    let hex = if s.len() >= 8 { &s[s.len()-8..] } else { s };
+    let s = s
+        .trim()
+        .trim_start_matches("H")
+        .trim_start_matches("h")
+        .trim_end_matches('&');
+    if s.len() < 6 {
+        return Err(());
+    }
+    let hex = if s.len() >= 8 { &s[s.len() - 8..] } else { s };
     let parse = |range: &str| u8::from_str_radix(range, 16).map_err(|_| ());
     if hex.len() == 8 {
         let alpha = parse(&hex[0..2])?;
         let blue = parse(&hex[2..4])?;
         let green = parse(&hex[4..6])?;
         let red = parse(&hex[6..8])?;
-        Ok(super::color::AssColor { alpha, blue, green, red })
+        Ok(super::color::AssColor {
+            alpha,
+            blue,
+            green,
+            red,
+        })
     } else if hex.len() == 6 {
         let blue = parse(&hex[0..2])?;
         let green = parse(&hex[2..4])?;
         let red = parse(&hex[4..6])?;
-        Ok(super::color::AssColor { alpha: 0, blue, green, red })
+        Ok(super::color::AssColor {
+            alpha: 0,
+            blue,
+            green,
+            red,
+        })
     } else {
         Err(())
     }
@@ -298,24 +322,53 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
     }
     if s.starts_with("pos(") {
         let inner = s.trim_start_matches("pos(").trim_end_matches(')');
-        let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        let nums: Vec<f64> = inner
+            .split(',')
+            .filter_map(|n| n.trim().parse().ok())
+            .collect();
         if nums.len() >= 2 {
-            return Some(OverrideTag::Pos { x: nums[0], y: nums[1] });
+            return Some(OverrideTag::Pos {
+                x: nums[0],
+                y: nums[1],
+            });
         }
     }
     if s.starts_with("move(") {
         let inner = s.trim_start_matches("move(").trim_end_matches(')');
-        let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        let nums: Vec<f64> = inner
+            .split(',')
+            .filter_map(|n| n.trim().parse().ok())
+            .collect();
         if nums.len() >= 4 {
-            let (t1, t2) = if nums.len() >= 6 { (nums[4] as u64, nums[5] as u64) } else { (0, 0) };
-            return Some(OverrideTag::Move { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3], t1, t2 });
+            let (t1, t2) = if nums.len() >= 6 {
+                (nums[4] as u64, nums[5] as u64)
+            } else {
+                (0, 0)
+            };
+            return Some(OverrideTag::Move {
+                x1: nums[0],
+                y1: nums[1],
+                x2: nums[2],
+                y2: nums[3],
+                t1,
+                t2,
+            });
         }
     }
     if s.starts_with("fad(") || s.starts_with("fade(") {
-        let inner = s.trim_start_matches("fad(").trim_start_matches("fade(").trim_end_matches(')');
-        let nums: Vec<u64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        let inner = s
+            .trim_start_matches("fad(")
+            .trim_start_matches("fade(")
+            .trim_end_matches(')');
+        let nums: Vec<u64> = inner
+            .split(',')
+            .filter_map(|n| n.trim().parse().ok())
+            .collect();
         if nums.len() >= 2 {
-            return Some(OverrideTag::Fade { duration_in: nums[0], duration_out: nums[1] });
+            return Some(OverrideTag::Fade {
+                duration_in: nums[0],
+                duration_out: nums[1],
+            });
         }
     }
     if let Some(stripped) = s.strip_prefix("fn") {
@@ -356,13 +409,21 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
         }
     }
     if let Some(stripped) = s.strip_prefix("k") {
-        let (tag_str, dur_str) = if let Some(stripped) = stripped.strip_prefix("f") { ("kf", stripped) }
-            else if let Some(stripped) = stripped.strip_prefix('o') { ("ko", stripped) }
-            else if let Some(stripped) = stripped.strip_prefix('t') { ("kt", stripped) }
-            else { ("k", stripped) };
+        let (tag_str, dur_str) = if let Some(stripped) = stripped.strip_prefix("f") {
+            ("kf", stripped)
+        } else if let Some(stripped) = stripped.strip_prefix('o') {
+            ("ko", stripped)
+        } else if let Some(stripped) = stripped.strip_prefix('t') {
+            ("kt", stripped)
+        } else {
+            ("k", stripped)
+        };
         if let Some(style) = super::karaoke::KaraokeStyle::from_tag(tag_str) {
             if let Ok(dur) = dur_str.parse::<u64>() {
-                return Some(OverrideTag::Karaoke { style, duration: dur * 10 });
+                return Some(OverrideTag::Karaoke {
+                    style,
+                    duration: dur * 10,
+                });
             }
         }
     }
@@ -372,61 +433,106 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
         let parts: Vec<&str> = split_commas_paren_aware(inner);
         if !parts.is_empty() {
             let tag = parts[0].trim().to_string();
-            let t1 = parts.get(1).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
-            let t2 = parts.get(2).and_then(|v| v.trim().parse().ok()).unwrap_or(t1);
-            let accel = parts.get(3).and_then(|v| v.trim().parse().ok()).unwrap_or(1.0);
+            let t1 = parts
+                .get(1)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0);
+            let t2 = parts
+                .get(2)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(t1);
+            let accel = parts
+                .get(3)
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(1.0);
             return Some(OverrideTag::Transform { tag, t1, t2, accel });
         }
     }
     // \clip(x1,y1,x2,y2) — rectangular clip, or \clip(scale,commands) — vector clip
     if s.starts_with("clip(") {
         let inner = s.trim_start_matches("clip(").trim_end_matches(')');
-        let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        let nums: Vec<f64> = inner
+            .split(',')
+            .filter_map(|n| n.trim().parse().ok())
+            .collect();
         if nums.len() >= 4 {
-            return Some(OverrideTag::Clip { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
+            return Some(OverrideTag::Clip {
+                x1: nums[0],
+                y1: nums[1],
+                x2: nums[2],
+                y2: nums[3],
+            });
         }
         // Vector drawing form: \clip(scale, drawing_commands)
         if let Some(comma_pos) = inner.find(',') {
             let scale_str = inner[..comma_pos].trim();
             let commands = inner[comma_pos + 1..].trim();
             if let Ok(scale) = scale_str.parse::<f32>() {
-                return Some(OverrideTag::ClipDrawing { scale, commands: commands.to_string() });
+                return Some(OverrideTag::ClipDrawing {
+                    scale,
+                    commands: commands.to_string(),
+                });
             }
         }
     }
     // \iclip(x1,y1,x2,y2) — inverse rectangular clip, or \iclip(scale,commands) — inverse vector clip
     if s.starts_with("iclip(") {
         let inner = s.trim_start_matches("iclip(").trim_end_matches(')');
-        let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        let nums: Vec<f64> = inner
+            .split(',')
+            .filter_map(|n| n.trim().parse().ok())
+            .collect();
         if nums.len() >= 4 {
-            return Some(OverrideTag::ClipInverse { x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3] });
+            return Some(OverrideTag::ClipInverse {
+                x1: nums[0],
+                y1: nums[1],
+                x2: nums[2],
+                y2: nums[3],
+            });
         }
         // Vector drawing form: \iclip(scale, drawing_commands)
         if let Some(comma_pos) = inner.find(',') {
             let scale_str = inner[..comma_pos].trim();
             let commands = inner[comma_pos + 1..].trim();
             if let Ok(scale) = scale_str.parse::<f32>() {
-                return Some(OverrideTag::ClipInverseDrawing { scale, commands: commands.to_string() });
+                return Some(OverrideTag::ClipInverseDrawing {
+                    scale,
+                    commands: commands.to_string(),
+                });
             }
         }
     }
     // \fade(a1,a2,a3,t1,t2,t3,t4) — 7-parameter complex fade
     if s.starts_with("fade(") && s.matches(',').count() >= 6 {
         let inner = s.trim_start_matches("fade(").trim_end_matches(')');
-        let nums: Vec<u64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        let nums: Vec<u64> = inner
+            .split(',')
+            .filter_map(|n| n.trim().parse().ok())
+            .collect();
         if nums.len() >= 7 {
             return Some(OverrideTag::FadeComplex {
-                alpha_start: nums[0] as u8, alpha_mid: nums[1] as u8, alpha_end: nums[2] as u8,
-                t1: nums[3], t2: nums[4], t3: nums[5], t4: nums[6],
+                alpha_start: nums[0] as u8,
+                alpha_mid: nums[1] as u8,
+                alpha_end: nums[2] as u8,
+                t1: nums[3],
+                t2: nums[4],
+                t3: nums[5],
+                t4: nums[6],
             });
         }
     }
     // \org(x,y) — rotation origin
     if s.starts_with("org(") {
         let inner = s.trim_start_matches("org(").trim_end_matches(')');
-        let nums: Vec<f64> = inner.split(',').filter_map(|n| n.trim().parse().ok()).collect();
+        let nums: Vec<f64> = inner
+            .split(',')
+            .filter_map(|n| n.trim().parse().ok())
+            .collect();
         if nums.len() >= 2 {
-            return Some(OverrideTag::Origin { x: nums[0], y: nums[1] });
+            return Some(OverrideTag::Origin {
+                x: nums[0],
+                y: nums[1],
+            });
         }
     }
     // \frz(angle), \fr(angle), \frx(angle), \fry(angle) — rotation
@@ -528,7 +634,12 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
         }
     }
     // \1c, \2c, \3c, \4c — color aliases
-    for (prefix, variant) in [("1c", "primary"), ("2c", "secondary"), ("3c", "outline"), ("4c", "shadow")] {
+    for (prefix, variant) in [
+        ("1c", "primary"),
+        ("2c", "secondary"),
+        ("3c", "outline"),
+        ("4c", "shadow"),
+    ] {
         if let Some(color_str) = s.strip_prefix(prefix) {
             if let Ok(color) = parse_ass_color(color_str) {
                 return Some(match variant {
@@ -548,7 +659,12 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
         }
     }
     // \1a, \2a, \3a, \4a — alpha aliases
-    for (prefix, variant) in [("1a", "primary"), ("2a", "secondary"), ("3a", "outline"), ("4a", "shadow")] {
+    for (prefix, variant) in [
+        ("1a", "primary"),
+        ("2a", "secondary"),
+        ("3a", "outline"),
+        ("4a", "shadow"),
+    ] {
         if let Some(val_str) = s.strip_prefix(prefix) {
             if let Ok(v) = parse_hex_u8(val_str) {
                 return Some(match variant {
@@ -743,7 +859,9 @@ mod tests {
     fn karaoke_override_tags_populated() {
         let (tags, _segments, _raw) = parse_text_with_tags("{\\k50\\b1}Hello{\\i1} World");
         assert!(tags.iter().any(|t| matches!(t, OverrideTag::Bold(true))));
-        assert!(tags.iter().any(|t| matches!(t, OverrideTag::Karaoke { .. })));
+        assert!(tags
+            .iter()
+            .any(|t| matches!(t, OverrideTag::Karaoke { .. })));
         assert!(tags.iter().any(|t| matches!(t, OverrideTag::Italic(true))));
     }
 
@@ -788,32 +906,65 @@ mod tests {
     #[test]
     fn clip_rectangular_unchanged() {
         let result = parse_single_tag("clip(10,20,30,40)").unwrap();
-        assert_eq!(result, OverrideTag::Clip { x1: 10.0, y1: 20.0, x2: 30.0, y2: 40.0 });
+        assert_eq!(
+            result,
+            OverrideTag::Clip {
+                x1: 10.0,
+                y1: 20.0,
+                x2: 30.0,
+                y2: 40.0
+            }
+        );
     }
 
     #[test]
     fn iclip_rectangular_unchanged() {
         let result = parse_single_tag("iclip(10,20,30,40)").unwrap();
-        assert_eq!(result, OverrideTag::ClipInverse { x1: 10.0, y1: 20.0, x2: 30.0, y2: 40.0 });
+        assert_eq!(
+            result,
+            OverrideTag::ClipInverse {
+                x1: 10.0,
+                y1: 20.0,
+                x2: 30.0,
+                y2: 40.0
+            }
+        );
     }
 
     #[test]
     fn clip_vector_minimal_commands() {
         let result = parse_single_tag("clip(1,m 0 0)").unwrap();
-        assert_eq!(result, OverrideTag::ClipDrawing { scale: 1.0, commands: "m 0 0".to_string() });
+        assert_eq!(
+            result,
+            OverrideTag::ClipDrawing {
+                scale: 1.0,
+                commands: "m 0 0".to_string()
+            }
+        );
     }
 
     #[test]
     fn clip_vector_fractional_scale() {
         let result = parse_single_tag("clip(0.5,m 10 10 l 20 20)").unwrap();
-        assert_eq!(result, OverrideTag::ClipDrawing { scale: 0.5, commands: "m 10 10 l 20 20".to_string() });
+        assert_eq!(
+            result,
+            OverrideTag::ClipDrawing {
+                scale: 0.5,
+                commands: "m 10 10 l 20 20".to_string()
+            }
+        );
     }
 
     #[test]
     fn clip_vector_through_parse_text_with_tags() {
-        let (_tags, _segments, _raw) =
-            parse_text_with_tags("{\\clip(1,m 0 0 l 100 0 100 100 0 100)}Vector{\\clip(10,20,30,40)}Clip");
-        assert!(_tags.iter().any(|t| matches!(t, OverrideTag::ClipDrawing { scale: 1.0, .. })));
-        assert!(_tags.iter().any(|t| matches!(t, OverrideTag::Clip { x1: 10.0, .. })));
+        let (_tags, _segments, _raw) = parse_text_with_tags(
+            "{\\clip(1,m 0 0 l 100 0 100 100 0 100)}Vector{\\clip(10,20,30,40)}Clip",
+        );
+        assert!(_tags
+            .iter()
+            .any(|t| matches!(t, OverrideTag::ClipDrawing { scale: 1.0, .. })));
+        assert!(_tags
+            .iter()
+            .any(|t| matches!(t, OverrideTag::Clip { x1: 10.0, .. })));
     }
 }

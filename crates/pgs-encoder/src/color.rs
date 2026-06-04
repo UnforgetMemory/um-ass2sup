@@ -1,27 +1,39 @@
-use color_quantizer::Rgba;
 use crate::types::PaletteEntry;
+use color_quantizer::Rgba;
 
 pub fn rgba_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
     let r = f64::from(r);
     let g = f64::from(g);
     let b = f64::from(b);
 
-    let y  = ( 0.299 * r + 0.587 * g + 0.114 * b).round().clamp(0.0, 255.0) as u8;
-    let cb = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0).round().clamp(0.0, 255.0) as u8;
-    let cr = ( 0.500 * r - 0.419 * g - 0.081 * b + 128.0).round().clamp(0.0, 255.0) as u8;
+    let y = (0.299 * r + 0.587 * g + 0.114 * b)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    let cb = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    let cr = (0.500 * r - 0.419 * g - 0.081 * b + 128.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
 
     (y, cb, cr)
 }
 
 pub fn build_palette(palette: &[Rgba]) -> Vec<PaletteEntry> {
-    palette.iter().enumerate().map(|(i, rgba)| {
-        let (y, cb, cr) = rgba_to_ycbcr(rgba.r, rgba.g, rgba.b);
-        PaletteEntry {
-            index: i as u8,
-            y, cb, cr,
-            alpha: rgba.a,
-        }
-    }).collect()
+    palette
+        .iter()
+        .enumerate()
+        .map(|(i, rgba)| {
+            let (y, cb, cr) = rgba_to_ycbcr(rgba.r, rgba.g, rgba.b);
+            PaletteEntry {
+                index: i as u8,
+                y,
+                cb,
+                cr,
+                alpha: rgba.a,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -70,10 +82,7 @@ mod tests {
 
     #[test]
     fn test_build_palette() {
-        let palette = vec![
-            Rgba::new(0, 0, 0, 0),
-            Rgba::new(255, 255, 255, 255),
-        ];
+        let palette = vec![Rgba::new(0, 0, 0, 0), Rgba::new(255, 255, 255, 255)];
         let entries = build_palette(&palette);
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].index, 0);

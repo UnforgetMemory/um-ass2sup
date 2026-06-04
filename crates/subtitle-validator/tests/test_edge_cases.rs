@@ -22,8 +22,10 @@ fn ass_with_n_events(n: usize) -> String {
         let end_s = i + 1;
         events.push_str(&format!(
             "Dialogue: 0,0:{:02}:{:02}.00,0:{:02}:{:02}.00,Default,,0,0,0,,Event {}\n",
-            start_s / 60, start_s % 60,
-            end_s / 60, end_s % 60,
+            start_s / 60,
+            start_s % 60,
+            end_s / 60,
+            end_s % 60,
             i,
         ));
     }
@@ -76,7 +78,10 @@ fn test_validation_100_plus_events_performance() {
     // Should complete without issues
     assert_eq!(report.stats.total_events, 150);
     // Events are sequential (1s each), no overlaps
-    assert!(report.overlaps.is_empty(), "Sequential 1s events should have no overlaps");
+    assert!(
+        report.overlaps.is_empty(),
+        "Sequential 1s events should have no overlaps"
+    );
 }
 
 #[test]
@@ -110,7 +115,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Second
     let ass = parse_ass(input);
     let report = validate(&ass);
 
-    assert!(!report.overlaps.is_empty(), "Exact same time range should be detected");
+    assert!(
+        !report.overlaps.is_empty(),
+        "Exact same time range should be detected"
+    );
     // Full overlap = Critical
     assert_eq!(report.overlaps[0].severity, OverlapSeverity::Critical);
 }
@@ -291,8 +299,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test
     let report = validate(&ass);
 
     // Should not have V002 (invalid resolution) since defaults are 1920x1080
-    let v002: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V002).collect();
-    assert!(v002.is_empty(), "Missing ScriptInfo should use valid defaults");
+    let v002: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V002)
+        .collect();
+    assert!(
+        v002.is_empty(),
+        "Missing ScriptInfo should use valid defaults"
+    );
 }
 
 // ─────────────────────── Invalid Timestamps ───────────────────────
@@ -316,9 +331,16 @@ Dialogue: 0,0:00:10.00,0:00:01.00,Default,,0,0,0,,Backwards
     let ass = parse_ass(input);
     let report = validate(&ass);
 
-    let v011: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V011).collect();
+    let v011: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V011)
+        .collect();
     assert!(!v011.is_empty(), "V011 should fire for end before start");
-    assert!(!report.is_valid, "End before start should make report invalid");
+    assert!(
+        !report.is_valid,
+        "End before start should make report invalid"
+    );
 }
 
 #[test]
@@ -341,7 +363,11 @@ Dialogue: 0,0:00:05.00,0:00:05.00,Default,,0,0,0,,Zero duration
     let report = validate(&ass);
 
     // start >= end (equal counts) → V011
-    let v011: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V011).collect();
+    let v011: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V011)
+        .collect();
     assert!(!v011.is_empty(), "V011 should fire for start == end");
 }
 
@@ -370,8 +396,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,, ,0,0,0,,Empty style name
     // But the parser may trim it; check if the style_name is empty
     let event = &ass.events[0];
     if event.style_name.is_empty() || event.style_name == " " {
-        let v009: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V009).collect();
-        assert!(!v009.is_empty(), "V009 should fire for empty/whitespace style name");
+        let v009: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.rule_id == RuleId::V009)
+            .collect();
+        assert!(
+            !v009.is_empty(),
+            "V009 should fire for empty/whitespace style name"
+        );
     }
 }
 
@@ -397,7 +430,11 @@ Dialogue: 0,0:00:01.00,0:01:00.00,Default,,0,0,0,,Very long subtitle over 30 sec
     let report = validate(&ass);
 
     // Duration = 59s > 30s → V012 warning
-    let v012: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V012).collect();
+    let v012: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V012)
+        .collect();
     assert!(!v012.is_empty(), "V012 should fire for duration > 30s");
 }
 
@@ -421,8 +458,15 @@ Dialogue: 0,0:00:01.00,0:00:31.00,Default,,0,0,0,,Exactly 30 seconds
     let report = validate(&ass);
 
     // Duration = 30000ms, condition is > 30000 → no warning
-    let v012: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V012).collect();
-    assert!(v012.is_empty(), "V012 should NOT fire for exactly 30s (only >30s)");
+    let v012: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V012)
+        .collect();
+    assert!(
+        v012.is_empty(),
+        "V012 should NOT fire for exactly 30s (only >30s)"
+    );
 }
 
 // ─────────────────────── Unmatched Braces ───────────────────────
@@ -446,7 +490,11 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\b1 text
     let ass = parse_ass(input);
     let report = validate(&ass);
 
-    let v013: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V013).collect();
+    let v013: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V013)
+        .collect();
     assert!(!v013.is_empty(), "V013 should fire for extra '{{'");
 }
 
@@ -469,7 +517,11 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,text} more
     let ass = parse_ass(input);
     let report = validate(&ass);
 
-    let v013: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V013).collect();
+    let v013: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V013)
+        .collect();
     assert!(!v013.is_empty(), "V013 should fire for extra '}}'");
 }
 
@@ -479,7 +531,11 @@ fn test_validation_matched_braces_no_error() {
     let ass = parse_ass(input);
     let report = validate(&ass);
 
-    let v013: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V013).collect();
+    let v013: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.rule_id == RuleId::V013)
+        .collect();
     assert!(v013.is_empty(), "No V013 for properly matched braces");
 }
 
@@ -571,7 +627,10 @@ Comment: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,This is a comment
     let ass = parse_ass(input);
     let report = validate(&ass);
 
-    assert_eq!(report.stats.total_events, 4, "4 events total (3 dialogue + 1 comment)");
+    assert_eq!(
+        report.stats.total_events, 4,
+        "4 events total (3 dialogue + 1 comment)"
+    );
     assert_eq!(report.stats.total_styles, 2, "2 styles");
     assert_eq!(report.stats.karaoke_events, 1, "1 event has karaoke tags");
 }
@@ -593,7 +652,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     let report = validate(&ass);
 
     let errors = report.errors();
-    assert!(!errors.is_empty(), "Should have errors for zero resolution and no events");
+    assert!(
+        !errors.is_empty(),
+        "Should have errors for zero resolution and no events"
+    );
     for err in &errors {
         assert_eq!(err.severity, subtitle_validator::report::Severity::Error);
     }

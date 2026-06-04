@@ -1,11 +1,11 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ass_parser::{AssFile, Effect, Event, EventType, Timestamp};
 use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
-use tiny_skia::Pixmap;
+use ass_parser::{AssFile, Effect, Event, EventType, Timestamp};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use subtitle_renderer::{
-    apply_gaussian_blur, apply_shadow, composite_over,
-    AffineTransform, RenderConfig, Renderer, Shaper,
+    apply_gaussian_blur, apply_shadow, composite_over, AffineTransform, RenderConfig, Renderer,
+    Shaper,
 };
+use tiny_skia::Pixmap;
 
 // ---------------------------------------------------------------------------
 // Helpers

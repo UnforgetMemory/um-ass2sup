@@ -1,8 +1,8 @@
 use ass_parser::AssFile;
 use color_quantizer::Quantizer;
 use pgs_encoder::PgsEncoder;
-use subtitle_renderer::{FrameCache, FontManager, RenderConfig, Renderer};
 use std::path::PathBuf;
+use subtitle_renderer::{FontManager, FrameCache, RenderConfig, Renderer};
 
 fn test_config() -> RenderConfig {
     RenderConfig {
@@ -91,10 +91,7 @@ fn test_karaoke_ass_end_to_end() {
     config.default_font = font_name;
     let renderer = Renderer::new(config);
     let dialogues: Vec<_> = ass.dialogue_events().cloned().collect();
-    assert!(
-        !dialogues.is_empty(),
-        "karaoke should have dialogue events"
-    );
+    assert!(!dialogues.is_empty(), "karaoke should have dialogue events");
     for event in &dialogues {
         let pts_ms = event.start.as_ms();
         let _frame = renderer.render_ass(&ass, pts_ms);
@@ -183,10 +180,7 @@ fn test_complex_styles_end_to_end() {
     let quantizer = Quantizer::new(255);
     let mut encoder = PgsEncoder::new(1920, 1080, 24.0);
     let dialogues: Vec<_> = ass.dialogue_events().cloned().collect();
-    assert!(
-        dialogues.len() >= 4,
-        "complex_styles should have 4+ events"
-    );
+    assert!(dialogues.len() >= 4, "complex_styles should have 4+ events");
     for event in &dialogues {
         let pts_ms = event.start.as_ms();
         if let Some(frame) = renderer.render_ass(&ass, pts_ms) {

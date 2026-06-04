@@ -59,12 +59,27 @@ fn run_full_pipeline(ass_content: &str) -> Vec<Vec<u8>> {
 fn test_full_pipeline_ass_to_sup() {
     let sup_outputs = run_full_pipeline(minimal_ass());
 
-    assert!(!sup_outputs.is_empty(), "Pipeline should produce at least one SUP output");
+    assert!(
+        !sup_outputs.is_empty(),
+        "Pipeline should produce at least one SUP output"
+    );
 
     for (i, sup_data) in sup_outputs.iter().enumerate() {
-        assert!(sup_data.len() >= 2, "SUP output {} should have at least 2 bytes", i);
-        assert_eq!(sup_data[0], b'P', "SUP output {} should start with 'P' magic byte", i);
-        assert_eq!(sup_data[1], b'G', "SUP output {} should start with 'G' magic byte", i);
+        assert!(
+            sup_data.len() >= 2,
+            "SUP output {} should have at least 2 bytes",
+            i
+        );
+        assert_eq!(
+            sup_data[0], b'P',
+            "SUP output {} should start with 'P' magic byte",
+            i
+        );
+        assert_eq!(
+            sup_data[1], b'G',
+            "SUP output {} should start with 'G' magic byte",
+            i
+        );
     }
 }
 
@@ -107,7 +122,10 @@ Second subtitle
         }
     }
 
-    assert_eq!(sup_count, 2, "Should produce 2 SUP frames from 2 SRT entries");
+    assert_eq!(
+        sup_count, 2,
+        "Should produce 2 SUP frames from 2 SRT entries"
+    );
 }
 
 #[test]
@@ -162,12 +180,18 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\k50}Hel{\k100}lo {\k75}World
     let ass = AssFile::parse(ass_content).expect("ASS parse failed");
     let event = ass.dialogue_events().next().unwrap();
     assert!(
-        event.override_tags.iter().any(|t| matches!(t, ass_parser::OverrideTag::Karaoke { .. })),
+        event
+            .override_tags
+            .iter()
+            .any(|t| matches!(t, ass_parser::OverrideTag::Karaoke { .. })),
         "Should detect karaoke override tags"
     );
 
     let sup_outputs = run_full_pipeline(ass_content);
-    assert!(!sup_outputs.is_empty(), "Karaoke ASS should produce SUP output");
+    assert!(
+        !sup_outputs.is_empty(),
+        "Karaoke ASS should produce SUP output"
+    );
     assert_eq!(sup_outputs[0][0], b'P');
     assert_eq!(sup_outputs[0][1], b'G');
 }
@@ -193,14 +217,21 @@ Dialogue: 0,0:00:06.00,0:00:10.00,Default,,0,0,0,,{\move(100,100,1820,980,0,4000
     let ass = AssFile::parse(ass_content).expect("ASS parse failed");
 
     for event in ass.dialogue_events() {
-        assert!(event.has_override_tags(), "Events should have override tags");
+        assert!(
+            event.has_override_tags(),
+            "Events should have override tags"
+        );
     }
 
     let sup_outputs = run_full_pipeline(ass_content);
     assert_eq!(sup_outputs.len(), 2, "Should produce 2 SUP frames");
 
     for (i, sup_data) in sup_outputs.iter().enumerate() {
-        assert!(sup_data.len() >= 2, "SUP output {} should have magic bytes", i);
+        assert!(
+            sup_data.len() >= 2,
+            "SUP output {} should have magic bytes",
+            i
+        );
         assert_eq!(sup_data[0], b'P');
         assert_eq!(sup_data[1], b'G');
     }
@@ -223,7 +254,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 "#;
 
     let sup_outputs = run_full_pipeline(ass_content);
-    assert!(sup_outputs.is_empty(), "Empty ASS (no dialogue) should produce no SUP output");
+    assert!(
+        sup_outputs.is_empty(),
+        "Empty ASS (no dialogue) should produce no SUP output"
+    );
 }
 
 #[test]
@@ -254,7 +288,11 @@ Dialogue: 0,0:00:07.00,0:00:09.00,Default,,0,0,0,,Third
 
     // Each output should be valid SUP
     for (i, sup_data) in sup_outputs.iter().enumerate() {
-        assert!(sup_data.len() >= 13, "SUP output {} should have at least a header (13 bytes)", i);
+        assert!(
+            sup_data.len() >= 13,
+            "SUP output {} should have at least a header (13 bytes)",
+            i
+        );
         assert_eq!(sup_data[0], b'P', "Magic byte P at output {}", i);
         assert_eq!(sup_data[1], b'G', "Magic byte G at output {}", i);
     }
@@ -300,11 +338,17 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Timed text
         let segments = pgs.encode_frame(&quantized, start_ms, duration_ms);
 
         let expected_pts = (1000u128 * 90000 * 1001 / 1000000) as u64;
-        assert_eq!(segments[0].pts, expected_pts, "PTS should be 90kHz NTSC of start_ms");
+        assert_eq!(
+            segments[0].pts, expected_pts,
+            "PTS should be 90kHz NTSC of start_ms"
+        );
 
         let expected_end_pts = (5000u128 * 90000 * 1001 / 1000000) as u64;
         let end_segment = segments.last().unwrap();
-        assert_eq!(end_segment.pts, expected_end_pts, "END PTS should be 90kHz of end time");
+        assert_eq!(
+            end_segment.pts, expected_end_pts,
+            "END PTS should be 90kHz of end time"
+        );
     }
 }
 
@@ -339,7 +383,8 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test
         assert_eq!(frame.width, 1280);
         assert_eq!(frame.height, 720);
         let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
-        let sup_data = pgs.encode_frame_to_bytes(&quantized, event.start.as_ms(), event.duration_ms());
+        let sup_data =
+            pgs.encode_frame_to_bytes(&quantized, event.start.as_ms(), event.duration_ms());
         assert!(sup_data.len() >= 2);
         assert_eq!(sup_data[0], b'P');
         assert_eq!(sup_data[1], b'G');
@@ -354,7 +399,10 @@ fn run_pipeline_at(ass_content: &str, timestamp_ms: u64) -> Vec<u8> {
     let quantizer = Quantizer::new(255);
     let mut pgs = PgsEncoder::new(1920, 1080, 23.976);
 
-    let event = ass.dialogue_events().next().expect("At least one dialogue event");
+    let event = ass
+        .dialogue_events()
+        .next()
+        .expect("At least one dialogue event");
     let duration_ms = event.duration_ms();
     if let Some(frame) = renderer.render_ass(&ass, timestamp_ms) {
         let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
@@ -389,10 +437,22 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,Banner;10;1;0,Banner Text
 
     assert!(!sup_early.is_empty(), "Banner early should produce SUP");
     assert!(!sup_late.is_empty(), "Banner late should produce SUP");
-    assert_eq!(sup_early[0], b'P', "Banner early SUP should start with PG magic");
-    assert_eq!(sup_early[1], b'G', "Banner early SUP should start with PG magic");
-    assert_eq!(sup_late[0], b'P', "Banner late SUP should start with PG magic");
-    assert_eq!(sup_late[1], b'G', "Banner late SUP should start with PG magic");
+    assert_eq!(
+        sup_early[0], b'P',
+        "Banner early SUP should start with PG magic"
+    );
+    assert_eq!(
+        sup_early[1], b'G',
+        "Banner early SUP should start with PG magic"
+    );
+    assert_eq!(
+        sup_late[0], b'P',
+        "Banner late SUP should start with PG magic"
+    );
+    assert_eq!(
+        sup_late[1], b'G',
+        "Banner late SUP should start with PG magic"
+    );
 }
 
 #[test]
@@ -414,12 +474,28 @@ Dialogue: 0,0:00:05.00,0:00:10.00,Default,,0,0,0,Scroll down;10;200;50,Scrolling
 "#;
 
     let sup_outputs = run_full_pipeline(ass_content);
-    assert_eq!(sup_outputs.len(), 2, "Scroll pipeline should produce 2 SUP outputs");
+    assert_eq!(
+        sup_outputs.len(),
+        2,
+        "Scroll pipeline should produce 2 SUP outputs"
+    );
 
     for (i, sup_data) in sup_outputs.iter().enumerate() {
-        assert!(sup_data.len() >= 2, "Scroll SUP output {} should have magic bytes", i);
-        assert_eq!(sup_data[0], b'P', "Scroll SUP output {} should start with PG", i);
-        assert_eq!(sup_data[1], b'G', "Scroll SUP output {} should start with PG", i);
+        assert!(
+            sup_data.len() >= 2,
+            "Scroll SUP output {} should have magic bytes",
+            i
+        );
+        assert_eq!(
+            sup_data[0], b'P',
+            "Scroll SUP output {} should start with PG",
+            i
+        );
+        assert_eq!(
+            sup_data[1], b'G',
+            "Scroll SUP output {} should start with PG",
+            i
+        );
     }
 }
 
@@ -442,14 +518,23 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\k50}Hel{\kf75}lo {\ko100}Wor
 
     let ass = AssFile::parse(ass_content).expect("ASS parse failed");
     assert!(
-        ass.events[0].override_tags.iter().any(|t| matches!(t, ass_parser::OverrideTag::Karaoke { .. })),
+        ass.events[0]
+            .override_tags
+            .iter()
+            .any(|t| matches!(t, ass_parser::OverrideTag::Karaoke { .. })),
         "Should detect karaoke override tags"
     );
-    assert!(!ass.events[0].karaoke_segments.is_empty(), "Karaoke segments should be populated");
+    assert!(
+        !ass.events[0].karaoke_segments.is_empty(),
+        "Karaoke segments should be populated"
+    );
 
     // Run full pipeline — should produce valid SUP
     let sup_outputs = run_full_pipeline(ass_content);
-    assert!(!sup_outputs.is_empty(), "Karaoke ASS should produce SUP output");
+    assert!(
+        !sup_outputs.is_empty(),
+        "Karaoke ASS should produce SUP output"
+    );
 
     // Verify SUP magic bytes
     assert_eq!(sup_outputs[0][0], b'P', "Karaoke SUP should start with P");
@@ -457,7 +542,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\k50}Hel{\kf75}lo {\ko100}Wor
 
     // Also verify pipeline works at a mid-karaoke timestamp
     let mid_sup = run_pipeline_at(ass_content, 3000);
-    assert!(!mid_sup.is_empty(), "Mid-karaoke pipeline should produce SUP");
+    assert!(
+        !mid_sup.is_empty(),
+        "Mid-karaoke pipeline should produce SUP"
+    );
     assert_eq!(mid_sup[0], b'P');
     assert_eq!(mid_sup[1], b'G');
 }
@@ -482,7 +570,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,2000,1)}Tr
     // Parse and verify transform tag
     let ass = AssFile::parse(ass_content).expect("ASS parse failed");
     assert!(
-        ass.events[0].override_tags.iter().any(|t| matches!(t, ass_parser::OverrideTag::Transform { .. })),
+        ass.events[0]
+            .override_tags
+            .iter()
+            .any(|t| matches!(t, ass_parser::OverrideTag::Transform { .. })),
         "Should parse Transform tag"
     );
 
@@ -519,12 +610,18 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(1,m 0 0 l 100 0 100 100
 
     let ass = AssFile::parse(ass_content).expect("ASS parse failed");
     assert!(
-        ass.events[0].override_tags.iter().any(|t| matches!(t, ass_parser::OverrideTag::ClipDrawing { .. })),
+        ass.events[0]
+            .override_tags
+            .iter()
+            .any(|t| matches!(t, ass_parser::OverrideTag::ClipDrawing { .. })),
         "Vector clip should parse as ClipDrawing"
     );
 
     let sup_outputs = run_full_pipeline(ass_content);
-    assert!(!sup_outputs.is_empty(), "Vector clip ASS should produce SUP output");
+    assert!(
+        !sup_outputs.is_empty(),
+        "Vector clip ASS should produce SUP output"
+    );
     let sup_data = &sup_outputs[0];
     assert!(sup_data.len() >= 2, "SUP data should have magic bytes");
     assert_eq!(sup_data[0], b'P', "SUP should start with P");
@@ -584,7 +681,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,NonExistent,,0,0,0,,Hello
 "#;
     let sup_outputs = run_full_pipeline(ass);
-    assert!(!sup_outputs.is_empty(), "Should produce SUP output even with non-existent style ref");
+    assert!(
+        !sup_outputs.is_empty(),
+        "Should produce SUP output even with non-existent style ref"
+    );
     assert_eq!(sup_outputs[0][0], b'P', "SUP should start with P");
     assert_eq!(sup_outputs[0][1], b'G', "SUP should start with G");
 }
@@ -608,7 +708,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
     if let Some(frame) = frame {
-        assert!(frame.bitmap.iter().all(|&b| b == 0), "No events should produce empty frame");
+        assert!(
+            frame.bitmap.iter().all(|&b| b == 0),
+            "No events should produce empty frame"
+        );
     }
 }
 
@@ -678,7 +781,9 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,日本語テスト 🎌 한국
 "#;
     let ass = AssFile::parse(ass).expect("Unicode ASS should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Unicode text should render");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Unicode text should render");
     assert!(frame.width > 0, "Unicode text should produce valid frame");
 }
 
@@ -699,12 +804,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 "#;
     let mut events = String::new();
     for i in 0..50 {
-        events.push_str(&format!("Dialogue: {i},0:00:01.00,0:00:05.00,Default,,0,0,0,,Event{i}\n"));
+        events.push_str(&format!(
+            "Dialogue: {i},0:00:01.00,0:00:05.00,Default,,0,0,0,,Event{i}\n"
+        ));
     }
     let ass_content = format!("{}{}", header, events);
     let ass = AssFile::parse(&ass_content).expect("Many events should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Should render at 2s");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Should render at 2s");
     assert!(frame.width > 0, "50 simultaneous events should render");
 }
 
@@ -726,7 +835,9 @@ Dialogue: 0,0:00:01.00,25:00:00.00,Default,,0,0,0,,25 hour event
 "#;
     let ass = AssFile::parse(ass).expect("Long duration ASS should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 36000000).expect("Should render at 10h");
+    let frame = renderer
+        .render_ass(&ass, 36000000)
+        .expect("Should render at 10h");
     assert!(frame.width > 0, "Long duration event should render at 10h");
 }
 
@@ -748,7 +859,9 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\b1\i1\c&H0000FF&\fs72}Nested
 "#;
     let ass = AssFile::parse(ass).expect("Nested override tags ASS should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Nested override tags should render");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Nested override tags should render");
     assert!(frame.width > 0, "Nested override tags should render");
 }
 
@@ -770,7 +883,9 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p1}m 0 0 l 100 0 100 100 0 1
 "#;
     let ass = AssFile::parse(ass).expect("Drawing mode p1 ASS should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Drawing mode p1 should render");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Drawing mode p1 should render");
     assert!(frame.width > 0, "Drawing mode p1 should render");
 }
 
@@ -792,7 +907,9 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p4}m 0 0 l 1920 0 1920 540 0
 "#;
     let ass = AssFile::parse(ass).expect("Drawing mode p4 ASS should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Drawing mode p4 clip should render");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Drawing mode p4 clip should render");
     assert!(frame.width > 0, "Drawing mode p4 clip should render");
 }
 
@@ -814,7 +931,9 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q2}Vertical Text
 "#;
     let ass = AssFile::parse(ass).expect("Writing mode vertical ASS should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Writing mode vertical should render");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Writing mode vertical should render");
     assert!(frame.width > 0, "Writing mode vertical should render");
 }
 
@@ -840,9 +959,14 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Fallback Test
 "#;
     let ass = AssFile::parse(ass).expect("ASS with nonexistent font should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Nonexistent font should fall back and render");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Nonexistent font should fall back and render");
     // Should not panic - falls back to a default font
-    assert!(frame.width > 0, "Nonexistent font should fall back and render");
+    assert!(
+        frame.width > 0,
+        "Nonexistent font should fall back and render"
+    );
 }
 
 #[test]
@@ -863,7 +987,9 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Default Font
 "#;
     let ass = AssFile::parse(ass).expect("ASS with DejaVu Sans should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Default DejaVu Sans should render");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Default DejaVu Sans should render");
     assert!(frame.width > 0, "Default DejaVu Sans should render");
 }
 
@@ -885,7 +1011,9 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fs72}Large Text
 "#;
     let ass = AssFile::parse(ass).expect("ASS with font size override should parse");
     let renderer = Renderer::new(RenderConfig::default());
-    let frame = renderer.render_ass(&ass, 2000).expect("Font size override should render");
+    let frame = renderer
+        .render_ass(&ass, 2000)
+        .expect("Font size override should render");
     assert!(frame.width > 0, "Font size override should render");
 }
 
@@ -908,7 +1036,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test";
     let result = AssFile::parse(ass);
     if let Ok(ass) = result {
-        assert!(!ass.styles.is_empty(), "Should have at least one valid style");
+        assert!(
+            !ass.styles.is_empty(),
+            "Should have at least one valid style"
+        );
     }
 }
 
@@ -917,8 +1048,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test";
 // ═══════════════════════════════════════════════════════════════════
 
 fn workspace_fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
 }
 
 #[test]
@@ -958,7 +1088,10 @@ fn test_cli_convert_chinese_srt_produces_nonzero_output() {
     Command::cargo_bin("ass2sup")
         .unwrap()
         .args([
-            workspace_fixtures_dir().join("chinese.srt").to_str().unwrap(),
+            workspace_fixtures_dir()
+                .join("chinese.srt")
+                .to_str()
+                .unwrap(),
             "-o",
         ])
         .arg(&tmp)
@@ -1011,5 +1144,8 @@ fn test_invalid_glob_does_not_panic() {
         stderr
     );
     // Exit code should be non-zero (no files found)
-    assert!(!output.status.success(), "Binary should exit non-zero when no files found");
+    assert!(
+        !output.status.success(),
+        "Binary should exit non-zero when no files found"
+    );
 }

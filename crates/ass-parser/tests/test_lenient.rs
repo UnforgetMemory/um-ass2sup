@@ -6,27 +6,48 @@ const ERRORS_ASS: &str = include_str!("../../../tests/fixtures/errors.ass");
 fn lenient_parses_valid_events_despite_errors() {
     let (ass, errors) = AssFile::parse_lenient(ERRORS_ASS);
     assert!(!errors.is_empty(), "should collect parse errors");
-    assert!(ass.events.len() >= 3, "should parse valid events, got {}", ass.events.len());
+    assert!(
+        ass.events.len() >= 3,
+        "should parse valid events, got {}",
+        ass.events.len()
+    );
 }
 
 #[test]
 fn lenient_collects_style_errors() {
     let (_ass, errors) = AssFile::parse_lenient(ERRORS_ASS);
-    let style_errors: Vec<_> = errors.iter().filter(|e| matches!(e, ParseError::InvalidStyle(_))).collect();
-    assert!(!style_errors.is_empty(), "should have style parse errors from BadStyle line");
+    let style_errors: Vec<_> = errors
+        .iter()
+        .filter(|e| matches!(e, ParseError::InvalidStyle(_)))
+        .collect();
+    assert!(
+        !style_errors.is_empty(),
+        "should have style parse errors from BadStyle line"
+    );
 }
 
 #[test]
 fn lenient_collects_event_errors() {
     let (_ass, errors) = AssFile::parse_lenient(ERRORS_ASS);
-    let event_errors: Vec<_> = errors.iter().filter(|e| matches!(e, ParseError::InvalidEvent(_) | ParseError::InvalidTimestamp(_))).collect();
+    let event_errors: Vec<_> = errors
+        .iter()
+        .filter(|e| {
+            matches!(
+                e,
+                ParseError::InvalidEvent(_) | ParseError::InvalidTimestamp(_)
+            )
+        })
+        .collect();
     assert!(!event_errors.is_empty(), "should have event parse errors");
 }
 
 #[test]
 fn lenient_preserves_valid_style() {
     let (ass, _errors) = AssFile::parse_lenient(ERRORS_ASS);
-    assert!(ass.styles.iter().any(|s| s.name == "Default"), "Default style should survive");
+    assert!(
+        ass.styles.iter().any(|s| s.name == "Default"),
+        "Default style should survive"
+    );
 }
 
 #[test]
@@ -67,7 +88,11 @@ Dialogue: 0,bad-time,0:00:06.00,Default,,0,0,0,,Should be skipped
 Dialogue: 0,0:00:07.00,0:00:10.00,Default,,0,0,0,,Second valid
 ";
     let (ass, errors) = AssFile::parse_lenient(content);
-    assert_eq!(ass.events.len(), 2, "valid events should survive, invalid skipped");
+    assert_eq!(
+        ass.events.len(),
+        2,
+        "valid events should survive, invalid skipped"
+    );
     assert_eq!(ass.events[0].text, "First valid");
     assert_eq!(ass.events[1].text, "Second valid");
     assert!(!errors.is_empty());
@@ -90,7 +115,11 @@ Dialogue: 0,0:00:04.00,0:00:06.00,Default
 Dialogue: 0,0:00:07.00,0:00:10.00,Default,,0,0,0,,Another good
 ";
     let (ass, errors) = AssFile::parse_lenient(content);
-    assert_eq!(ass.events.len(), 2, "events with too few fields should be skipped");
+    assert_eq!(
+        ass.events.len(),
+        2,
+        "events with too few fields should be skipped"
+    );
     assert!(!errors.is_empty());
 }
 
@@ -139,7 +168,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello
 ";
     let (ass, errors) = AssFile::parse_lenient(content);
-    assert!(errors.is_empty(), "valid file should produce no errors, got {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "valid file should produce no errors, got {:?}",
+        errors
+    );
     assert_eq!(ass.events.len(), 1);
     assert_eq!(ass.styles.len(), 1);
 }
@@ -177,5 +210,9 @@ Dialogue: 0,0:00:07.00,0:00:10.00,Default,,0,0,0,,Valid 2
     // parse_lenient doesn't validate braces (that's the validator's job via V013)
     // all 3 events should parse successfully since they have correct field structure
     assert_eq!(ass.events.len(), 3, "all parseable events should be kept");
-    assert!(errors.is_empty(), "lenient parse should not error on valid event structure: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "lenient parse should not error on valid event structure: {:?}",
+        errors
+    );
 }

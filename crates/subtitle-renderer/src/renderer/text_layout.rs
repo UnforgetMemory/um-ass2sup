@@ -57,10 +57,9 @@ pub fn strip_override_blocks(text: &str) -> String {
     for ch in text.chars() {
         match ch {
             '{' => depth += 1,
-            '}'
-                if depth > 0 => {
-                    depth -= 1;
-                }
+            '}' if depth > 0 => {
+                depth -= 1;
+            }
             _ if depth == 0 => result.push(ch),
             _ => {}
         }
@@ -84,8 +83,15 @@ pub(super) fn wrap_text(
         3 => {
             // Low-end wrapping: word-wrap from bottom-right (ASS q=3)
             // Uses same smart wrapping but places lines from bottom
-            let mut result: Vec<String> =
-                wrap_text(text, 0, shaper, font_id, font_size, spacing, available_width);
+            let mut result: Vec<String> = wrap_text(
+                text,
+                0,
+                shaper,
+                font_id,
+                font_size,
+                spacing,
+                available_width,
+            );
             // q=3 places lines from bottom, achieved by reversing the line order
             result.reverse();
             result
@@ -111,10 +117,13 @@ pub(super) fn wrap_text(
                         if w.is_empty() {
                             return None;
                         }
-                        shaper.shape(w, font_id, font_size).ok().map(|shaped| WordInfo {
-                            text: w.to_string(),
-                            width: shaped.total_advance + spacing * shaped.glyphs.len() as f32,
-                        })
+                        shaper
+                            .shape(w, font_id, font_size)
+                            .ok()
+                            .map(|shaped| WordInfo {
+                                text: w.to_string(),
+                                width: shaped.total_advance + spacing * shaped.glyphs.len() as f32,
+                            })
                     })
                     .collect();
 
@@ -137,7 +146,11 @@ pub(super) fn wrap_text(
                 let mut current_width = 0.0f32;
 
                 for (i, wi) in word_data.iter().enumerate() {
-                    let gap = if current_line.is_empty() { 0.0 } else { space_width };
+                    let gap = if current_line.is_empty() {
+                        0.0
+                    } else {
+                        space_width
+                    };
                     let test_width = current_width + gap + wi.width;
 
                     if current_width > 0.0 && test_width > available_width {
@@ -296,10 +309,7 @@ mod tests {
 
     #[test]
     fn test_strip_override_blocks_nested_blocks() {
-        assert_eq!(
-            strip_override_blocks("{\\b1{\\i1}}Nested"),
-            "Nested"
-        );
+        assert_eq!(strip_override_blocks("{\\b1{\\i1}}Nested"), "Nested");
     }
 
     #[test]

@@ -337,7 +337,10 @@ mod tests {
         let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 250);
         match states[0].phase {
             KaraokePhase::Active { progress } => {
-                assert!((progress - 0.25).abs() < 0.01, "Expected ~0.25 progress, got {progress}");
+                assert!(
+                    (progress - 0.25).abs() < 0.01,
+                    "Expected ~0.25 progress, got {progress}"
+                );
             }
             other => panic!("Expected Active phase, got {other:?}"),
         }
@@ -364,7 +367,10 @@ mod tests {
         assert_eq!(states[1].style, KaraokeStyle::Outline);
         match states[1].phase {
             KaraokePhase::Active { progress } => {
-                assert!((progress - 0.4).abs() < 0.01, "Expected ~0.4 progress, got {progress}");
+                assert!(
+                    (progress - 0.4).abs() < 0.01,
+                    "Expected ~0.4 progress, got {progress}"
+                );
             }
             other => panic!("Expected Active for second syllable, got {other:?}"),
         }
@@ -466,7 +472,7 @@ mod tests {
         let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 100);
         match states[0].phase {
             KaraokePhase::Active { .. } => {} // zero-duration → instant done
-            KaraokePhase::Done => {} // also acceptable for zero-duration
+            KaraokePhase::Done => {}          // also acceptable for zero-duration
             _ => panic!("Expected Active or Done"),
         }
         assert_eq!(states[0].start_ms, 100);
@@ -482,15 +488,26 @@ mod tests {
         ];
         // At t=150ms: first [0,100) = Done, second [100,250) = Active at 50/150≈0.33
         let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 150);
-        assert_eq!(states[0].phase, KaraokePhase::Done, "first syllable should be Done");
+        assert_eq!(
+            states[0].phase,
+            KaraokePhase::Done,
+            "first syllable should be Done"
+        );
         match states[1].phase {
             KaraokePhase::Active { progress } => {
                 let expected = 50.0 / 150.0;
-                assert!((progress - expected).abs() < 0.01, "Expected ~{expected}, got {progress}");
+                assert!(
+                    (progress - expected).abs() < 0.01,
+                    "Expected ~{expected}, got {progress}"
+                );
             }
             _ => panic!("second syllable should be Active"),
         }
-        assert_eq!(states[2].phase, KaraokePhase::Pending, "third syllable should be Pending");
+        assert_eq!(
+            states[2].phase,
+            KaraokePhase::Pending,
+            "third syllable should be Pending"
+        );
     }
 
     #[test]

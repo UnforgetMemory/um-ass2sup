@@ -1,5 +1,5 @@
-use tiny_skia::Pixmap;
 use subtitle_renderer::{apply_gaussian_blur, apply_shadow, composite_over};
+use tiny_skia::Pixmap;
 
 fn make_pixmap(w: u32, h: u32, fill: [u8; 4]) -> Pixmap {
     let mut pm = Pixmap::new(w, h).unwrap();
@@ -96,7 +96,10 @@ fn test_shadow_basic_offset() {
     let shadow_color = [0, 0, 0, 200];
     let result = apply_shadow(&src_mut, w, h, 2.0, 2.0, 0.0, shadow_color);
     let dst_idx = ((7 * w + 7) * 4) as usize;
-    assert!(result[dst_idx + 3] > 0, "shadow should appear at offset position");
+    assert!(
+        result[dst_idx + 3] > 0,
+        "shadow should appear at offset position"
+    );
     assert_eq!(result[dst_idx], 0);
     assert_eq!(result[dst_idx + 1], 0);
     assert_eq!(result[dst_idx + 2], 0);
@@ -116,7 +119,11 @@ fn test_shadow_zero_offset() {
     let shadow_color = [0, 0, 0, 128];
     let result = apply_shadow(&src_mut, w, h, 0.0, 0.0, 0.0, shadow_color);
     let dst_idx = ((5 * w + 5) * 4) as usize;
-    assert_eq!(result[dst_idx + 3], 128, "shadow at zero offset should use shadow alpha");
+    assert_eq!(
+        result[dst_idx + 3],
+        128,
+        "shadow at zero offset should use shadow alpha"
+    );
 }
 
 #[test]
@@ -124,7 +131,10 @@ fn test_shadow_empty_source() {
     let src = vec![0u8; 10 * 10 * 4];
     let shadow_color = [0, 0, 0, 255];
     let result = apply_shadow(&src, 10, 10, 3.0, 3.0, 0.0, shadow_color);
-    assert!(result.iter().all(|&b| b == 0), "shadow of empty source should be empty");
+    assert!(
+        result.iter().all(|&b| b == 0),
+        "shadow of empty source should be empty"
+    );
 }
 
 #[test]
@@ -187,7 +197,10 @@ fn test_composite_over_semi_transparent() {
     src[2] = 255;
     src[3] = 128;
     composite_over(&mut dst, &src, 1, 1);
-    assert!(dst[0] > 0, "semi-transparent white on black should lighten pixel");
+    assert!(
+        dst[0] > 0,
+        "semi-transparent white on black should lighten pixel"
+    );
     assert!(dst[0] < 200, "semi-transparent should not fully replace");
     assert_eq!(dst[3], 255, "alpha should remain 255");
 }
@@ -204,16 +217,16 @@ fn test_composite_over_both_transparent() {
 fn test_composite_over_simd_batch_4px() {
     // Exercise the SIMD path: exactly 4 pixels (one u32x4 batch)
     let mut dst = vec![
-        0, 0, 0, 0,       // pixel 0: transparent black
-        0, 0, 0, 255,     // pixel 1: opaque black
+        0, 0, 0, 0, // pixel 0: transparent black
+        0, 0, 0, 255, // pixel 1: opaque black
         100, 150, 200, 255, // pixel 2: opaque gray-blue
-        255, 0, 0, 128,   // pixel 3: semi-transparent red
+        255, 0, 0, 128, // pixel 3: semi-transparent red
     ];
     let src = vec![
-        255, 0, 0, 255,     // pixel 0: opaque red
+        255, 0, 0, 255, // pixel 0: opaque red
         255, 255, 255, 128, // pixel 1: semi-transparent white
-        0, 0, 0, 0,         // pixel 2: fully transparent
-        0, 0, 255, 255,     // pixel 3: opaque blue
+        0, 0, 0, 0, // pixel 2: fully transparent
+        0, 0, 255, 255, // pixel 3: opaque blue
     ];
     composite_over(&mut dst, &src, 4, 1);
 
@@ -250,12 +263,12 @@ fn test_composite_over_simd_batch_4px() {
 fn test_composite_over_simd_with_remainder() {
     // 2 pixels: SIMD batch handles first 0 of 4, scalar handles remaining 2
     let mut dst = vec![
-        0, 0, 0, 255,       // pixel 0: opaque black
+        0, 0, 0, 255, // pixel 0: opaque black
         128, 128, 128, 255, // pixel 1: opaque gray
     ];
     let src = vec![
-        0, 0, 0, 0,       // pixel 0: fully transparent
-        255, 0, 0, 200,   // pixel 1: semi-transparent red
+        0, 0, 0, 0, // pixel 0: fully transparent
+        255, 0, 0, 200, // pixel 1: semi-transparent red
     ];
     composite_over(&mut dst, &src, 2, 1);
 

@@ -2,10 +2,22 @@ use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
 
 #[test]
 fn test_karaoke_style_from_tag() {
-    assert!(matches!(KaraokeStyle::from_tag("k"), Some(KaraokeStyle::Instant)));
-    assert!(matches!(KaraokeStyle::from_tag("kf"), Some(KaraokeStyle::Fill)));
-    assert!(matches!(KaraokeStyle::from_tag("ko"), Some(KaraokeStyle::Outline)));
-    assert!(matches!(KaraokeStyle::from_tag("kt"), Some(KaraokeStyle::Timing)));
+    assert!(matches!(
+        KaraokeStyle::from_tag("k"),
+        Some(KaraokeStyle::Instant)
+    ));
+    assert!(matches!(
+        KaraokeStyle::from_tag("kf"),
+        Some(KaraokeStyle::Fill)
+    ));
+    assert!(matches!(
+        KaraokeStyle::from_tag("ko"),
+        Some(KaraokeStyle::Outline)
+    ));
+    assert!(matches!(
+        KaraokeStyle::from_tag("kt"),
+        Some(KaraokeStyle::Timing)
+    ));
 }
 
 #[test]

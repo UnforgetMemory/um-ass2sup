@@ -26,44 +26,44 @@ pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
         let token = tokens[i];
         if token.len() == 1 {
             match token {
-                "m"
-                    if i + 2 < tokens.len() => {
-                        if let (Ok(x), Ok(y)) = (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>()) {
-                            commands.push(DrawingCommand::MoveTo(x, y));
-                            last_cmd = Some("m");
-                            i += 3;
-                            continue;
-                        }
+                "m" if i + 2 < tokens.len() => {
+                    if let (Ok(x), Ok(y)) =
+                        (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>())
+                    {
+                        commands.push(DrawingCommand::MoveTo(x, y));
+                        last_cmd = Some("m");
+                        i += 3;
+                        continue;
                     }
-                "l"
-                    if i + 2 < tokens.len() => {
-                        if let (Ok(x), Ok(y)) = (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>()) {
-                            commands.push(DrawingCommand::LineTo(x, y));
-                            last_cmd = Some("l");
-                            i += 3;
-                            continue;
-                        }
+                }
+                "l" if i + 2 < tokens.len() => {
+                    if let (Ok(x), Ok(y)) =
+                        (tokens[i + 1].parse::<f32>(), tokens[i + 2].parse::<f32>())
+                    {
+                        commands.push(DrawingCommand::LineTo(x, y));
+                        last_cmd = Some("l");
+                        i += 3;
+                        continue;
                     }
-                "b"
-                    if i + 6 < tokens.len() => {
-                        let nums: Option<Vec<f32>> = (1..=6)
-                            .map(|j| tokens[i + j].parse::<f32>().ok())
-                            .collect::<Option<Vec<_>>>();
-                        if let Some(n) = nums {
-                            commands.push(DrawingCommand::BezierTo(n[0], n[1], n[2], n[3], n[4], n[5]));
-                            last_cmd = Some("b");
-                            i += 7;
-                            continue;
-                        }
+                }
+                "b" if i + 6 < tokens.len() => {
+                    let nums: Option<Vec<f32>> = (1..=6)
+                        .map(|j| tokens[i + j].parse::<f32>().ok())
+                        .collect::<Option<Vec<_>>>();
+                    if let Some(n) = nums {
+                        commands.push(DrawingCommand::BezierTo(n[0], n[1], n[2], n[3], n[4], n[5]));
+                        last_cmd = Some("b");
+                        i += 7;
+                        continue;
                     }
+                }
                 "p" | "n" => {
-                    if i + 1 < tokens.len()
-                        && tokens[i + 1] == "c" {
-                            commands.push(DrawingCommand::Close);
-                            last_cmd = None;
-                            i += 2;
-                            continue;
-                        }
+                    if i + 1 < tokens.len() && tokens[i + 1] == "c" {
+                        commands.push(DrawingCommand::Close);
+                        last_cmd = None;
+                        i += 2;
+                        continue;
+                    }
                     commands.push(DrawingCommand::Close);
                     last_cmd = None;
                     i += 1;
@@ -107,7 +107,10 @@ pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                                             .filter_map(|j| tokens.get(i + j)?.parse().ok())
                                             .collect();
                                         if nums.len() == 6 {
-                                            commands.push(DrawingCommand::BezierTo(nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]));
+                                            commands.push(DrawingCommand::BezierTo(
+                                                nums[0], nums[1], nums[2], nums[3], nums[4],
+                                                nums[5],
+                                            ));
                                         }
                                     }
                                     _ => {}

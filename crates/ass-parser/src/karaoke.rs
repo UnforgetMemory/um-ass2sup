@@ -47,7 +47,12 @@ pub struct KaraokeSegment {
 
 impl KaraokeSegment {
     pub fn new(style: KaraokeStyle, duration_ms: u64, text: String, index: usize) -> Self {
-        Self { style, duration_ms, text, index }
+        Self {
+            style,
+            duration_ms,
+            text,
+            index,
+        }
     }
 
     /// Returns the end timestamp (ms) given a start timestamp.

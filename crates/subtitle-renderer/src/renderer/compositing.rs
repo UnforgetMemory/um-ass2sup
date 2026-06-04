@@ -1,8 +1,8 @@
-use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform};
+use super::drawing::{parse_drawing_commands, DrawingCommand};
+use super::ShapedLine;
 use crate::context::RenderContext;
 use crate::shaper::Shaper;
-use super::ShapedLine;
-use super::drawing::{DrawingCommand, parse_drawing_commands};
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform};
 
 pub(super) fn apply_alpha_multiplier(data: &mut [u8], alpha: f32) {
     let factor = alpha.clamp(0.0, 1.0);
@@ -61,7 +61,14 @@ pub(super) fn apply_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &RenderConte
 ///
 /// Parses `.clip_drawing_commands` and builds a tiny_skia path, then clears
 /// pixels outside (or inside, for inverse clips) the filled path.
-pub(super) fn apply_drawing_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &RenderContext, sx: f32, sy: f32) {
+pub(super) fn apply_drawing_clip_mask(
+    data: &mut [u8],
+    w: u32,
+    h: u32,
+    ctx: &RenderContext,
+    sx: f32,
+    sy: f32,
+) {
     let commands_text = match ctx.clip_drawing_commands {
         Some(ref c) => c,
         None => return,
@@ -77,9 +84,12 @@ pub(super) fn apply_drawing_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &Ren
             DrawingCommand::LineTo(x, y) => pb.line_to(x * scale * sx, y * scale * sy),
             DrawingCommand::BezierTo(x1, y1, x2, y2, x3, y3) => {
                 pb.cubic_to(
-                    x1 * scale * sx, y1 * scale * sy,
-                    x2 * scale * sx, y2 * scale * sy,
-                    x3 * scale * sx, y3 * scale * sy,
+                    x1 * scale * sx,
+                    y1 * scale * sy,
+                    x2 * scale * sx,
+                    y2 * scale * sy,
+                    x3 * scale * sx,
+                    y3 * scale * sy,
                 );
             }
             DrawingCommand::Close => pb.close(),
@@ -87,17 +97,31 @@ pub(super) fn apply_drawing_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &Ren
     }
 
     if let Some(path) = pb.finish() {
-        let mut mask = if let Some(p) = Pixmap::new(w, h) { p } else { return; };
+        let mut mask = if let Some(p) = Pixmap::new(w, h) {
+            p
+        } else {
+            return;
+        };
         let mut paint = Paint::default();
         paint.set_color_rgba8(255, 255, 255, 255);
         paint.anti_alias = true;
-        mask.fill_path(&path, &paint, FillRule::EvenOdd, SkiaTransform::identity(), None);
+        mask.fill_path(
+            &path,
+            &paint,
+            FillRule::EvenOdd,
+            SkiaTransform::identity(),
+            None,
+        );
 
         for py in 0..h {
             for px in 0..w {
                 let idx = ((py * w + px) * 4 + 3) as usize;
                 let inside = mask.data()[idx] > 0;
-                let clear = if ctx.clip_drawing_inverse { inside } else { !inside };
+                let clear = if ctx.clip_drawing_inverse {
+                    inside
+                } else {
+                    !inside
+                };
                 if clear {
                     let base = idx - 3;
                     data[base] = 0;
@@ -161,9 +185,14 @@ pub(super) fn composite_subregion(
                 continue;
             }
 
-            dst[di]     = ((u32::from(src[si]) * sa + u32::from(dst[di]) * da * inv_sa / 255) / out_a) as u8;
-            dst[di + 1] = ((u32::from(src[si + 1]) * sa + u32::from(dst[di + 1]) * da * inv_sa / 255) / out_a) as u8;
-            dst[di + 2] = ((u32::from(src[si + 2]) * sa + u32::from(dst[di + 2]) * da * inv_sa / 255) / out_a) as u8;
+            dst[di] =
+                ((u32::from(src[si]) * sa + u32::from(dst[di]) * da * inv_sa / 255) / out_a) as u8;
+            dst[di + 1] = ((u32::from(src[si + 1]) * sa
+                + u32::from(dst[di + 1]) * da * inv_sa / 255)
+                / out_a) as u8;
+            dst[di + 2] = ((u32::from(src[si + 2]) * sa
+                + u32::from(dst[di + 2]) * da * inv_sa / 255)
+                / out_a) as u8;
             dst[di + 3] = out_a as u8;
         }
     }
@@ -244,7 +273,7 @@ mod tests {
         let mut data = vec![255, 255, 255, 200, 128, 128, 128, 100];
         apply_alpha_multiplier(&mut data, 0.5);
         assert_eq!(data[3], 100); // 200 * 0.5
-        assert_eq!(data[7], 50);  // 100 * 0.5
+        assert_eq!(data[7], 50); // 100 * 0.5
     }
 
     #[test]
@@ -261,7 +290,7 @@ mod tests {
         assert_eq!(data[0], 100); // R unchanged
         assert_eq!(data[1], 150); // G unchanged
         assert_eq!(data[2], 200); // B unchanged
-        assert_eq!(data[3], 80);  // A halved
+        assert_eq!(data[3], 80); // A halved
     }
 
     // ── apply_clip_mask ───────────────────────────────────────
@@ -269,7 +298,7 @@ mod tests {
     #[test]
     fn test_clip_mask_normal_inside_preserved() {
         let mut data = vec![0u8; 4 * 4 * 4]; // 4x4 RGBA image
-        // Fill all pixels with white
+                                             // Fill all pixels with white
         for i in 0..16 {
             data[i * 4] = 255;
             data[i * 4 + 1] = 255;
@@ -338,7 +367,10 @@ mod tests {
 
         // Center of triangle (roughly) should be preserved
         let inside_alpha = data[((5 * w + 5) * 4 + 3) as usize];
-        assert_eq!(inside_alpha, 255, "pixel inside triangle should be preserved");
+        assert_eq!(
+            inside_alpha, 255,
+            "pixel inside triangle should be preserved"
+        );
 
         // Top-left corner should be cleared (outside triangle)
         let outside_alpha = data[3];
@@ -362,11 +394,17 @@ mod tests {
 
         // Center of triangle should be cleared (inverse)
         let inside_alpha = data[((5 * w + 5) * 4 + 3) as usize];
-        assert_eq!(inside_alpha, 0, "pixel inside triangle should be cleared for inverse");
+        assert_eq!(
+            inside_alpha, 0,
+            "pixel inside triangle should be cleared for inverse"
+        );
 
         // Top-left corner should be preserved (outside triangle)
         let outside_alpha = data[3];
-        assert_eq!(outside_alpha, 255, "pixel outside triangle should be preserved for inverse");
+        assert_eq!(
+            outside_alpha, 255,
+            "pixel outside triangle should be preserved for inverse"
+        );
     }
 
     #[test]
@@ -387,11 +425,17 @@ mod tests {
 
         // Point (3,3) should be inside the scaled triangle
         let inside_alpha = data[((3 * w + 3) * 4 + 3) as usize];
-        assert_eq!(inside_alpha, 255, "pixel inside scaled triangle should be preserved");
+        assert_eq!(
+            inside_alpha, 255,
+            "pixel inside scaled triangle should be preserved"
+        );
 
         // Point (9,9) should be outside the scaled triangle
         let outside_alpha = data[((9 * w + 9) * 4 + 3) as usize];
-        assert_eq!(outside_alpha, 0, "pixel outside scaled triangle should be cleared");
+        assert_eq!(
+            outside_alpha, 0,
+            "pixel outside scaled triangle should be cleared"
+        );
     }
 
     // ── edge cases ────────────────────────────────────────────

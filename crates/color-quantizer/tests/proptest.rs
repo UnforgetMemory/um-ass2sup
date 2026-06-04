@@ -1,5 +1,5 @@
+use color_quantizer::{DitherMethod, Quantizer};
 use proptest::prelude::*;
-use color_quantizer::{Quantizer, DitherMethod};
 
 // ============================================================
 // Property: Palette size never exceeds max_colors + 1
@@ -126,7 +126,11 @@ fn all_dither_methods_produce_valid_output() {
         }
     }
 
-    for dither in &[DitherMethod::None, DitherMethod::FloydSteinberg, DitherMethod::Ordered] {
+    for dither in &[
+        DitherMethod::None,
+        DitherMethod::FloydSteinberg,
+        DitherMethod::Ordered,
+    ] {
         let q = Quantizer::new(128).with_dither(*dither);
         let frame = q.quantize(&rgba, width, height);
         assert!(frame.palette_size() <= 129);

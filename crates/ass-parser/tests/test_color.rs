@@ -64,7 +64,7 @@ fn test_to_rgba() {
     assert_eq!(rgba[0], 0xFF); // R
     assert_eq!(rgba[1], 0xFF); // G
     assert_eq!(rgba[2], 0xFF); // B
-    assert_eq!(rgba[3], 255);  // Alpha = 255 - 0 = 255 (fully opaque)
+    assert_eq!(rgba[3], 255); // Alpha = 255 - 0 = 255 (fully opaque)
 }
 
 #[test]

@@ -54,7 +54,12 @@ impl<'a> Shaper<'a> {
     ///
     /// Returns [`FontError::NotFound`] if `font_id` is not in the manager, or
     /// [`FontError::ParseError`] if the font data is invalid.
-    pub fn shape(&self, text: &str, font_id: fontdb::ID, font_size: f32) -> Result<ShapedText, FontError> {
+    pub fn shape(
+        &self,
+        text: &str,
+        font_id: fontdb::ID,
+        font_size: f32,
+    ) -> Result<ShapedText, FontError> {
         let data = self
             .font_manager
             .get_font_data(font_id)
@@ -140,7 +145,8 @@ mod tests {
     fn setup_shaper() -> (FontManager, fontdb::ID) {
         let mut fm = FontManager::new();
         fm.load_system_fonts();
-        let id = fm.query("Arial", false, false)
+        let id = fm
+            .query("Arial", false, false)
             .or_else(|| fm.query("Liberation Sans", false, false))
             .or_else(|| fm.query("DejaVu Sans", false, false))
             .or_else(|| fm.query("Noto Sans", false, false))
@@ -179,7 +185,10 @@ mod tests {
         let shaper = Shaper::new(&fm);
         let r1 = shaper.shape("Hello", id, 24.0).unwrap();
         let r2 = shaper.shape("Hello", id, 48.0).unwrap();
-        assert!(r2.total_advance > r1.total_advance, "Larger font size should produce wider advance");
+        assert!(
+            r2.total_advance > r1.total_advance,
+            "Larger font size should produce wider advance"
+        );
     }
 
     #[test]
@@ -205,7 +214,10 @@ mod tests {
         let (fm, id) = setup_shaper();
         let shaper = Shaper::new(&fm);
         let bbox = shaper.get_glyph_bbox(id, 0, 48.0);
-        assert!(bbox.is_some(), "Glyph bbox should be available for valid glyph");
+        assert!(
+            bbox.is_some(),
+            "Glyph bbox should be available for valid glyph"
+        );
     }
 
     #[test]
@@ -216,6 +228,9 @@ mod tests {
         let b2 = shaper.get_glyph_bbox(id, 0, 48.0).unwrap();
         let w1 = b1.x_max - b1.x_min;
         let w2 = b2.x_max - b2.x_min;
-        assert!((w2 - w1 * 2.0).abs() < 1.0, "2x font size should produce ~2x glyph width");
+        assert!(
+            (w2 - w1 * 2.0).abs() < 1.0,
+            "2x font size should produce ~2x glyph width"
+        );
     }
 }

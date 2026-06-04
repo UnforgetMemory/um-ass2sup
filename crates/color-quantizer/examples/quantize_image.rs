@@ -13,8 +13,8 @@ fn main() {
         for x in 0..width {
             rgba.push((x * 64) as u8); // R
             rgba.push((y * 64) as u8); // G
-            rgba.push(128);            // B
-            rgba.push(255);            // A
+            rgba.push(128); // B
+            rgba.push(255); // A
         }
     }
 

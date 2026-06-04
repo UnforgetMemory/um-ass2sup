@@ -44,8 +44,8 @@ pub use effect::Effect;
 pub use error::ParseError;
 pub use event::{Event, EventType};
 pub use karaoke::{KaraokeSegment, KaraokeStyle};
-pub use override_tag::OverrideTag;
 pub use override_tag::parse_override_tag;
+pub use override_tag::OverrideTag;
 pub use style::Style;
 pub use timestamp::Timestamp;
 
@@ -307,7 +307,9 @@ impl AssFile {
                 "PlayResX" => self.script_info.play_res_x = value.parse().unwrap_or(1920),
                 "PlayResY" => self.script_info.play_res_y = value.parse().unwrap_or(1080),
                 _ => {
-                    self.script_info.extra.insert(key.to_string(), value.to_string());
+                    self.script_info
+                        .extra
+                        .insert(key.to_string(), value.to_string());
                 }
             }
         }

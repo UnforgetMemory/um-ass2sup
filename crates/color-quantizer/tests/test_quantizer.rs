@@ -1,4 +1,4 @@
-use color_quantizer::{DitherMethod, QuantizedFrame, Quantizer, Rgba, quantize};
+use color_quantizer::{quantize, DitherMethod, QuantizedFrame, Quantizer, Rgba};
 
 #[test]
 fn test_rgba_new() {
@@ -89,23 +89,20 @@ fn test_quantize_single_pixel_transparent() {
 #[test]
 fn test_quantize_2x2_uniform() {
     let rgba = vec![
-        255u8, 0, 0, 255,
-        255, 0, 0, 255,
-        255, 0, 0, 255,
-        255, 0, 0, 255,
+        255u8, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255,
     ];
     let frame = quantize(&rgba, 2, 2);
     assert_eq!(frame.indices.len(), 4);
-    assert!(frame.palette.iter().any(|c| c.r == 255 && c.g == 0 && c.b == 0));
+    assert!(frame
+        .palette
+        .iter()
+        .any(|c| c.r == 255 && c.g == 0 && c.b == 0));
 }
 
 #[test]
 fn test_quantize_2x2_mixed() {
     let rgba = vec![
-        255u8, 0, 0, 255,
-        0, 255, 0, 255,
-        0, 0, 255, 255,
-        255, 255, 255, 255,
+        255u8, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
     ];
     let frame = quantize(&rgba, 2, 2);
     assert!(frame.palette_size() >= 2);

@@ -85,9 +85,7 @@ pub enum ParsedPayload {
         objects: Vec<ParsedObjectComposition>,
     },
     /// Window Definition — display regions.
-    WindowDefinition {
-        windows: Vec<WindowDef>,
-    },
+    WindowDefinition { windows: Vec<WindowDef> },
     /// End of display set (no payload).
     End,
 }
@@ -122,7 +120,9 @@ pub struct ParsedObjectComposition {
 pub fn decode_sup(data: &[u8]) -> Result<Vec<DisplaySet>, DecodeError> {
     let mut offset = 0;
     let mut display_sets = Vec::new();
-    let mut current_set = DisplaySet { segments: Vec::new() };
+    let mut current_set = DisplaySet {
+        segments: Vec::new(),
+    };
 
     while offset < data.len() {
         let (segment, consumed) = decode_segment(data, offset)?;
@@ -131,7 +131,9 @@ pub fn decode_sup(data: &[u8]) -> Result<Vec<DisplaySet>, DecodeError> {
         current_set.segments.push(segment);
         if is_end {
             display_sets.push(current_set);
-            current_set = DisplaySet { segments: Vec::new() };
+            current_set = DisplaySet {
+                segments: Vec::new(),
+            };
         }
     }
 
@@ -186,8 +188,8 @@ pub fn decode_segment(data: &[u8], offset: usize) -> Result<(ParsedSegment, usiz
 
 /// Parse payload bytes for a given segment type.
 fn parse_payload(seg_type: u8, data: &[u8]) -> Result<ParsedPayload, DecodeError> {
-    let seg_type = SegmentType::from_u8(seg_type)
-        .ok_or(DecodeError::InvalidSegmentType(seg_type))?;
+    let seg_type =
+        SegmentType::from_u8(seg_type).ok_or(DecodeError::InvalidSegmentType(seg_type))?;
 
     match seg_type {
         SegmentType::Pds => parse_pds_payload(data),
@@ -402,7 +404,12 @@ fn read_be16(data: &[u8], offset: usize) -> u16 {
 }
 
 fn read_be32(data: &[u8], offset: usize) -> u32 {
-    u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
+    u32::from_be_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ])
 }
 
 // === Tests ===
@@ -554,7 +561,7 @@ mod tests {
         payload.push(0); // palette_update = false
         payload.push(0); // palette_id
         payload.push(1); // num_objects
-        // Object: id=0, window=0, not forced, x=100, y=200
+                         // Object: id=0, window=0, not forced, x=100, y=200
         payload.extend_from_slice(&0u16.to_be_bytes()); // object_id
         payload.push(0); // window_id
         payload.push(0); // cropped + forced
@@ -602,7 +609,7 @@ mod tests {
     fn test_decode_wds_payload() {
         // WDS: 2 windows
         let mut payload = vec![2u8]; // num_windows
-        // Window 0: id=0, x=0, y=0, w=960, h=1080
+                                     // Window 0: id=0, x=0, y=0, w=960, h=1080
         payload.push(0);
         payload.extend_from_slice(&0u16.to_be_bytes());
         payload.extend_from_slice(&0u16.to_be_bytes());

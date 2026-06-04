@@ -2,8 +2,7 @@ use assert_cmd::Command;
 use std::path::PathBuf;
 
 fn fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
 }
 
 fn simple_fixture() -> PathBuf {

@@ -1,5 +1,7 @@
-use ass_parser::{AssFile, Effect, Event, EventType, OverrideTag, Style, Timestamp, AssColor};
-use subtitle_renderer::{RenderConfig, RenderContext, Renderer, alignment_to_pos, strip_override_blocks};
+use ass_parser::{AssColor, AssFile, Effect, Event, EventType, OverrideTag, Style, Timestamp};
+use subtitle_renderer::{
+    alignment_to_pos, strip_override_blocks, RenderConfig, RenderContext, Renderer,
+};
 
 fn default_ass() -> AssFile {
     AssFile::new()
@@ -103,7 +105,10 @@ fn test_strip_override_blocks_single_block() {
 
 #[test]
 fn test_strip_override_blocks_multiple_blocks() {
-    assert_eq!(strip_override_blocks("{\\b1}Hello{\\i1} World"), "Hello World");
+    assert_eq!(
+        strip_override_blocks("{\\b1}Hello{\\i1} World"),
+        "Hello World"
+    );
 }
 
 #[test]
@@ -123,7 +128,10 @@ fn test_strip_override_blocks_only_tags() {
 
 #[test]
 fn test_strip_override_blocks_text_with_newlines() {
-    assert_eq!(strip_override_blocks("{\\b1}Line1\\NLine2"), "Line1\\NLine2");
+    assert_eq!(
+        strip_override_blocks("{\\b1}Line1\\NLine2"),
+        "Line1\\NLine2"
+    );
 }
 
 #[test]
@@ -147,7 +155,12 @@ fn test_build_context_move_tag() {
     let renderer = default_renderer();
     let mut event = default_event();
     event.override_tags = vec![OverrideTag::Move {
-        x1: 50.0, y1: 60.0, x2: 300.0, y2: 400.0, t1: 0, t2: 1000,
+        x1: 50.0,
+        y1: 60.0,
+        x2: 300.0,
+        y2: 400.0,
+        t1: 0,
+        t2: 1000,
     }];
     let style = Style::default();
     // At t=2500, move t2=1000 => animation complete => end position
@@ -164,7 +177,12 @@ fn test_build_context_move_tag() {
 fn test_build_context_clip_tag() {
     let renderer = default_renderer();
     let mut event = default_event();
-    event.override_tags = vec![OverrideTag::Clip { x1: 10.0, y1: 20.0, x2: 100.0, y2: 200.0 }];
+    event.override_tags = vec![OverrideTag::Clip {
+        x1: 10.0,
+        y1: 20.0,
+        x2: 100.0,
+        y2: 200.0,
+    }];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.clip_enabled);
@@ -178,7 +196,12 @@ fn test_build_context_clip_tag() {
 fn test_build_context_clip_inverse_tag() {
     let renderer = default_renderer();
     let mut event = default_event();
-    event.override_tags = vec![OverrideTag::ClipInverse { x1: 5.0, y1: 15.0, x2: 95.0, y2: 195.0 }];
+    event.override_tags = vec![OverrideTag::ClipInverse {
+        x1: 5.0,
+        y1: 15.0,
+        x2: 95.0,
+        y2: 195.0,
+    }];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.clip_enabled);
@@ -203,7 +226,11 @@ fn test_build_context_scale_tag() {
 fn test_build_context_rotation_z_only() {
     let renderer = default_renderer();
     let mut event = default_event();
-    event.override_tags = vec![OverrideTag::Rotation { x: 0.0, y: 0.0, z: 45.0 }];
+    event.override_tags = vec![OverrideTag::Rotation {
+        x: 0.0,
+        y: 0.0,
+        z: 45.0,
+    }];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.rotation, 45.0);
@@ -216,14 +243,24 @@ fn test_build_context_rotation_with_origin() {
     let renderer = default_renderer();
     let mut event = default_event();
     event.override_tags = vec![
-        OverrideTag::Rotation { x: 0.0, y: 0.0, z: 90.0 },
+        OverrideTag::Rotation {
+            x: 0.0,
+            y: 0.0,
+            z: 90.0,
+        },
         OverrideTag::Origin { x: 100.0, y: 200.0 },
     ];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.rotation, 90.0);
-    assert_eq!(ctx.origin_x, 100.0, "Origin x scaled by width/script_width (1920/1920=1.0)");
-    assert_eq!(ctx.origin_y, 200.0, "Origin y scaled by height/script_height (1080/1080=1.0)");
+    assert_eq!(
+        ctx.origin_x, 100.0,
+        "Origin x scaled by width/script_width (1920/1920=1.0)"
+    );
+    assert_eq!(
+        ctx.origin_y, 200.0,
+        "Origin y scaled by height/script_height (1080/1080=1.0)"
+    );
 }
 
 #[test]
@@ -260,10 +297,7 @@ fn test_build_context_shadow_tag() {
 fn test_build_context_shadow_xy_tags() {
     let renderer = default_renderer();
     let mut event = default_event();
-    event.override_tags = vec![
-        OverrideTag::ShadowX(3.0),
-        OverrideTag::ShadowY(7.0),
-    ];
+    event.override_tags = vec![OverrideTag::ShadowX(3.0), OverrideTag::ShadowY(7.0)];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.shadow_x, 3.0, "ShadowX sets shadow_x");
@@ -275,15 +309,15 @@ fn test_build_context_shadow_xy_tags() {
 fn test_build_context_border_xy_tags() {
     let renderer = default_renderer();
     let mut event = default_event();
-    event.override_tags = vec![
-        OverrideTag::BorderX(1.5),
-        OverrideTag::BorderY(4.0),
-    ];
+    event.override_tags = vec![OverrideTag::BorderX(1.5), OverrideTag::BorderY(4.0)];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.outline_x_width, 1.5, "BorderX sets outline_x_width");
     assert_eq!(ctx.outline_y_width, 4.0, "BorderY sets outline_y_width");
-    assert_eq!(ctx.outline_width, 2.0, "outline_width stays at style default");
+    assert_eq!(
+        ctx.outline_width, 2.0,
+        "outline_width stays at style default"
+    );
 }
 
 #[test]
@@ -387,8 +421,14 @@ fn test_build_context_alignment_sets_position() {
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert_eq!(ctx.alignment, 7);
-    assert!((ctx.x - ctx.margin_l).abs() < 0.01, "alignment 7 should be left-aligned");
-    assert!((ctx.y - ctx.margin_v).abs() < 0.01, "alignment 7 should be top-aligned");
+    assert!(
+        (ctx.x - ctx.margin_l).abs() < 0.01,
+        "alignment 7 should be left-aligned"
+    );
+    assert!(
+        (ctx.y - ctx.margin_v).abs() < 0.01,
+        "alignment 7 should be top-aligned"
+    );
 }
 
 #[test]
@@ -422,10 +462,7 @@ fn test_build_context_font_name_and_size_override() {
 fn test_build_context_bold_and_italic_override() {
     let renderer = default_renderer();
     let mut event = default_event();
-    event.override_tags = vec![
-        OverrideTag::Bold(true),
-        OverrideTag::Italic(true),
-    ];
+    event.override_tags = vec![OverrideTag::Bold(true), OverrideTag::Italic(true)];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
     assert!(ctx.bold);
@@ -486,7 +523,12 @@ fn test_build_context_multiple_tags() {
         OverrideTag::WrapStyle(1),
         OverrideTag::Underline(true),
         OverrideTag::Strikeout(true),
-        OverrideTag::Clip { x1: 10.0, y1: 20.0, x2: 500.0, y2: 400.0 },
+        OverrideTag::Clip {
+            x1: 10.0,
+            y1: 20.0,
+            x2: 500.0,
+            y2: 400.0,
+        },
     ];
     let style = Style::default();
     let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);

@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::error::ParseError;
+use std::fmt;
 
 /// A timestamp in milliseconds, used for subtitle event timing.
 ///
@@ -40,14 +40,22 @@ impl Timestamp {
         if parts.len() != 3 {
             return Err(ParseError::InvalidTimestamp(s.to_string()));
         }
-        let h: u32 = parts[0].parse().map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
-        let m: u32 = parts[1].parse().map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
+        let h: u32 = parts[0]
+            .parse()
+            .map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
+        let m: u32 = parts[1]
+            .parse()
+            .map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
         let sec_parts: Vec<&str> = parts[2].split('.').collect();
         if sec_parts.len() != 2 {
             return Err(ParseError::InvalidTimestamp(s.to_string()));
         }
-        let sec: u32 = sec_parts[0].parse().map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
-        let cs: u32 = sec_parts[1].parse().map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
+        let sec: u32 = sec_parts[0]
+            .parse()
+            .map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
+        let cs: u32 = sec_parts[1]
+            .parse()
+            .map_err(|_| ParseError::InvalidTimestamp(s.to_string()))?;
         Ok(Self::from_hms(h, m, sec, cs.saturating_mul(10)))
     }
 

@@ -1,7 +1,15 @@
-use ass_parser::OverrideTag;
 use crate::context::RenderContext;
+use ass_parser::OverrideTag;
 
-pub(super) fn interpolate_move(x1: f32, y1: f32, x2: f32, y2: f32, t1: u64, t2: u64, elapsed: u64) -> (f32, f32) {
+pub(super) fn interpolate_move(
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+    t1: u64,
+    t2: u64,
+    elapsed: u64,
+) -> (f32, f32) {
     if elapsed <= t1 {
         return (x1, y1);
     }
@@ -12,7 +20,12 @@ pub(super) fn interpolate_move(x1: f32, y1: f32, x2: f32, y2: f32, t1: u64, t2: 
     (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
 }
 
-pub(super) fn compute_fad_alpha(elapsed: u64, total_duration: u64, fade_in: u64, fade_out: u64) -> f32 {
+pub(super) fn compute_fad_alpha(
+    elapsed: u64,
+    total_duration: u64,
+    fade_in: u64,
+    fade_out: u64,
+) -> f32 {
     if fade_in > 0 && elapsed < fade_in {
         return elapsed as f32 / fade_in as f32;
     }
@@ -29,7 +42,10 @@ pub(super) fn compute_fade_complex(
     alpha_start: u8,
     alpha_mid: u8,
     alpha_end: u8,
-    t1: u64, t2: u64, t3: u64, t4: u64,
+    t1: u64,
+    t2: u64,
+    t3: u64,
+    t4: u64,
 ) -> f32 {
     let (a1, a2, a3) = (
         f32::from(255 - alpha_start) / 255.0,
@@ -58,12 +74,21 @@ pub(super) fn compute_fade_complex(
 pub(super) fn apply_transform_tag(
     ctx: &mut RenderContext,
     inner_tag: &str,
-    t1: u64, t2: u64, accel: f64,
-    timestamp_ms: u64, event_start_ms: u64, _event_end_ms: u64,
-    scale_x: f32, scale_y: f32,
+    t1: u64,
+    t2: u64,
+    accel: f64,
+    timestamp_ms: u64,
+    event_start_ms: u64,
+    _event_end_ms: u64,
+    scale_x: f32,
+    scale_y: f32,
 ) {
     let anim_start = event_start_ms + t1;
-    let anim_end = if t2 > 0 { event_start_ms + t2 } else { u64::MAX };
+    let anim_end = if t2 > 0 {
+        event_start_ms + t2
+    } else {
+        u64::MAX
+    };
 
     if timestamp_ms < anim_start || timestamp_ms > anim_end {
         return;
@@ -92,18 +117,15 @@ pub(super) fn apply_transform_tag(
                 let target = *fs as f32 * scale_y;
                 ctx.font_size = default_val + (target - default_val) * p;
             }
-            OverrideTag::FontName(name)
-                if p >= 0.5 => {
-                    ctx.font_name = name.clone();
-                }
-            OverrideTag::Bold(b)
-                if p >= 0.5 => {
-                    ctx.bold = *b;
-                }
-            OverrideTag::Italic(i)
-                if p >= 0.5 => {
-                    ctx.italic = *i;
-                }
+            OverrideTag::FontName(name) if p >= 0.5 => {
+                ctx.font_name = name.clone();
+            }
+            OverrideTag::Bold(b) if p >= 0.5 => {
+                ctx.bold = *b;
+            }
+            OverrideTag::Italic(i) if p >= 0.5 => {
+                ctx.italic = *i;
+            }
             OverrideTag::PrimaryColor(c) => {
                 let target = c.to_rgba();
                 for (i, target_val) in target.iter().enumerate() {
@@ -194,18 +216,15 @@ pub(super) fn apply_transform_tag(
                 ctx.origin_x = ctx.origin_x + (*x as f32 * scale_x - ctx.origin_x) * p;
                 ctx.origin_y = ctx.origin_y + (*y as f32 * scale_y - ctx.origin_y) * p;
             }
-            OverrideTag::Underline(u)
-                if p >= 0.5 => {
-                    ctx.underline = *u;
-                }
-            OverrideTag::Strikeout(s)
-                if p >= 0.5 => {
-                    ctx.strikeout = *s;
-                }
-            OverrideTag::BoldWeight(w)
-                if p >= 0.5 => {
-                    ctx.bold = *w > 0;
-                }
+            OverrideTag::Underline(u) if p >= 0.5 => {
+                ctx.underline = *u;
+            }
+            OverrideTag::Strikeout(s) if p >= 0.5 => {
+                ctx.strikeout = *s;
+            }
+            OverrideTag::BoldWeight(w) if p >= 0.5 => {
+                ctx.bold = *w > 0;
+            }
             OverrideTag::Pos { x, y } => {
                 let target_x = *x as f32 * scale_x;
                 let target_y = *y as f32 * scale_y;
@@ -236,26 +255,24 @@ pub(super) fn apply_transform_tag(
                 ctx.clip_enabled = true;
                 ctx.clip_inverse = true;
             }
-            OverrideTag::ClipDrawing { scale, commands }
-                if p >= 0.5 => {
-                    ctx.clip_drawing_commands = Some(commands.clone());
-                    ctx.clip_drawing_scale = *scale;
-                    ctx.clip_drawing_inverse = false;
-                    ctx.clip_enabled = true;
-                }
-            OverrideTag::ClipInverseDrawing { scale, commands }
-                if p >= 0.5 => {
-                    ctx.clip_drawing_commands = Some(commands.clone());
-                    ctx.clip_drawing_scale = *scale;
-                    ctx.clip_drawing_inverse = true;
-                    ctx.clip_enabled = true;
-                }
-            OverrideTag::DrawingMode(level)
-                if p >= 0.5 => {
-                    ctx.drawing_mode = *level;
-                }
+            OverrideTag::ClipDrawing { scale, commands } if p >= 0.5 => {
+                ctx.clip_drawing_commands = Some(commands.clone());
+                ctx.clip_drawing_scale = *scale;
+                ctx.clip_drawing_inverse = false;
+                ctx.clip_enabled = true;
+            }
+            OverrideTag::ClipInverseDrawing { scale, commands } if p >= 0.5 => {
+                ctx.clip_drawing_commands = Some(commands.clone());
+                ctx.clip_drawing_scale = *scale;
+                ctx.clip_drawing_inverse = true;
+                ctx.clip_enabled = true;
+            }
+            OverrideTag::DrawingMode(level) if p >= 0.5 => {
+                ctx.drawing_mode = *level;
+            }
             OverrideTag::BaselineOffset(offset) => {
-                ctx.baseline_offset = ctx.baseline_offset + (*offset - ctx.baseline_offset) * f64::from(p);
+                ctx.baseline_offset =
+                    ctx.baseline_offset + (*offset - ctx.baseline_offset) * f64::from(p);
             }
             _ => {}
         }
@@ -410,7 +427,7 @@ mod tests {
     #[test]
     fn test_fad_alpha_fade_in_and_out() {
         // fade_in=200, fade_out=300, total=1000
-        assert!(compute_fad_alpha(0, 1000, 200, 300) < 0.01);   // start: transparent
+        assert!(compute_fad_alpha(0, 1000, 200, 300) < 0.01); // start: transparent
         assert!((compute_fad_alpha(200, 1000, 200, 300) - 1.0).abs() < 0.01); // fade-in done
         assert!((compute_fad_alpha(500, 1000, 200, 300) - 1.0).abs() < 0.01); // middle: opaque
         assert!((compute_fad_alpha(850, 1000, 200, 300) - 0.5).abs() < 0.01); // fade-out mid
@@ -529,7 +546,7 @@ mod tests {
         assert_eq!(tags.len(), 3);
         assert!(matches!(&tags[0], OverrideTag::Border(v) if *v == 2.0));
         // clip is parsed via the regular ASS parser, not ass_parser::parse_override_tag
-        assert!(matches!(&tags[1], OverrideTag::Clip{..}));
+        assert!(matches!(&tags[1], OverrideTag::Clip { .. }));
         assert!(matches!(&tags[2], OverrideTag::Shadow(v) if *v == 3.0));
     }
 
@@ -543,15 +560,24 @@ mod tests {
     fn test_parse_override_block_karaoke() {
         let tags = parse_override_block("\\k50\\kf100");
         assert_eq!(tags.len(), 2);
-        assert!(matches!(&tags[0], OverrideTag::Karaoke { duration: 500, .. }));
-        assert!(matches!(&tags[1], OverrideTag::Karaoke { duration: 1000, .. }));
+        assert!(matches!(
+            &tags[0],
+            OverrideTag::Karaoke { duration: 500, .. }
+        ));
+        assert!(matches!(
+            &tags[1],
+            OverrideTag::Karaoke { duration: 1000, .. }
+        ));
     }
 
     // ── apply_transform_tag ───────────────────────────────────
 
     #[test]
     fn test_apply_transform_fontsize() {
-        let mut ctx = RenderContext { font_size: 20.0, ..Default::default() };
+        let mut ctx = RenderContext {
+            font_size: 20.0,
+            ..Default::default()
+        };
         apply_transform_tag(&mut ctx, "\\fs40", 0, 1000, 1.0, 500, 0, 1000, 1.0, 1.0);
         assert!(ctx.font_size > 29.0 && ctx.font_size < 31.0);
     }
@@ -561,34 +587,72 @@ mod tests {
         let mut ctx1 = RenderContext::default();
         let mut ctx2 = RenderContext::default();
         // accel=1.0 (linear) vs accel=2.0 (decelerating)
-        apply_transform_tag(&mut ctx1, "\\bord10", 0, 1000, 1.0, 500, 0, 1000, 100.0, 100.0);
-        apply_transform_tag(&mut ctx2, "\\bord10", 0, 1000, 2.0, 500, 0, 1000, 100.0, 100.0);
+        apply_transform_tag(
+            &mut ctx1, "\\bord10", 0, 1000, 1.0, 500, 0, 1000, 100.0, 100.0,
+        );
+        apply_transform_tag(
+            &mut ctx2, "\\bord10", 0, 1000, 2.0, 500, 0, 1000, 100.0, 100.0,
+        );
         // accel=2.0 at 50% → 0.25 progress, linear at 50% → 0.5
         assert!(ctx2.outline_width < ctx1.outline_width);
     }
 
     #[test]
     fn test_apply_transform_outside_range() {
-        let mut ctx = RenderContext { font_size: 20.0, ..Default::default() };
-        apply_transform_tag(&mut ctx, "\\fs40", 500, 1000, 1.0, 200, 0, 1500, 100.0, 100.0);
+        let mut ctx = RenderContext {
+            font_size: 20.0,
+            ..Default::default()
+        };
+        apply_transform_tag(
+            &mut ctx, "\\fs40", 500, 1000, 1.0, 200, 0, 1500, 100.0, 100.0,
+        );
         // Before t1=500 → no change
         assert_eq!(ctx.font_size, 20.0);
     }
 
     #[test]
     fn test_apply_transform_color() {
-        let mut ctx = RenderContext { primary_color: [255, 0, 0, 255], ..Default::default() }; // red
+        let mut ctx = RenderContext {
+            primary_color: [255, 0, 0, 255],
+            ..Default::default()
+        }; // red
         let red = AssColor::from_rgb(0, 0, 255); // blue in ASS format (BGR)
-        apply_transform_tag(&mut ctx, &format!("\\1c{}", red.to_ass_hex()), 0, 1000, 1.0, 1000, 0, 1000, 100.0, 100.0);
+        apply_transform_tag(
+            &mut ctx,
+            &format!("\\1c{}", red.to_ass_hex()),
+            0,
+            1000,
+            1.0,
+            1000,
+            0,
+            1000,
+            100.0,
+            100.0,
+        );
         // At progress=1.0 → fully interpolated to target
         assert_eq!(ctx.primary_color[2], 255); // blue channel should be 255
-        assert_eq!(ctx.primary_color[0], 0);   // red channel should be 0
+        assert_eq!(ctx.primary_color[0], 0); // red channel should be 0
     }
 
     #[test]
     fn test_apply_transform_scale() {
-        let mut ctx = RenderContext { scale_x: 100.0, scale_y: 100.0, ..Default::default() };
-        apply_transform_tag(&mut ctx, "\\fscx200", 0, 1000, 1.0, 500, 0, 1000, 100.0, 100.0);
+        let mut ctx = RenderContext {
+            scale_x: 100.0,
+            scale_y: 100.0,
+            ..Default::default()
+        };
+        apply_transform_tag(
+            &mut ctx,
+            "\\fscx200",
+            0,
+            1000,
+            1.0,
+            500,
+            0,
+            1000,
+            100.0,
+            100.0,
+        );
         assert!(ctx.scale_x > 149.0 && ctx.scale_x < 151.0);
         assert_eq!(ctx.scale_y, 100.0); // y unchanged
     }
@@ -597,27 +661,80 @@ mod tests {
 
     #[test]
     fn test_apply_transform_pos_interpolation() {
-        let mut ctx = RenderContext { x: 0.0, y: 0.0, ..Default::default() };
+        let mut ctx = RenderContext {
+            x: 0.0,
+            y: 0.0,
+            ..Default::default()
+        };
         // Interpolate from (0,0) to (1920,1080) at 50% progress (t=500, duration=1000)
-        apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 0, 1000, 1.0, 500, 0, 1000, 1.0, 1.0);
-        assert!((ctx.x - 960.0).abs() < 1.0, "x should be ~960, got {}", ctx.x);
-        assert!((ctx.y - 540.0).abs() < 1.0, "y should be ~540, got {}", ctx.y);
+        apply_transform_tag(
+            &mut ctx,
+            "\\pos(1920,1080)",
+            0,
+            1000,
+            1.0,
+            500,
+            0,
+            1000,
+            1.0,
+            1.0,
+        );
+        assert!(
+            (ctx.x - 960.0).abs() < 1.0,
+            "x should be ~960, got {}",
+            ctx.x
+        );
+        assert!(
+            (ctx.y - 540.0).abs() < 1.0,
+            "y should be ~540, got {}",
+            ctx.y
+        );
     }
 
     #[test]
     fn test_apply_transform_pos_before_start() {
-        let mut ctx = RenderContext { x: 100.0, y: 200.0, ..Default::default() };
+        let mut ctx = RenderContext {
+            x: 100.0,
+            y: 200.0,
+            ..Default::default()
+        };
         // Before t1=500, no interpolation should happen
-        apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 500, 1000, 1.0, 100, 0, 2000, 1.0, 1.0);
+        apply_transform_tag(
+            &mut ctx,
+            "\\pos(1920,1080)",
+            500,
+            1000,
+            1.0,
+            100,
+            0,
+            2000,
+            1.0,
+            1.0,
+        );
         assert_eq!(ctx.x, 100.0);
         assert_eq!(ctx.y, 200.0);
     }
 
     #[test]
     fn test_apply_transform_pos_after_end() {
-        let mut ctx = RenderContext { x: 100.0, y: 200.0, ..Default::default() };
+        let mut ctx = RenderContext {
+            x: 100.0,
+            y: 200.0,
+            ..Default::default()
+        };
         // At t2=1000 (the end of animation), should be at target
-        apply_transform_tag(&mut ctx, "\\pos(1920,1080)", 0, 1000, 1.0, 1000, 0, 1000, 1.0, 1.0);
+        apply_transform_tag(
+            &mut ctx,
+            "\\pos(1920,1080)",
+            0,
+            1000,
+            1.0,
+            1000,
+            0,
+            1000,
+            1.0,
+            1.0,
+        );
         assert!((ctx.x - 1920.0).abs() < 1.0);
         assert!((ctx.y - 1080.0).abs() < 1.0);
     }
@@ -637,7 +754,10 @@ mod tests {
     fn test_fade_complex_t1_eq_t2_returns_a1() {
         let a = compute_fade_complex(500, 100, 200, 50, 500, 500, 800, 1000);
         let expected = (255 - 100) as f32 / 255.0;
-        assert!((a - expected).abs() < 0.01, "t1==t2 elapsed==t1 returns a1: {a}");
+        assert!(
+            (a - expected).abs() < 0.01,
+            "t1==t2 elapsed==t1 returns a1: {a}"
+        );
     }
 
     #[test]
@@ -648,7 +768,10 @@ mod tests {
 
     #[test]
     fn test_apply_transform_empty_tag_no_crash() {
-        let mut ctx = RenderContext { font_size: 20.0, ..Default::default() };
+        let mut ctx = RenderContext {
+            font_size: 20.0,
+            ..Default::default()
+        };
         apply_transform_tag(&mut ctx, "", 0, 1000, 1.0, 500, 0, 1000, 1.0, 1.0);
         assert_eq!(ctx.font_size, 20.0);
     }

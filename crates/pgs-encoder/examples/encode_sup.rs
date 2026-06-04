@@ -3,7 +3,7 @@
 //! Run with: `cargo run -p pgs-encoder --example encode_sup`
 
 use color_quantizer::{DitherMethod, Quantizer, Rgba};
-use pgs_encoder::{PgsEncoder, decode_sup, verify_roundtrip};
+use pgs_encoder::{decode_sup, verify_roundtrip, PgsEncoder};
 
 fn main() {
     // Synthetic 2x2 magenta image.

@@ -85,7 +85,8 @@ impl Style {
         let fields: Vec<&str> = line.splitn(24, ',').collect();
         if fields.len() < 23 {
             return Err(super::error::ParseError::InvalidStyle(format!(
-                "expected 23 fields, got {}", fields.len()
+                "expected 23 fields, got {}",
+                fields.len()
             )));
         }
         Ok(Self {
@@ -112,7 +113,11 @@ impl Style {
             margin_r: fields[20].trim().parse().unwrap_or(10),
             margin_v: fields[21].trim().parse().unwrap_or(10),
             encoding: fields[22].trim().parse().unwrap_or(1),
-            relative_to: if fields.len() > 23 { fields[23].trim().parse().unwrap_or(0) } else { 0 },
+            relative_to: if fields.len() > 23 {
+                fields[23].trim().parse().unwrap_or(0)
+            } else {
+                0
+            },
         })
     }
 
@@ -134,7 +139,8 @@ impl Style {
         let fields: Vec<&str> = line.splitn(19, ',').collect();
         if fields.len() < 18 {
             return Err(super::error::ParseError::InvalidStyle(format!(
-                "expected 18 fields for SSA v4 style, got {}", fields.len()
+                "expected 18 fields for SSA v4 style, got {}",
+                fields.len()
             )));
         }
         // Helper: parse a color value that may be decimal (SSA v4) or &H hex
@@ -169,7 +175,11 @@ impl Style {
             margin_l: fields[13].trim().parse().unwrap_or(10),
             margin_r: fields[14].trim().parse().unwrap_or(10),
             margin_v: fields[15].trim().parse().unwrap_or(10),
-            encoding: if fields.len() > 17 { fields[17].trim().parse().unwrap_or(1) } else { 1 },
+            encoding: if fields.len() > 17 {
+                fields[17].trim().parse().unwrap_or(1)
+            } else {
+                1
+            },
             relative_to: 0,
         })
     }

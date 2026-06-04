@@ -1,7 +1,7 @@
 use fontdb::{Database, Family, Query, Weight};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 /// Errors that can occur during font operations.
@@ -132,11 +132,7 @@ impl FontManager {
         let mut best: Option<(fontdb::ID, f32)> = None;
 
         for face in self.db.faces() {
-            let face_family = face
-                .families
-                .first()
-                .map(|(s, _)| s.as_str())
-                .unwrap_or("");
+            let face_family = face.families.first().map(|(s, _)| s.as_str()).unwrap_or("");
             let weight_diff = (f32::from(face.weight.0) - f32::from(target_weight)).abs();
             let italic_penalty = if target_italic != (face.style == fontdb::Style::Italic) {
                 100.0
@@ -164,7 +160,12 @@ impl FontManager {
     ///
     /// Results are cached internally by (family, bold, italic) key. The cache is
     /// invalidated whenever fonts are loaded or added.
-    pub fn query_with_fallback(&self, family: &str, bold: bool, italic: bool) -> Option<fontdb::ID> {
+    pub fn query_with_fallback(
+        &self,
+        family: &str,
+        bold: bool,
+        italic: bool,
+    ) -> Option<fontdb::ID> {
         let key = (family.to_lowercase(), bold, italic);
         if let Some(cached) = self.query_cache.lock().unwrap().get(&key) {
             return Some(*cached);
@@ -177,7 +178,12 @@ impl FontManager {
     }
 
     /// Fallback query implementation (un-cached). See [`query_with_fallback`].
-    fn query_with_fallback_inner(&self, family: &str, bold: bool, italic: bool) -> Option<fontdb::ID> {
+    fn query_with_fallback_inner(
+        &self,
+        family: &str,
+        bold: bool,
+        italic: bool,
+    ) -> Option<fontdb::ID> {
         if let Some(id) = self.query_with_score(family, bold, italic) {
             return Some(id);
         }
@@ -208,7 +214,10 @@ impl FontManager {
         }
         self.db.with_face_data(id, |data, _index| {
             let arc = Arc::new(data.to_vec());
-            self.font_data_cache.lock().unwrap().insert(id, Arc::clone(&arc));
+            self.font_data_cache
+                .lock()
+                .unwrap()
+                .insert(id, Arc::clone(&arc));
             arc
         })
     }
@@ -266,7 +275,10 @@ mod tests {
         let id = find_any_font(&fm).expect("No system fonts found");
         let data1 = fm.get_font_data(id).expect("Font data should exist");
         let data2 = fm.get_font_data(id).expect("Font data should exist");
-        assert_eq!(data1, data2, "get_font_data should return identical bytes for same ID");
+        assert_eq!(
+            data1, data2,
+            "get_font_data should return identical bytes for same ID"
+        );
     }
 
     #[test]
@@ -319,8 +331,7 @@ mod tests {
         }
         let data_a = fm.get_font_data(fonts[0].id).expect("Font data");
         let data_b = fm.get_font_data(fonts[1].id).expect("Font data");
-        if data_a.len() != data_b.len() || data_a != data_b {
-        }
+        if data_a.len() != data_b.len() || data_a != data_b {}
         // If two different IDs happen to return same data, that's valid (duplicated font).
         // The point is no panic or corruption.
     }
@@ -347,7 +358,10 @@ mod tests {
             if let Some(data) = fm.get_font_data(id) {
                 let loaded_id = fm.load_font_data(data.to_vec());
                 let loaded_data = fm.get_font_data(loaded_id);
-                assert!(loaded_data.is_some(), "Loading valid font data should produce retrievable font");
+                assert!(
+                    loaded_data.is_some(),
+                    "Loading valid font data should produce retrievable font"
+                );
             }
         }
     }

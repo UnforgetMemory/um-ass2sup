@@ -59,7 +59,10 @@ fn test_golden_simple() {
 #[test]
 fn test_golden_effects() {
     let sup_data = render_fixture_to_sup("effects.ass", &find_any_font()).expect("render failed");
-    assert!(sup_data.len() > 100, "effects.ass should produce substantial output");
+    assert!(
+        sup_data.len() > 100,
+        "effects.ass should produce substantial output"
+    );
 }
 
 #[test]
@@ -72,72 +75,84 @@ fn test_golden_karaoke() {
 
 #[test]
 fn test_golden_overlapping() {
-    let sup_data = render_fixture_to_sup("overlapping.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("overlapping.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_complex_styles() {
-    let sup_data = render_fixture_to_sup("complex_styles.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("complex_styles.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_effects_chain() {
-    let sup_data = render_fixture_to_sup("effects_chain.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("effects_chain.ass", &find_any_font()).expect("render failed");
     assert!(sup_data.len() > 200);
 }
 
 #[test]
 fn test_golden_karaoke_advanced() {
-    let sup_data = render_fixture_to_sup("karaoke_advanced.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("karaoke_advanced.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_transform_anim() {
-    let sup_data = render_fixture_to_sup("transform_anim.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("transform_anim.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_clip_regions() {
-    let sup_data = render_fixture_to_sup("clip_regions.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("clip_regions.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_fade_effects() {
-    let sup_data = render_fixture_to_sup("fade_effects.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("fade_effects.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_rotation_scale() {
-    let sup_data = render_fixture_to_sup("rotation_scale.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("rotation_scale.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_unicode_text() {
-    let sup_data = render_fixture_to_sup("unicode_text.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("unicode_text.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_position_move() {
-    let sup_data = render_fixture_to_sup("position_move.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("position_move.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_color_alpha() {
-    let sup_data = render_fixture_to_sup("color_alpha.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("color_alpha.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }
 
 #[test]
 fn test_golden_drawing_mode() {
-    let sup_data = render_fixture_to_sup("drawing_mode.ass", &find_any_font()).expect("render failed");
+    let sup_data =
+        render_fixture_to_sup("drawing_mode.ass", &find_any_font()).expect("render failed");
     assert!(!sup_data.is_empty());
 }

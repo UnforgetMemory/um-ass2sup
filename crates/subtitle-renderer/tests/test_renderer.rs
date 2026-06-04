@@ -1,5 +1,7 @@
-use subtitle_renderer::{RenderConfig, RenderContext, RenderedFrame, FontManager, Shaper, Renderer};
 use ass_parser::{AssFile, Effect, Event, EventType, Timestamp};
+use subtitle_renderer::{
+    FontManager, RenderConfig, RenderContext, RenderedFrame, Renderer, Shaper,
+};
 
 #[test]
 fn test_render_config_default() {
@@ -173,7 +175,10 @@ fn test_render_ass_outside_event_returns_none() {
     assert!(frame.is_some(), "render_ass always returns Some pixmap");
     let f = frame.unwrap();
     let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
-    assert_eq!(non_zero, 0, "No visible events at t=500ms should produce empty bitmap");
+    assert_eq!(
+        non_zero, 0,
+        "No visible events at t=500ms should produce empty bitmap"
+    );
 }
 
 #[test]
@@ -182,7 +187,10 @@ fn test_render_ass_bitmap_has_content() {
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000).unwrap();
     let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Bitmap should have non-zero pixels when text is rendered");
+    assert!(
+        non_zero > 0,
+        "Bitmap should have non-zero pixels when text is rendered"
+    );
 }
 
 #[test]
@@ -250,7 +258,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\pos(200,300)\b1\i1\fs72\1c&H
     let ass = AssFile::parse(content).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "Override tags should produce visible output");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "Override tags should produce visible output"
+    );
 }
 
 #[test]
@@ -278,7 +289,8 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,X
 #[test]
 fn test_render_ass_long_text() {
     let long = "A".repeat(500);
-    let content = format!(r#"[Script Info]
+    let content = format!(
+        r#"[Script Info]
 Title: Long
 ScriptType: v4.00+
 PlayResX: 1920
@@ -291,11 +303,15 @@ Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{long}
-"#);
+"#
+    );
     let ass = AssFile::parse(&content).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
-    assert!(frame.is_some(), "Long text should still produce a frame without panic");
+    assert!(
+        frame.is_some(),
+        "Long text should still produce a frame without panic"
+    );
 }
 
 #[test]
@@ -344,7 +360,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fad(500,500)}Fading Text
     let frame_start = renderer.render_ass(&ass, 1000);
     // At middle (3000ms), should be fully visible
     let frame_mid = renderer.render_ass(&ass, 3000);
-    assert!(frame_start.is_some() || frame_mid.is_some(), "Fade effect should produce frames");
+    assert!(
+        frame_start.is_some() || frame_mid.is_some(),
+        "Fade effect should produce frames"
+    );
 }
 
 #[test]
@@ -386,7 +405,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,720p text
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let cfg = RenderConfig { width: 1280, height: 720, script_width: 1280, script_height: 720, ..Default::default() };
+    let cfg = RenderConfig {
+        width: 1280,
+        height: 720,
+        script_width: 1280,
+        script_height: 720,
+        ..Default::default()
+    };
     let renderer = Renderer::new(cfg);
     let frame = renderer.render_ass(&ass, 2000).unwrap();
     assert_eq!(frame.width, 1280);
@@ -424,7 +449,10 @@ fn test_render_ass_simple_text() {
     assert_eq!(f.width, 1920);
     assert_eq!(f.height, 1080);
     assert_eq!(f.bitmap.len(), 1920 * 1080 * 4);
-    assert!(f.bitmap.iter().any(|&b| b != 0), "Bitmap should have non-zero pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b != 0),
+        "Bitmap should have non-zero pixels"
+    );
 }
 
 #[test]
@@ -433,9 +461,15 @@ fn test_render_ass_returns_none_outside_time() {
     let ass = make_simple_ass("Hello", 1000, 5000);
     // render_ass always returns Some pixmap — empty when no events visible
     let f_before = renderer.render_ass(&ass, 0).unwrap();
-    assert!(f_before.bitmap.iter().all(|&b| b == 0), "Before start: empty bitmap");
+    assert!(
+        f_before.bitmap.iter().all(|&b| b == 0),
+        "Before start: empty bitmap"
+    );
     let f_after = renderer.render_ass(&ass, 6000).unwrap();
-    assert!(f_after.bitmap.iter().all(|&b| b == 0), "After end: empty bitmap");
+    assert!(
+        f_after.bitmap.iter().all(|&b| b == 0),
+        "After end: empty bitmap"
+    );
     assert!(renderer.render_ass(&ass, 2000).is_some(), "During event");
 }
 
@@ -509,7 +543,7 @@ fn test_render_ass_with_fade() {
 
 #[test]
 fn test_render_ass_cache() {
-    use subtitle_renderer::{FrameCache, make_frame_key};
+    use subtitle_renderer::{make_frame_key, FrameCache};
     let renderer = Renderer::new(RenderConfig::default());
     let ass = make_simple_ass("Cached", 0, 5000);
     let cache = FrameCache::new(16);
@@ -703,8 +737,14 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\writing_mode(2)}Vertical Tex
 "#;
     let ass = AssFile::parse(content).unwrap();
     assert!(!ass.events[0].override_tags.is_empty());
-    let has_wm = ass.events[0].override_tags.iter().any(|t| matches!(t, ass_parser::OverrideTag::WritingMode(2)));
-    assert!(has_wm, "writing_mode(2) should be parsed as WritingMode(2) tag");
+    let has_wm = ass.events[0]
+        .override_tags
+        .iter()
+        .any(|t| matches!(t, ass_parser::OverrideTag::WritingMode(2)));
+    assert!(
+        has_wm,
+        "writing_mode(2) should be parsed as WritingMode(2) tag"
+    );
 }
 
 #[test]
@@ -760,10 +800,16 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,BottomLayer
     let ass = AssFile::parse(content).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
-    assert!(frame.is_some(), "Layer-ordered rendering should produce a frame");
+    assert!(
+        frame.is_some(),
+        "Layer-ordered rendering should produce a frame"
+    );
     let f = frame.unwrap();
     let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Layer-ordered rendering should have non-zero pixels");
+    assert!(
+        non_zero > 0,
+        "Layer-ordered rendering should have non-zero pixels"
+    );
 }
 
 // ── B0: \t comma parsing with nested parens ──────────────────────
@@ -775,7 +821,10 @@ fn test_t_parsing_with_nested_parens_integration() {
     let result = ass_parser::parse_override_tag("t(\\pos(100,200),0,1000,1)").unwrap();
     match &result {
         ass_parser::OverrideTag::Transform { tag, t1, t2, accel } => {
-            assert_eq!(tag, "\\pos(100,200)", "Inner tag should preserve nested parens");
+            assert_eq!(
+                tag, "\\pos(100,200)",
+                "Inner tag should preserve nested parens"
+            );
             assert_eq!(*t1, 0, "t1 should be 0");
             assert_eq!(*t2, 1000, "t2 should be 1000");
             assert!((*accel - 1.0).abs() < 0.01, "accel should be 1.0");
@@ -799,10 +848,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(100,200),0,1000,1)}Moving
 "#;
     let ass = AssFile::parse(content).unwrap();
-    let any_transform = ass.events[0].override_tags.iter().any(|t| {
-        matches!(t, ass_parser::OverrideTag::Transform { .. })
-    });
-    assert!(any_transform, "Event should contain at least a Transform tag");
+    let any_transform = ass.events[0]
+        .override_tags
+        .iter()
+        .any(|t| matches!(t, ass_parser::OverrideTag::Transform { .. }));
+    assert!(
+        any_transform,
+        "Event should contain at least a Transform tag"
+    );
 }
 
 // ── B1: border_style=3 opaque box ────────────────────────────────
@@ -833,7 +886,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Opaque,,0,0,0,,Opaque Box Text
     assert!(frame.is_some(), "BorderStyle=3 should render");
     let f = frame.unwrap();
     let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Opaque box rendering should have visible pixels");
+    assert!(
+        non_zero > 0,
+        "Opaque box rendering should have visible pixels"
+    );
 }
 
 // ── B2: \ko outline boost ────────────────────────────────────────
@@ -858,14 +914,26 @@ Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko100}He{\ko100}llo
     let ass = AssFile::parse(content).unwrap();
     // Verify the override tags contain KO karaoke style indicators
     let has_ko = ass.events[0].override_tags.iter().any(|t| {
-        matches!(t, ass_parser::OverrideTag::Karaoke { style: ass_parser::karaoke::KaraokeStyle::Outline, .. })
+        matches!(
+            t,
+            ass_parser::OverrideTag::Karaoke {
+                style: ass_parser::karaoke::KaraokeStyle::Outline,
+                ..
+            }
+        )
     });
-    assert!(has_ko, "KO override tag should be parsed as KaraokeStyle::Outline");
+    assert!(
+        has_ko,
+        "KO override tag should be parsed as KaraokeStyle::Outline"
+    );
 
     // Render at t=2000ms to exercise the ko path
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 2000);
-    assert!(frame.is_some(), "KO karaoke should render without panic at mid-event");
+    assert!(
+        frame.is_some(),
+        "KO karaoke should render without panic at mid-event"
+    );
     let f = frame.unwrap();
     let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
     assert!(non_zero > 0, "KO karaoke should produce visible output");
@@ -892,14 +960,20 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\rAlt}Reset To Alt Style
 "#;
     let ass = AssFile::parse(content).unwrap();
     assert_eq!(ass.styles.len(), 2, "Should have two styles");
-    assert_eq!(ass.styles[1].name, "Alt", "Second style should be named Alt");
+    assert_eq!(
+        ass.styles[1].name, "Alt",
+        "Second style should be named Alt"
+    );
 
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "\\r named style reset should render");
     let f = frame.unwrap();
     let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "\\r style reset should produce visible output");
+    assert!(
+        non_zero > 0,
+        "\\r style reset should produce visible output"
+    );
 }
 
 // ── B4: \kt absolute timing ──────────────────────────────────────
@@ -925,7 +999,10 @@ Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\kt0}Abs{\kt100}olute{\kt250}
 
     // Render at several timestamps to ensure kt doesn't panic
     let frame_before = renderer.render_ass(&ass, 500);
-    assert!(frame_before.is_some(), "Before event should produce frame with kt");
+    assert!(
+        frame_before.is_some(),
+        "Before event should produce frame with kt"
+    );
 
     let frame_mid = renderer.render_ass(&ass, 2000);
     assert!(frame_mid.is_some(), "Mid-event kt should render");
@@ -1015,10 +1092,20 @@ fn test_font_data_cache_handles_multiple_ids_integration() {
 
     // Interleaved reads exercise the cache for both entries.
     for i in 0..5 {
-        let da = fm.get_font_data(id_a).unwrap_or_else(|| panic!("Iter {i}: font A data"));
-        let db = fm.get_font_data(id_b).unwrap_or_else(|| panic!("Iter {i}: font B data"));
-        assert_eq!(da, data_a_first, "Iter {i}: font A data should be consistent");
-        assert_eq!(db, data_b_first, "Iter {i}: font B data should be consistent");
+        let da = fm
+            .get_font_data(id_a)
+            .unwrap_or_else(|| panic!("Iter {i}: font A data"));
+        let db = fm
+            .get_font_data(id_b)
+            .unwrap_or_else(|| panic!("Iter {i}: font B data"));
+        assert_eq!(
+            da, data_a_first,
+            "Iter {i}: font A data should be consistent"
+        );
+        assert_eq!(
+            db, data_b_first,
+            "Iter {i}: font B data should be consistent"
+        );
     }
 }
 
@@ -1052,7 +1139,10 @@ Dialogue: 1,0:00:01.00,0:00:05.00,Default,,0,0,0,,Second Event
 
     // Second render reuses pixmaps from pool.
     let frame2 = renderer.render_ass(&ass, 3000);
-    assert!(frame2.is_some(), "Second render (reusing pool) should succeed");
+    assert!(
+        frame2.is_some(),
+        "Second render (reusing pool) should succeed"
+    );
 
     // Both should produce visible output.
     let f1 = frame1.unwrap();
@@ -1092,10 +1182,16 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Combined,,0,0,0,,Combined Features
 
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
-    assert!(frame.is_some(), "Combined BorderStyle=3 + style properties should render");
+    assert!(
+        frame.is_some(),
+        "Combined BorderStyle=3 + style properties should render"
+    );
     let f = frame.unwrap();
     let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Combined features should produce visible output");
+    assert!(
+        non_zero > 0,
+        "Combined features should produce visible output"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1108,7 +1204,11 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Combined,,0,0,0,,Combined Features
 fn test_banner_effect_ltr_changes_x_position() {
     let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
-    ass.styles.push(ass_parser::Style { name: "Default".to_string(), font_name: "DejaVu Sans".to_string(), ..ass_parser::Style::default() });
+    ass.styles.push(ass_parser::Style {
+        name: "Default".to_string(),
+        font_name: "DejaVu Sans".to_string(),
+        ..ass_parser::Style::default()
+    });
     ass.events.push(Event {
         event_type: EventType::Dialogue,
         layer: 0,
@@ -1119,7 +1219,11 @@ fn test_banner_effect_ltr_changes_x_position() {
         margin_l: 0,
         margin_r: 0,
         margin_v: 0,
-        effect: Effect::Banner { delay_per_pixel: 10, left_to_right: true, fadeaway_width: 0.0 },
+        effect: Effect::Banner {
+            delay_per_pixel: 10,
+            left_to_right: true,
+            fadeaway_width: 0.0,
+        },
         text: "BannerLTR Text".to_string(),
         override_tags: vec![],
         karaoke_segments: vec![],
@@ -1129,9 +1233,18 @@ fn test_banner_effect_ltr_changes_x_position() {
     let early = renderer.render_ass(&ass, 100).unwrap();
     // t=2000: x_offset = 2000/10 = 200px — text shifted right by 190px
     let late = renderer.render_ass(&ass, 2000).unwrap();
-    assert!(early.bitmap.iter().any(|&b| b != 0), "Banner LTR early should have content");
-    assert!(late.bitmap.iter().any(|&b| b != 0), "Banner LTR late should have content");
-    assert_ne!(early.bitmap, late.bitmap, "Banner LTR should shift text horizontally");
+    assert!(
+        early.bitmap.iter().any(|&b| b != 0),
+        "Banner LTR early should have content"
+    );
+    assert!(
+        late.bitmap.iter().any(|&b| b != 0),
+        "Banner LTR late should have content"
+    );
+    assert_ne!(
+        early.bitmap, late.bitmap,
+        "Banner LTR should shift text horizontally"
+    );
 }
 
 #[test]
@@ -1148,7 +1261,11 @@ fn test_banner_effect_rtl_changes_x_position() {
         margin_l: 0,
         margin_r: 0,
         margin_v: 0,
-        effect: Effect::Banner { delay_per_pixel: 10, left_to_right: false, fadeaway_width: 0.0 },
+        effect: Effect::Banner {
+            delay_per_pixel: 10,
+            left_to_right: false,
+            fadeaway_width: 0.0,
+        },
         text: "BannerRTL Text".to_string(),
         override_tags: vec![],
         karaoke_segments: vec![],
@@ -1158,9 +1275,18 @@ fn test_banner_effect_rtl_changes_x_position() {
     let early = renderer.render_ass(&ass, 100).unwrap();
     // t=2000: x_offset = -200px
     let late = renderer.render_ass(&ass, 2000).unwrap();
-    assert!(early.bitmap.iter().any(|&b| b != 0), "Banner RTL early should have content");
-    assert!(late.bitmap.iter().any(|&b| b != 0), "Banner RTL late should have content");
-    assert_ne!(early.bitmap, late.bitmap, "Banner RTL should shift text horizontally");
+    assert!(
+        early.bitmap.iter().any(|&b| b != 0),
+        "Banner RTL early should have content"
+    );
+    assert!(
+        late.bitmap.iter().any(|&b| b != 0),
+        "Banner RTL late should have content"
+    );
+    assert_ne!(
+        early.bitmap, late.bitmap,
+        "Banner RTL should shift text horizontally"
+    );
 }
 
 // ── C1: Scroll effect position change ─────────────────────────
@@ -1179,7 +1305,11 @@ fn test_scroll_up_effect_changes_y_position() {
         margin_l: 0,
         margin_r: 0,
         margin_v: 0,
-        effect: Effect::ScrollUp { delay_per_row: 10, top_offset: 10.0, bottom_offset: 50.0 },
+        effect: Effect::ScrollUp {
+            delay_per_row: 10,
+            top_offset: 10.0,
+            bottom_offset: 50.0,
+        },
         text: "ScrollUp Text".to_string(),
         override_tags: vec![],
         karaoke_segments: vec![],
@@ -1189,9 +1319,18 @@ fn test_scroll_up_effect_changes_y_position() {
     let early = renderer.render_ass(&ass, 100).unwrap();
     // t=2000: y = 1080 - 50 - 200 = 830
     let late = renderer.render_ass(&ass, 2000).unwrap();
-    assert!(early.bitmap.iter().any(|&b| b != 0), "ScrollUp early should have content");
-    assert!(late.bitmap.iter().any(|&b| b != 0), "ScrollUp late should have content");
-    assert_ne!(early.bitmap, late.bitmap, "ScrollUp should shift text vertically");
+    assert!(
+        early.bitmap.iter().any(|&b| b != 0),
+        "ScrollUp early should have content"
+    );
+    assert!(
+        late.bitmap.iter().any(|&b| b != 0),
+        "ScrollUp late should have content"
+    );
+    assert_ne!(
+        early.bitmap, late.bitmap,
+        "ScrollUp should shift text vertically"
+    );
 }
 
 #[test]
@@ -1208,7 +1347,11 @@ fn test_scroll_down_effect_changes_y_position() {
         margin_l: 0,
         margin_r: 0,
         margin_v: 0,
-        effect: Effect::ScrollDown { delay_per_row: 10, top_offset: 200.0, bottom_offset: 50.0 },
+        effect: Effect::ScrollDown {
+            delay_per_row: 10,
+            top_offset: 200.0,
+            bottom_offset: 50.0,
+        },
         text: "ScrollDown Text".to_string(),
         override_tags: vec![],
         karaoke_segments: vec![],
@@ -1218,9 +1361,18 @@ fn test_scroll_down_effect_changes_y_position() {
     let early = renderer.render_ass(&ass, 100).unwrap();
     // t=2000: y = 200 + 200 = 400
     let late = renderer.render_ass(&ass, 2000).unwrap();
-    assert!(early.bitmap.iter().any(|&b| b != 0), "ScrollDown early should have content");
-    assert!(late.bitmap.iter().any(|&b| b != 0), "ScrollDown late should have content");
-    assert_ne!(early.bitmap, late.bitmap, "ScrollDown should shift text vertically");
+    assert!(
+        early.bitmap.iter().any(|&b| b != 0),
+        "ScrollDown early should have content"
+    );
+    assert!(
+        late.bitmap.iter().any(|&b| b != 0),
+        "ScrollDown late should have content"
+    );
+    assert_ne!(
+        early.bitmap, late.bitmap,
+        "ScrollDown should shift text vertically"
+    );
 }
 
 // ── C2: Karaoke segments parsing ──────────────────────────────
@@ -1243,74 +1395,143 @@ Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\k50}Hel{\kf75}lo {\ko100}Wor
 "#;
     let ass = AssFile::parse(content).unwrap();
     let event = &ass.events[0];
-    assert!(!event.karaoke_segments.is_empty(), "Karaoke segments should be populated");
+    assert!(
+        !event.karaoke_segments.is_empty(),
+        "Karaoke segments should be populated"
+    );
 
     // Verify all four tag types are present
     let styles: Vec<_> = event.karaoke_segments.iter().map(|s| s.style).collect();
-    assert!(styles.contains(&ass_parser::karaoke::KaraokeStyle::Instant), "Should have \\k style");
-    assert!(styles.contains(&ass_parser::karaoke::KaraokeStyle::Fill), "Should have \\kf style");
-    assert!(styles.contains(&ass_parser::karaoke::KaraokeStyle::Outline), "Should have \\ko style");
-    assert!(styles.contains(&ass_parser::karaoke::KaraokeStyle::Timing), "Should have \\kt style");
+    assert!(
+        styles.contains(&ass_parser::karaoke::KaraokeStyle::Instant),
+        "Should have \\k style"
+    );
+    assert!(
+        styles.contains(&ass_parser::karaoke::KaraokeStyle::Fill),
+        "Should have \\kf style"
+    );
+    assert!(
+        styles.contains(&ass_parser::karaoke::KaraokeStyle::Outline),
+        "Should have \\ko style"
+    );
+    assert!(
+        styles.contains(&ass_parser::karaoke::KaraokeStyle::Timing),
+        "Should have \\kt style"
+    );
 
     // Verify segments have text content
     for seg in &event.karaoke_segments {
-        assert!(!seg.text.is_empty(), "Each karaoke segment should have text");
-        assert!(seg.duration_ms > 0, "Each karaoke segment should have positive duration");
+        assert!(
+            !seg.text.is_empty(),
+            "Each karaoke segment should have text"
+        );
+        assert!(
+            seg.duration_ms > 0,
+            "Each karaoke segment should have positive duration"
+        );
     }
 }
 
 #[test]
 fn test_karaoke_syllable_states_at_different_timestamps() {
-    use subtitle_renderer::karaoke::{KaraokeRenderer, KaraokePhase};
+    use subtitle_renderer::karaoke::{KaraokePhase, KaraokeRenderer};
 
     let segs = vec![
-        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Instant, 500, "Hel".into(), 0),
-        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Fill, 500, "lo ".into(), 1),
-        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Outline, 500, "Wor".into(), 2),
-        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Timing, 0, "ld".into(), 3),
+        ass_parser::karaoke::KaraokeSegment::new(
+            ass_parser::karaoke::KaraokeStyle::Instant,
+            500,
+            "Hel".into(),
+            0,
+        ),
+        ass_parser::karaoke::KaraokeSegment::new(
+            ass_parser::karaoke::KaraokeStyle::Fill,
+            500,
+            "lo ".into(),
+            1,
+        ),
+        ass_parser::karaoke::KaraokeSegment::new(
+            ass_parser::karaoke::KaraokeStyle::Outline,
+            500,
+            "Wor".into(),
+            2,
+        ),
+        ass_parser::karaoke::KaraokeSegment::new(
+            ass_parser::karaoke::KaraokeStyle::Timing,
+            0,
+            "ld".into(),
+            3,
+        ),
     ];
 
     // At t=0: all pending
     let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 0);
     assert_eq!(states.len(), 4);
-    assert!(matches!(states[0].phase, KaraokePhase::Active { progress } if progress == 0.0), "First syllable should be Active at t=0");
+    assert!(
+        matches!(states[0].phase, KaraokePhase::Active { progress } if progress == 0.0),
+        "First syllable should be Active at t=0"
+    );
     assert!(matches!(states[1].phase, KaraokePhase::Pending));
     assert!(matches!(states[2].phase, KaraokePhase::Pending));
     assert!(matches!(states[3].phase, KaraokePhase::Done));
 
     // At t=750: syllable 0 done, syllable 1 active (~50%), 2+3 pending
     let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 750);
-    assert!(matches!(states[0].phase, KaraokePhase::Done), "First syllable should be Done at t=750");
-    assert!(matches!(states[1].phase, KaraokePhase::Active { .. }), "Second syllable should be Active at t=750");
-    assert!(matches!(states[2].phase, KaraokePhase::Pending), "Third syllable should be Pending at t=750");
-    assert!(matches!(states[3].phase, KaraokePhase::Done), "Timing syllable with dur=0 should be Done at t=750");
+    assert!(
+        matches!(states[0].phase, KaraokePhase::Done),
+        "First syllable should be Done at t=750"
+    );
+    assert!(
+        matches!(states[1].phase, KaraokePhase::Active { .. }),
+        "Second syllable should be Active at t=750"
+    );
+    assert!(
+        matches!(states[2].phase, KaraokePhase::Pending),
+        "Third syllable should be Pending at t=750"
+    );
+    assert!(
+        matches!(states[3].phase, KaraokePhase::Done),
+        "Timing syllable with dur=0 should be Done at t=750"
+    );
 
     // At t=2000: all done
     let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 2000);
     for (i, s) in states.iter().enumerate() {
-        assert!(matches!(s.phase, KaraokePhase::Done), "Syllable {i} should be Done at t=2000");
+        assert!(
+            matches!(s.phase, KaraokePhase::Done),
+            "Syllable {i} should be Done at t=2000"
+        );
     }
 }
 
 #[test]
 fn test_karaoke_fill_progress_increases_over_time() {
-    use subtitle_renderer::karaoke::{KaraokeRenderer, KaraokePhase};
+    use subtitle_renderer::karaoke::{KaraokePhase, KaraokeRenderer};
 
-    let segs = vec![
-        ass_parser::karaoke::KaraokeSegment::new(ass_parser::karaoke::KaraokeStyle::Fill, 1000, "Fill".into(), 0),
-    ];
+    let segs = vec![ass_parser::karaoke::KaraokeSegment::new(
+        ass_parser::karaoke::KaraokeStyle::Fill,
+        1000,
+        "Fill".into(),
+        0,
+    )];
 
     // At t=0: active with progress 0 (start == event_start)
     let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 0);
-    assert!(matches!(states[0].phase, KaraokePhase::Active { progress } if progress == 0.0), "At t=0 fill should be Active with progress 0");
+    assert!(
+        matches!(states[0].phase, KaraokePhase::Active { progress } if progress == 0.0),
+        "At t=0 fill should be Active with progress 0"
+    );
 
     // At t=250: active, progress ~0.25
     let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 250);
-    assert!(matches!(states[0].phase, KaraokePhase::Active { progress } if (progress - 0.25).abs() < 0.05));
+    assert!(
+        matches!(states[0].phase, KaraokePhase::Active { progress } if (progress - 0.25).abs() < 0.05)
+    );
 
     // At t=500: active, progress ~0.5
     let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 500);
-    assert!(matches!(states[0].phase, KaraokePhase::Active { progress } if (progress - 0.50).abs() < 0.05));
+    assert!(
+        matches!(states[0].phase, KaraokePhase::Active { progress } if (progress - 0.50).abs() < 0.05)
+    );
 
     // At t=1000: done
     let states = KaraokeRenderer::compute_syllable_states(&segs, 0, 1000);
@@ -1338,15 +1559,27 @@ Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\k50}Hel{\kf75}lo {\ko100}Wor
 
     // Render before, during, and after karaoke event — all should produce frames
     let before = renderer.render_ass(&ass, 500);
-    assert!(before.is_some(), "Karaoke render before event should produce frame");
+    assert!(
+        before.is_some(),
+        "Karaoke render before event should produce frame"
+    );
 
     let during = renderer.render_ass(&ass, 3000);
-    assert!(during.is_some(), "Karaoke render during event should produce frame");
+    assert!(
+        during.is_some(),
+        "Karaoke render during event should produce frame"
+    );
     let f = during.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b != 0), "Karaoke during event should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b != 0),
+        "Karaoke during event should have visible pixels"
+    );
 
     let after = renderer.render_ass(&ass, 7000);
-    assert!(after.is_some(), "Karaoke render after event should produce frame");
+    assert!(
+        after.is_some(),
+        "Karaoke render after event should produce frame"
+    );
 }
 
 // ── C3: \t(\pos) transform ────────────────────────────────────
@@ -1377,15 +1610,28 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,3000,1)}Tr
     let mid_frame = renderer.render_ass(&ass, 1500).unwrap();
     let end_frame = renderer.render_ass(&ass, 3000).unwrap();
 
-    assert!(start_frame.bitmap.iter().any(|&b| b != 0), "Transform start should have content");
-    assert!(mid_frame.bitmap.iter().any(|&b| b != 0), "Transform mid should have content");
-    assert!(end_frame.bitmap.iter().any(|&b| b != 0), "Transform end should have content");
+    assert!(
+        start_frame.bitmap.iter().any(|&b| b != 0),
+        "Transform start should have content"
+    );
+    assert!(
+        mid_frame.bitmap.iter().any(|&b| b != 0),
+        "Transform mid should have content"
+    );
+    assert!(
+        end_frame.bitmap.iter().any(|&b| b != 0),
+        "Transform end should have content"
+    );
 
     // At different interpolation points, position differs → different bitmap
-    assert_ne!(start_frame.bitmap, mid_frame.bitmap,
-        "Mid-transform bitmap should differ from start");
-    assert_ne!(mid_frame.bitmap, end_frame.bitmap,
-        "Mid-transform bitmap should differ from end");
+    assert_ne!(
+        start_frame.bitmap, mid_frame.bitmap,
+        "Mid-transform bitmap should differ from start"
+    );
+    assert_ne!(
+        mid_frame.bitmap, end_frame.bitmap,
+        "Mid-transform bitmap should differ from end"
+    );
 }
 
 #[test]
@@ -1411,13 +1657,28 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,3000,2)}Ac
     let frame1 = renderer.render_ass(&ass, 1500).unwrap();
     let frame3 = renderer.render_ass(&ass, 3000).unwrap();
 
-    assert!(frame0.bitmap.iter().any(|&b| b != 0), "Accelerated start should render");
-    assert!(frame1.bitmap.iter().any(|&b| b != 0), "Accelerated mid should render");
-    assert!(frame3.bitmap.iter().any(|&b| b != 0), "Accelerated end should render");
+    assert!(
+        frame0.bitmap.iter().any(|&b| b != 0),
+        "Accelerated start should render"
+    );
+    assert!(
+        frame1.bitmap.iter().any(|&b| b != 0),
+        "Accelerated mid should render"
+    );
+    assert!(
+        frame3.bitmap.iter().any(|&b| b != 0),
+        "Accelerated end should render"
+    );
 
     // With accel=2, positions differ from linear, so bitmaps at mid vs end differ
-    assert_ne!(frame0.bitmap, frame1.bitmap, "Start and mid bitmaps should differ");
-    assert_ne!(frame1.bitmap, frame3.bitmap, "Mid and end bitmaps should differ");
+    assert_ne!(
+        frame0.bitmap, frame1.bitmap,
+        "Start and mid bitmaps should differ"
+    );
+    assert_ne!(
+        frame1.bitmap, frame3.bitmap,
+        "Mid and end bitmaps should differ"
+    );
 }
 
 #[test]
@@ -1444,9 +1705,18 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),1000,3000,1)
     let during_anim = renderer.render_ass(&ass, 3000).unwrap();
     let after_anim = renderer.render_ass(&ass, 4500).unwrap();
 
-    assert!(before_anim.bitmap.iter().any(|&b| b != 0), "Before animation should render");
-    assert!(during_anim.bitmap.iter().any(|&b| b != 0), "During animation should render");
-    assert!(after_anim.bitmap.iter().any(|&b| b != 0), "After animation should render");
+    assert!(
+        before_anim.bitmap.iter().any(|&b| b != 0),
+        "Before animation should render"
+    );
+    assert!(
+        during_anim.bitmap.iter().any(|&b| b != 0),
+        "During animation should render"
+    );
+    assert!(
+        after_anim.bitmap.iter().any(|&b| b != 0),
+        "After animation should render"
+    );
 }
 
 // ── C4: Vector clip ───────────────────────────────────────────
@@ -1470,17 +1740,24 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(1,m 0 0 l 1920 0 1920 1
     let ass = AssFile::parse(content).unwrap();
 
     // Verify ClipDrawing tag was parsed
-    let has_clip_drawing = ass.events[0].override_tags.iter().any(|t| {
-        matches!(t, ass_parser::OverrideTag::ClipDrawing { .. })
-    });
-    assert!(has_clip_drawing, "Vector clip should parse as ClipDrawing tag");
+    let has_clip_drawing = ass.events[0]
+        .override_tags
+        .iter()
+        .any(|t| matches!(t, ass_parser::OverrideTag::ClipDrawing { .. }));
+    assert!(
+        has_clip_drawing,
+        "Vector clip should parse as ClipDrawing tag"
+    );
 
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
     assert!(frame.is_some(), "Vector clip should render without panic");
     let f = frame.unwrap();
     let non_zero = f.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Vector clip rendering should produce visible output");
+    assert!(
+        non_zero > 0,
+        "Vector clip rendering should produce visible output"
+    );
 }
 
 #[test]
@@ -1502,14 +1779,21 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\iclip(1,m 0 0 l 1920 0 1920 
     let ass = AssFile::parse(content).unwrap();
 
     // Verify ClipInverseDrawing tag was parsed
-    let has_iclip_drawing = ass.events[0].override_tags.iter().any(|t| {
-        matches!(t, ass_parser::OverrideTag::ClipInverseDrawing { .. })
-    });
-    assert!(has_iclip_drawing, "Inverse vector clip should parse as ClipInverseDrawing tag");
+    let has_iclip_drawing = ass.events[0]
+        .override_tags
+        .iter()
+        .any(|t| matches!(t, ass_parser::OverrideTag::ClipInverseDrawing { .. }));
+    assert!(
+        has_iclip_drawing,
+        "Inverse vector clip should parse as ClipInverseDrawing tag"
+    );
 
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
-    assert!(frame.is_some(), "Inverse vector clip should render without panic");
+    assert!(
+        frame.is_some(),
+        "Inverse vector clip should render without panic"
+    );
 }
 
 #[test]
@@ -1533,11 +1817,17 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(0.5,m 10 10 l 200 0 200
     let has_scaled = ass.events[0].override_tags.iter().any(|t| {
         matches!(t, ass_parser::OverrideTag::ClipDrawing { scale, .. } if (*scale - 0.5).abs() < 0.01)
     });
-    assert!(has_scaled, "Vector clip with scale=0.5 should parse correctly");
+    assert!(
+        has_scaled,
+        "Vector clip with scale=0.5 should parse correctly"
+    );
 
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
-    assert!(frame.is_some(), "Scaled vector clip should render without panic");
+    assert!(
+        frame.is_some(),
+        "Scaled vector clip should render without panic"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1581,8 +1871,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\shad4}Symmetric
     let renderer = Renderer::new(RenderConfig::default());
     let asym_frame = renderer.render_ass(&asym_ass, 1000).unwrap();
     let sym_frame = renderer.render_ass(&sym_ass, 1000).unwrap();
-    assert!(asym_frame.bitmap.iter().any(|&b| b != 0), "Asymmetric shadow should render visible pixels");
-    assert!(sym_frame.bitmap.iter().any(|&b| b != 0), "Symmetric shadow should render visible pixels");
+    assert!(
+        asym_frame.bitmap.iter().any(|&b| b != 0),
+        "Asymmetric shadow should render visible pixels"
+    );
+    assert!(
+        sym_frame.bitmap.iter().any(|&b| b != 0),
+        "Symmetric shadow should render visible pixels"
+    );
     assert_ne!(
         asym_frame.bitmap, sym_frame.bitmap,
         "Asymmetric xshad5/yshad3 should differ from symmetric shad4"
@@ -1608,7 +1904,10 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\xshad5\yshad0}ShadowX
     let ass = AssFile::parse(content).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 1000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b != 0), "Horizontal-priority shadow should render");
+    assert!(
+        frame.bitmap.iter().any(|&b| b != 0),
+        "Horizontal-priority shadow should render"
+    );
 }
 
 #[test]
@@ -1630,7 +1929,10 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\xshad0\yshad5}ShadowY
     let ass = AssFile::parse(content).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 1000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b != 0), "Vertical-priority shadow should render");
+    assert!(
+        frame.bitmap.iter().any(|&b| b != 0),
+        "Vertical-priority shadow should render"
+    );
 }
 
 // ── Group 2: \ko outline karaoke ────────────────────────────────
@@ -1656,7 +1958,10 @@ Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko50}First{\ko50}Second
     // t=1000 = event start: syllable 1 Active, syllable 2 Pending
     // In Pending \ko: outline_width=0, fill stays secondary color
     let frame = renderer.render_ass(&ass, 1000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b != 0), "KO pending phase should render visible output");
+    assert!(
+        frame.bitmap.iter().any(|&b| b != 0),
+        "KO pending phase should render visible output"
+    );
 }
 
 #[test]
@@ -1681,8 +1986,14 @@ Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko50}First{\ko50}Second
     let active_frame = renderer.render_ass(&ass, 1250).unwrap();
     // t=2500: both syllables Done (full glyph in primary)
     let done_frame = renderer.render_ass(&ass, 2500).unwrap();
-    assert!(active_frame.bitmap.iter().any(|&b| b != 0), "KO Active should have content");
-    assert!(done_frame.bitmap.iter().any(|&b| b != 0), "KO Done should have content");
+    assert!(
+        active_frame.bitmap.iter().any(|&b| b != 0),
+        "KO Active should have content"
+    );
+    assert!(
+        done_frame.bitmap.iter().any(|&b| b != 0),
+        "KO Done should have content"
+    );
     // Active \ko (secondary fill + primary outline sweep) vs Done (full primary glyph)
     assert_ne!(
         active_frame.bitmap, done_frame.bitmap,
@@ -1712,8 +2023,14 @@ Dialogue: 0,0:00:01.00,0:00:06.00,Default,,0,0,0,,{\ko50}First{\ko50}Second
     let done_frame = renderer.render_ass(&ass, 2500).unwrap();
     // t=1000: syllable 1 Active (progress=0), syllable 2 Pending
     let pending_active_frame = renderer.render_ass(&ass, 1000).unwrap();
-    assert!(done_frame.bitmap.iter().any(|&b| b != 0), "KO Done should have content");
-    assert!(pending_active_frame.bitmap.iter().any(|&b| b != 0), "KO Pending/Active should have content");
+    assert!(
+        done_frame.bitmap.iter().any(|&b| b != 0),
+        "KO Done should have content"
+    );
+    assert!(
+        pending_active_frame.bitmap.iter().any(|&b| b != 0),
+        "KO Pending/Active should have content"
+    );
     assert_ne!(
         pending_active_frame.bitmap, done_frame.bitmap,
         "KO Done (primary) should differ from Pending/Active (secondary + outline)"
@@ -1745,8 +2062,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\fscx150,0,2000)}ScaleMe
     let renderer = Renderer::new(RenderConfig::default());
     let t0 = renderer.render_ass(&ass, 0).unwrap();
     let t2000 = renderer.render_ass(&ass, 2000).unwrap();
-    assert!(t0.bitmap.iter().any(|&b| b != 0), "Scale t=0 should have content");
-    assert!(t2000.bitmap.iter().any(|&b| b != 0), "Scale t=2000 should have content");
+    assert!(
+        t0.bitmap.iter().any(|&b| b != 0),
+        "Scale t=0 should have content"
+    );
+    assert!(
+        t2000.bitmap.iter().any(|&b| b != 0),
+        "Scale t=2000 should have content"
+    );
     // The sub-region path does not apply scale/rotation transform;
     // still verify both timestamps render without panic.
 }
@@ -1773,8 +2096,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\1c0000FF,0,2000)}ColorShi
     let renderer = Renderer::new(RenderConfig::default());
     let t0 = renderer.render_ass(&ass, 0).unwrap();
     let t2000 = renderer.render_ass(&ass, 2000).unwrap();
-    assert!(t0.bitmap.iter().any(|&b| b != 0), "Color t=0 should have content");
-    assert!(t2000.bitmap.iter().any(|&b| b != 0), "Color t=2000 should have content");
+    assert!(
+        t0.bitmap.iter().any(|&b| b != 0),
+        "Color t=0 should have content"
+    );
+    assert!(
+        t2000.bitmap.iter().any(|&b| b != 0),
+        "Color t=2000 should have content"
+    );
 }
 
 #[test]
@@ -1797,8 +2126,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\fscx120\1c0000FF,0,2000)}
     let renderer = Renderer::new(RenderConfig::default());
     let t0 = renderer.render_ass(&ass, 0).unwrap();
     let t2000 = renderer.render_ass(&ass, 2000).unwrap();
-    assert!(t0.bitmap.iter().any(|&b| b != 0), "Composite t=0 should have content");
-    assert!(t2000.bitmap.iter().any(|&b| b != 0), "Composite t=2000 should have content");
+    assert!(
+        t0.bitmap.iter().any(|&b| b != 0),
+        "Composite t=0 should have content"
+    );
+    assert!(
+        t2000.bitmap.iter().any(|&b| b != 0),
+        "Composite t=2000 should have content"
+    );
 }
 
 #[test]
@@ -1824,11 +2159,23 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\t(\pos(960,540),0,3000,2)}Ac
     let t0 = renderer.render_ass(&ass, 0).unwrap();
     let t750 = renderer.render_ass(&ass, 750).unwrap();
     let t3000 = renderer.render_ass(&ass, 3000).unwrap();
-    assert!(t0.bitmap.iter().any(|&b| b != 0), "Accel t=0 should have content");
-    assert!(t750.bitmap.iter().any(|&b| b != 0), "Accel t=750 should have content");
-    assert!(t3000.bitmap.iter().any(|&b| b != 0), "Accel t=3000 should have content");
+    assert!(
+        t0.bitmap.iter().any(|&b| b != 0),
+        "Accel t=0 should have content"
+    );
+    assert!(
+        t750.bitmap.iter().any(|&b| b != 0),
+        "Accel t=750 should have content"
+    );
+    assert!(
+        t3000.bitmap.iter().any(|&b| b != 0),
+        "Accel t=3000 should have content"
+    );
     assert_ne!(t0.bitmap, t750.bitmap, "Accel t=0 and t=750 should differ");
-    assert_ne!(t750.bitmap, t3000.bitmap, "Accel t=750 and t=3000 should differ");
+    assert_ne!(
+        t750.bitmap, t3000.bitmap,
+        "Accel t=750 and t=3000 should differ"
+    );
 }
 
 // ── Group 4: \fad/\fade ─────────────────────────────────────────
@@ -1852,11 +2199,20 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fad(1000,1000)}FadingText
     let ass = AssFile::parse(content).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     // \fad(1000,1000): fade-in 0..1000ms, fade-out 4000..5000ms
-    let t500 = renderer.render_ass(&ass, 500).unwrap();   // alpha ~0.5
+    let t500 = renderer.render_ass(&ass, 500).unwrap(); // alpha ~0.5
     let t1000 = renderer.render_ass(&ass, 1000).unwrap(); // alpha=1.0
-    assert!(t500.bitmap.iter().any(|&b| b != 0), "Fade t=500 should have content");
-    assert!(t1000.bitmap.iter().any(|&b| b != 0), "Fade t=1000 should have content");
-    assert_ne!(t500.bitmap, t1000.bitmap, "Fade t=500 (alpha=0.5) and t=1000 (alpha=1.0) should differ");
+    assert!(
+        t500.bitmap.iter().any(|&b| b != 0),
+        "Fade t=500 should have content"
+    );
+    assert!(
+        t1000.bitmap.iter().any(|&b| b != 0),
+        "Fade t=1000 should have content"
+    );
+    assert_ne!(
+        t500.bitmap, t1000.bitmap,
+        "Fade t=500 (alpha=0.5) and t=1000 (alpha=1.0) should differ"
+    );
 }
 
 #[test]
@@ -1882,14 +2238,26 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fad(500,1000)}FadeSimple
     // \fad(500,1000): fade-in 0..500ms, fade-out 4000..5000ms
     let ass = AssFile::parse(content).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
-    let t250 = renderer.render_ass(&ass, 250).unwrap();   // alpha ~0.5 (fade-in)
-    let t500 = renderer.render_ass(&ass, 500).unwrap();    // alpha=1.0 (fade-in done)
-    let t4500 = renderer.render_ass(&ass, 4500).unwrap();  // alpha=0.5 (fade-out)
-    assert!(t250.bitmap.iter().any(|&b| b != 0), "Fade t=250 should have content");
-    assert!(t500.bitmap.iter().any(|&b| b != 0), "Fade t=500 should have content");
-    assert_ne!(t250.bitmap, t500.bitmap, "Fade t=250 (alpha~0.5) and t=500 (alpha=1.0) should differ");
+    let t250 = renderer.render_ass(&ass, 250).unwrap(); // alpha ~0.5 (fade-in)
+    let t500 = renderer.render_ass(&ass, 500).unwrap(); // alpha=1.0 (fade-in done)
+    let t4500 = renderer.render_ass(&ass, 4500).unwrap(); // alpha=0.5 (fade-out)
+    assert!(
+        t250.bitmap.iter().any(|&b| b != 0),
+        "Fade t=250 should have content"
+    );
+    assert!(
+        t500.bitmap.iter().any(|&b| b != 0),
+        "Fade t=500 should have content"
+    );
+    assert_ne!(
+        t250.bitmap, t500.bitmap,
+        "Fade t=250 (alpha~0.5) and t=500 (alpha=1.0) should differ"
+    );
     if t4500.bitmap.iter().any(|&b| b != 0) {
-        assert_ne!(t500.bitmap, t4500.bitmap, "Fade t=500 vs t=4500 (fade-out) should differ");
+        assert_ne!(
+            t500.bitmap, t4500.bitmap,
+            "Fade t=500 vs t=4500 (fade-out) should differ"
+        );
     }
 }
 
@@ -1913,14 +2281,26 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\move(100,100,500,500,0,3000)
 "#;
     let ass = AssFile::parse(content).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
-    let t0 = renderer.render_ass(&ass, 0).unwrap();       // (100,100)
-    let t1500 = renderer.render_ass(&ass, 1500).unwrap();  // (300,300)
-    let t3000 = renderer.render_ass(&ass, 3000).unwrap();  // (500,500)
-    assert!(t0.bitmap.iter().any(|&b| b != 0), "Move t=0 should have content");
-    assert!(t1500.bitmap.iter().any(|&b| b != 0), "Move t=1500 should have content");
-    assert!(t3000.bitmap.iter().any(|&b| b != 0), "Move t=3000 should have content");
+    let t0 = renderer.render_ass(&ass, 0).unwrap(); // (100,100)
+    let t1500 = renderer.render_ass(&ass, 1500).unwrap(); // (300,300)
+    let t3000 = renderer.render_ass(&ass, 3000).unwrap(); // (500,500)
+    assert!(
+        t0.bitmap.iter().any(|&b| b != 0),
+        "Move t=0 should have content"
+    );
+    assert!(
+        t1500.bitmap.iter().any(|&b| b != 0),
+        "Move t=1500 should have content"
+    );
+    assert!(
+        t3000.bitmap.iter().any(|&b| b != 0),
+        "Move t=3000 should have content"
+    );
     assert_ne!(t0.bitmap, t1500.bitmap, "Move t=0 and t=1500 should differ");
-    assert_ne!(t1500.bitmap, t3000.bitmap, "Move t=1500 and t=3000 should differ");
+    assert_ne!(
+        t1500.bitmap, t3000.bitmap,
+        "Move t=1500 and t=3000 should differ"
+    );
 }
 
 #[test]
@@ -1958,8 +2338,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,PlainText
     let renderer = Renderer::new(RenderConfig::default());
     let rot_frame = renderer.render_ass(&rot_ass, 1000).unwrap();
     let plain_frame = renderer.render_ass(&plain_ass, 1000).unwrap();
-    assert!(rot_frame.bitmap.iter().any(|&b| b != 0), "Rotated text with org should render");
-    assert!(plain_frame.bitmap.iter().any(|&b| b != 0), "Plain text should render");
+    assert!(
+        rot_frame.bitmap.iter().any(|&b| b != 0),
+        "Rotated text with org should render"
+    );
+    assert!(
+        plain_frame.bitmap.iter().any(|&b| b != 0),
+        "Plain text should render"
+    );
     assert_ne!(
         rot_frame.bitmap, plain_frame.bitmap,
         "Rotated text should differ from unrotated plain text"
@@ -2003,8 +2389,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\bord2}SymBorder
     let renderer = Renderer::new(RenderConfig::default());
     let asym_frame = renderer.render_ass(&asym_ass, 1000).unwrap();
     let sym_frame = renderer.render_ass(&sym_ass, 1000).unwrap();
-    assert!(asym_frame.bitmap.iter().any(|&b| b != 0), "Asymmetric border should render visible pixels");
-    assert!(sym_frame.bitmap.iter().any(|&b| b != 0), "Symmetric border should render visible pixels");
+    assert!(
+        asym_frame.bitmap.iter().any(|&b| b != 0),
+        "Asymmetric border should render visible pixels"
+    );
+    assert!(
+        sym_frame.bitmap.iter().any(|&b| b != 0),
+        "Symmetric border should render visible pixels"
+    );
     assert_ne!(
         asym_frame.bitmap, sym_frame.bitmap,
         "Asymmetric xbord3/ybord1 should differ from symmetric bord2"
@@ -2046,8 +2438,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\bord5}ImplicitSym
     let renderer = Renderer::new(RenderConfig::default());
     let explicit_frame = renderer.render_ass(&explicit_ass, 1000).unwrap();
     let implicit_frame = renderer.render_ass(&implicit_ass, 1000).unwrap();
-    assert!(explicit_frame.bitmap.iter().any(|&b| b != 0), "Explicit symmetric border (xbord5/ybord5) should render");
-    assert!(implicit_frame.bitmap.iter().any(|&b| b != 0), "Implicit symmetric border (bord5) should render");
+    assert!(
+        explicit_frame.bitmap.iter().any(|&b| b != 0),
+        "Explicit symmetric border (xbord5/ybord5) should render"
+    );
+    assert!(
+        implicit_frame.bitmap.iter().any(|&b| b != 0),
+        "Implicit symmetric border (bord5) should render"
+    );
 }
 
 // EFFECT-007: Multi-line underline/strikeout — regression tests
@@ -2101,10 +2499,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Line1\NLine2"#;
     let frame = renderer.render_ass(&parsed, 1000).unwrap();
 
     let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Multi-line underline should produce visible pixels");
+    assert!(
+        non_zero > 0,
+        "Multi-line underline should produce visible pixels"
+    );
 
     let ranges = count_y_ranges(&frame);
-    assert!(!ranges.is_empty(),
+    assert!(
+        !ranges.is_empty(),
         "Multi-line underline should have at least 1 y-range, got {}",
         ranges.len()
     );
@@ -2130,10 +2532,14 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Line1\NLine2"#;
     let frame = renderer.render_ass(&parsed, 1000).unwrap();
 
     let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Multi-line strikeout should produce visible pixels");
+    assert!(
+        non_zero > 0,
+        "Multi-line strikeout should produce visible pixels"
+    );
 
     let ranges = count_y_ranges(&frame);
-    assert!(!ranges.is_empty(),
+    assert!(
+        !ranges.is_empty(),
         "Multi-line strikeout should have at least 1 y-range, got {}",
         ranges.len()
     );
@@ -2159,7 +2565,10 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Single Line"#;
     let frame = renderer.render_ass(&parsed, 1000).unwrap();
 
     let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Single-line underline should produce visible pixels");
+    assert!(
+        non_zero > 0,
+        "Single-line underline should produce visible pixels"
+    );
 }
 
 #[test]
@@ -2183,7 +2592,10 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\blur5\k100}Test"#;
     let frame = renderer.render_ass(&parsed, 1000).unwrap();
 
     let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Karaoke with shadow+blur should produce visible pixels");
+    assert!(
+        non_zero > 0,
+        "Karaoke with shadow+blur should produce visible pixels"
+    );
 
     // Compare with no-blur version — blurred shadow should have more non-zero pixels
     let ass_no_blur = r#"[Script Info]
@@ -2231,7 +2643,10 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\k100}Test"#;
     let frame = renderer.render_ass(&parsed, 1000).unwrap();
 
     let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
-    assert!(non_zero > 0, "Karaoke without shadow should produce visible pixels");
+    assert!(
+        non_zero > 0,
+        "Karaoke without shadow should produce visible pixels"
+    );
 
     // Compare with shadow version — no-shadow should have fewer pixels
     let ass_shadow = r#"[Script Info]
@@ -2277,9 +2692,19 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(100,100,300,300)}{\an7}
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000).unwrap();
     let w = frame.width as usize;
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "Clip rect should keep visible text");
-    assert!(frame.bitmap[(250 * w + 210) * 4 + 3] > 0, "Pixel at (210,250) inside clip+text should be non-zero");
-    assert_eq!(frame.bitmap[(50 * w + 50) * 4 + 3], 0, "Pixel at (50,50) outside clip rect should be zero");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "Clip rect should keep visible text"
+    );
+    assert!(
+        frame.bitmap[(250 * w + 210) * 4 + 3] > 0,
+        "Pixel at (210,250) inside clip+text should be non-zero"
+    );
+    assert_eq!(
+        frame.bitmap[(50 * w + 50) * 4 + 3],
+        0,
+        "Pixel at (50,50) outside clip rect should be zero"
+    );
 }
 
 #[test]
@@ -2301,9 +2726,19 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\an7\iclip(100,100,300,300)}{
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000).unwrap();
     let w = frame.width as usize;
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "Inverse clip should keep text outside rect visible");
-    assert!(frame.bitmap[(60 * w + 65) * 4 + 3] > 0, "Pixel at (65,60) outside iclip rect should be non-zero");
-    assert_eq!(frame.bitmap[(200 * w + 200) * 4 + 3], 0, "Pixel at (200,200) inside iclip rect should be zero");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "Inverse clip should keep text outside rect visible"
+    );
+    assert!(
+        frame.bitmap[(60 * w + 65) * 4 + 3] > 0,
+        "Pixel at (65,60) outside iclip rect should be non-zero"
+    );
+    assert_eq!(
+        frame.bitmap[(200 * w + 200) * 4 + 3],
+        0,
+        "Pixel at (200,200) inside iclip rect should be zero"
+    );
 }
 
 #[test]
@@ -2324,7 +2759,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\clip(0.5,m 0 0 l 1920 0 1920
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "Full-frame vector clip should keep text visible");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "Full-frame vector clip should keep text visible"
+    );
 }
 
 #[test]
@@ -2389,7 +2827,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p1}m 50 50 l 200 200{\p0}
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "Basic line drawing should produce visible pixels");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "Basic line drawing should produce visible pixels"
+    );
 }
 
 #[test]
@@ -2410,7 +2851,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p1}m 50 50 l 250 50 250 250 
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "Filled polygon drawing should produce visible pixels");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "Filled polygon drawing should produce visible pixels"
+    );
 }
 
 #[test]
@@ -2431,7 +2875,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\p1\pbo10}m 10 10 l 190 10 19
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "Drawing with baseline offset should produce visible pixels");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "Drawing with baseline offset should produce visible pixels"
+    );
 }
 
 #[test]
@@ -2452,7 +2899,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\1c&H0000FF&\p1}m 50 50 l 250
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "Colored drawing path should produce visible pixels");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "Colored drawing path should produce visible pixels"
+    );
 }
 
 #[test]
@@ -2473,9 +2923,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q0}Long text that should wra
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000);
-    assert!(frame.is_some(), "Smart wrapping should render without panic");
+    assert!(
+        frame.is_some(),
+        "Smart wrapping should render without panic"
+    );
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "Smart wrapping text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "Smart wrapping text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2498,7 +2954,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q2}Line1\NLine2
     let frame = renderer.render_ass(&parsed, 2000);
     assert!(frame.is_some(), "EOL wrapping should render without panic");
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "EOL wrapping text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "EOL wrapping text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2519,7 +2978,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q1}Long text that should NOT
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000).unwrap();
-    assert!(frame.bitmap.iter().any(|&b| b > 0), "No-wrap text should have visible pixels");
+    assert!(
+        frame.bitmap.iter().any(|&b| b > 0),
+        "No-wrap text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2540,9 +3002,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\q3}Same as q0 smart wrapping
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000);
-    assert!(frame.is_some(), "q3 smart wrapping should render without panic");
+    assert!(
+        frame.is_some(),
+        "q3 smart wrapping should render without panic"
+    );
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "q3 smart wrapping text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "q3 smart wrapping text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2565,7 +3033,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fscx120\fscy120\1c&H0000FF&}
     let frame = renderer.render_ass(&parsed, 2000);
     assert!(frame.is_some(), "Scale+color should render without panic");
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "Scale+color text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "Scale+color text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2586,9 +3057,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\bord3\shad5\blur3}ShadowBlur
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000);
-    assert!(frame.is_some(), "Border+shadow+blur should render without panic");
+    assert!(
+        frame.is_some(),
+        "Border+shadow+blur should render without panic"
+    );
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "Border+shadow+blur text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "Border+shadow+blur text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2609,15 +3086,30 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fad(500,500)\t(\fscx150,0,20
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame_mid = renderer.render_ass(&parsed, 2000);
-    assert!(frame_mid.is_some(), "Fade+transform should render at 2000ms");
+    assert!(
+        frame_mid.is_some(),
+        "Fade+transform should render at 2000ms"
+    );
     let f = frame_mid.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "Fade+transform text should have visible pixels at 2000ms");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "Fade+transform text should have visible pixels at 2000ms"
+    );
     let frame_later = renderer.render_ass(&parsed, 3000);
-    assert!(frame_later.is_some(), "Fade+transform should render at 3000ms");
+    assert!(
+        frame_later.is_some(),
+        "Fade+transform should render at 3000ms"
+    );
     let f2 = frame_later.unwrap();
-    assert!(f2.bitmap.iter().any(|&b| b > 0), "Fade+transform text should have visible pixels at 3000ms");
+    assert!(
+        f2.bitmap.iter().any(|&b| b > 0),
+        "Fade+transform text should have visible pixels at 3000ms"
+    );
     let frame_start = renderer.render_ass(&parsed, 1000);
-    assert!(frame_start.is_some(), "Fade+transform should render at 1000ms");
+    assert!(
+        frame_start.is_some(),
+        "Fade+transform should render at 1000ms"
+    );
 }
 
 #[test]
@@ -2638,9 +3130,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\frx45}PerspectiveX
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000);
-    assert!(frame.is_some(), "\\frx45 perspective should render without panic");
+    assert!(
+        frame.is_some(),
+        "\\frx45 perspective should render without panic"
+    );
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "\\frx45 perspective text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "\\frx45 perspective text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2661,9 +3159,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\fry30}PerspectiveY
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000);
-    assert!(frame.is_some(), "\\fry30 perspective should render without panic");
+    assert!(
+        frame.is_some(),
+        "\\fry30 perspective should render without panic"
+    );
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "\\fry30 perspective text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "\\fry30 perspective text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2684,9 +3188,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\frx20\fry15}PerspectiveBoth
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000);
-    assert!(frame.is_some(), "\\frx20\\fry15 should render without panic");
+    assert!(
+        frame.is_some(),
+        "\\frx20\\fry15 should render without panic"
+    );
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "\\frx20\\fry15 text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "\\frx20\\fry15 text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2746,9 +3256,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\org(960,540)\frx45}PerspOrg
     let parsed = AssFile::parse(ass).unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&parsed, 2000);
-    assert!(frame.is_some(), "\\frx45 with \\org should render without panic");
+    assert!(
+        frame.is_some(),
+        "\\frx45 with \\org should render without panic"
+    );
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "\\frx45 with \\org text should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "\\frx45 with \\org text should have visible pixels"
+    );
 }
 
 #[test]
@@ -2757,7 +3273,11 @@ fn test_embedded_font_data_loadable() {
     let font_data = std::fs::read(font_path).expect("DejaVu Sans TTF should exist");
     let mut renderer = Renderer::new(RenderConfig::default());
     let id = renderer.font_manager_mut().load_font_data(font_data);
-    assert_ne!(id, fontdb::ID::dummy(), "load_font_data should return a valid font ID");
+    assert_ne!(
+        id,
+        fontdb::ID::dummy(),
+        "load_font_data should return a valid font ID"
+    );
 }
 
 #[test]
@@ -2782,9 +3302,15 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,EmbeddedFontOverride
 "#;
     let parsed = AssFile::parse(ass).unwrap();
     let frame = renderer.render_ass(&parsed, 2000);
-    assert!(frame.is_some(), "Render with loaded font data should not panic");
+    assert!(
+        frame.is_some(),
+        "Render with loaded font data should not panic"
+    );
     let f = frame.unwrap();
-    assert!(f.bitmap.iter().any(|&b| b > 0), "Text with loaded font data should have visible pixels");
+    assert!(
+        f.bitmap.iter().any(|&b| b > 0),
+        "Text with loaded font data should have visible pixels"
+    );
 }
 
 #[test]
@@ -2806,8 +3332,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,EmbeddedTest
 "#;
     let mut parsed = AssFile::parse(ass).unwrap();
-    let loaded = parsed.load_embedded_fonts(std::path::Path::new("/usr/share/fonts/truetype/dejavu/"));
-    assert!(!loaded.is_empty(), "load_embedded_fonts should return non-empty vec for existing file");
+    let loaded =
+        parsed.load_embedded_fonts(std::path::Path::new("/usr/share/fonts/truetype/dejavu/"));
+    assert!(
+        !loaded.is_empty(),
+        "load_embedded_fonts should return non-empty vec for existing file"
+    );
 }
 
 #[test]
@@ -2830,7 +3360,10 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,MissingTest
 "#;
     let mut parsed = AssFile::parse(ass).unwrap();
     let loaded = parsed.load_embedded_fonts(std::path::Path::new("/tmp/"));
-    assert!(loaded.is_empty(), "load_embedded_fonts should return empty vec for missing file");
+    assert!(
+        loaded.is_empty(),
+        "load_embedded_fonts should return empty vec for missing file"
+    );
 }
 
 #[test]
@@ -2853,5 +3386,8 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,EmptyTest
 "#;
     let mut parsed = AssFile::parse(ass).unwrap();
     let loaded = parsed.load_embedded_fonts(std::path::Path::new("/tmp/"));
-    assert!(loaded.is_empty(), "load_embedded_fonts should return empty vec for empty filename");
+    assert!(
+        loaded.is_empty(),
+        "load_embedded_fonts should return empty vec for empty filename"
+    );
 }

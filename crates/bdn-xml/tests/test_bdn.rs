@@ -1,4 +1,4 @@
-use bdn_xml::{BdnEvent, BdnXml, QuantizedFrame, generate_png, generate_xml, ms_to_timecode};
+use bdn_xml::{generate_png, generate_xml, ms_to_timecode, BdnEvent, BdnXml, QuantizedFrame};
 
 #[test]
 fn test_bdn_xml_new_1080p() {
@@ -139,7 +139,10 @@ fn test_generate_png_basic() {
     let indices = vec![1u8; 4];
     let png = generate_png(&palette, &indices, 2, 2).unwrap();
     assert!(!png.is_empty());
-    assert_eq!(&png[0..8], &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    assert_eq!(
+        &png[0..8],
+        &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    );
 }
 
 #[test]

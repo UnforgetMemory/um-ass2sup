@@ -56,10 +56,7 @@ impl AffineTransform {
         let (s, c) = rad.sin_cos();
         // T(cx,cy) * R * T(-cx,-cy)
         Self {
-            matrix: [
-                [c, -s, cx - c * cx + s * cy],
-                [s, c, cy - s * cx - c * cy],
-            ],
+            matrix: [[c, -s, cx - c * cx + s * cy], [s, c, cy - s * cx - c * cy]],
         }
     }
 
@@ -213,10 +210,30 @@ impl AffineTransform {
                 let dst_idx = ((dy * dst_w + dx) * 4) as usize;
 
                 // SIMD: process all 4 RGBA channels in parallel with f32x4
-                let s00_v = f32x4::from([f32::from(s00[0]), f32::from(s00[1]), f32::from(s00[2]), f32::from(s00[3])]);
-                let s10_v = f32x4::from([f32::from(s10[0]), f32::from(s10[1]), f32::from(s10[2]), f32::from(s10[3])]);
-                let s01_v = f32x4::from([f32::from(s01[0]), f32::from(s01[1]), f32::from(s01[2]), f32::from(s01[3])]);
-                let s11_v = f32x4::from([f32::from(s11[0]), f32::from(s11[1]), f32::from(s11[2]), f32::from(s11[3])]);
+                let s00_v = f32x4::from([
+                    f32::from(s00[0]),
+                    f32::from(s00[1]),
+                    f32::from(s00[2]),
+                    f32::from(s00[3]),
+                ]);
+                let s10_v = f32x4::from([
+                    f32::from(s10[0]),
+                    f32::from(s10[1]),
+                    f32::from(s10[2]),
+                    f32::from(s10[3]),
+                ]);
+                let s01_v = f32x4::from([
+                    f32::from(s01[0]),
+                    f32::from(s01[1]),
+                    f32::from(s01[2]),
+                    f32::from(s01[3]),
+                ]);
+                let s11_v = f32x4::from([
+                    f32::from(s11[0]),
+                    f32::from(s11[1]),
+                    f32::from(s11[2]),
+                    f32::from(s11[3]),
+                ]);
 
                 let result = s00_v * f32x4::splat(w00)
                     + s10_v * f32x4::splat(w10)
@@ -329,14 +346,30 @@ impl AffineTransform {
 
                 let dst_idx = ((dy * dst_w + dx) * 4) as usize;
 
-                let s00_v =
-                    f32x4::from([f32::from(s00[0]), f32::from(s00[1]), f32::from(s00[2]), f32::from(s00[3])]);
-                let s10_v =
-                    f32x4::from([f32::from(s10[0]), f32::from(s10[1]), f32::from(s10[2]), f32::from(s10[3])]);
-                let s01_v =
-                    f32x4::from([f32::from(s01[0]), f32::from(s01[1]), f32::from(s01[2]), f32::from(s01[3])]);
-                let s11_v =
-                    f32x4::from([f32::from(s11[0]), f32::from(s11[1]), f32::from(s11[2]), f32::from(s11[3])]);
+                let s00_v = f32x4::from([
+                    f32::from(s00[0]),
+                    f32::from(s00[1]),
+                    f32::from(s00[2]),
+                    f32::from(s00[3]),
+                ]);
+                let s10_v = f32x4::from([
+                    f32::from(s10[0]),
+                    f32::from(s10[1]),
+                    f32::from(s10[2]),
+                    f32::from(s10[3]),
+                ]);
+                let s01_v = f32x4::from([
+                    f32::from(s01[0]),
+                    f32::from(s01[1]),
+                    f32::from(s01[2]),
+                    f32::from(s01[3]),
+                ]);
+                let s11_v = f32x4::from([
+                    f32::from(s11[0]),
+                    f32::from(s11[1]),
+                    f32::from(s11[2]),
+                    f32::from(s11[3]),
+                ]);
 
                 let result = s00_v * f32x4::splat(w00)
                     + s10_v * f32x4::splat(w10)
@@ -676,7 +709,10 @@ mod tests {
 
         // Should not panic even at near-90° angles
         let persp = t.apply_with_perspective(&src, w, h, w, h, 89.0, 0.0, 0.0, 0.0);
-        assert!(!persp.is_empty(), "extreme perspective output should be non-empty");
+        assert!(
+            !persp.is_empty(),
+            "extreme perspective output should be non-empty"
+        );
         assert_eq!(
             persp.len(),
             (w * h * 4) as usize,

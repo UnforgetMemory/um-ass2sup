@@ -63,10 +63,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
             for dx in -(r as i32)..=(r as i32) {
                 let nx = (x as i32 + dx) as usize;
                 let idx = (y * w + nx) * 4;
-                    sr += u32::from(data[idx]);
-                    sg += u32::from(data[idx + 1]);
-                    sb += u32::from(data[idx + 2]);
-                    sa += u32::from(data[idx + 3]);
+                sr += u32::from(data[idx]);
+                sg += u32::from(data[idx + 1]);
+                sb += u32::from(data[idx + 2]);
+                sa += u32::from(data[idx + 3]);
             }
             {
                 let idx = (y * w + x) * 4;
@@ -186,10 +186,14 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 let top_idx = (top_y * w + x) * 4;
                 let bot_idx = (bot_y * w + x) * 4;
 
-                col_sum_r[x] = col_sum_r[x].saturating_sub(u32::from(data[top_idx])) + u32::from(data[bot_idx]);
-                col_sum_g[x] = col_sum_g[x].saturating_sub(u32::from(data[top_idx + 1])) + u32::from(data[bot_idx + 1]);
-                col_sum_b[x] = col_sum_b[x].saturating_sub(u32::from(data[top_idx + 2])) + u32::from(data[bot_idx + 2]);
-                col_sum_a[x] = col_sum_a[x].saturating_sub(u32::from(data[top_idx + 3])) + u32::from(data[bot_idx + 3]);
+                col_sum_r[x] = col_sum_r[x].saturating_sub(u32::from(data[top_idx]))
+                    + u32::from(data[bot_idx]);
+                col_sum_g[x] = col_sum_g[x].saturating_sub(u32::from(data[top_idx + 1]))
+                    + u32::from(data[bot_idx + 1]);
+                col_sum_b[x] = col_sum_b[x].saturating_sub(u32::from(data[top_idx + 2]))
+                    + u32::from(data[bot_idx + 2]);
+                col_sum_a[x] = col_sum_a[x].saturating_sub(u32::from(data[top_idx + 3]))
+                    + u32::from(data[bot_idx + 3]);
             }
 
             for x in 0..w {
@@ -273,9 +277,7 @@ pub fn apply_shadow(
             Some(p) => p,
             None => return src.to_vec(),
         };
-        shadow_pixmap
-            .data_mut()
-            .copy_from_slice(&shadow_data);
+        shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
         apply_gaussian_blur(&mut shadow_pixmap, blur_radius);
         shadow_data = shadow_pixmap.data().to_vec();
     }
@@ -329,22 +331,54 @@ pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
         let idx = chunk * 16;
 
         // Deinterleave RGBA components across 4 pixels into u32x4 lanes
-        let sr = u32x4::from([u32::from(src[idx]), u32::from(src[idx + 4]),
-            u32::from(src[idx + 8]), u32::from(src[idx + 12])]);
-        let sg = u32x4::from([u32::from(src[idx + 1]), u32::from(src[idx + 5]),
-            u32::from(src[idx + 9]), u32::from(src[idx + 13])]);
-        let sb = u32x4::from([u32::from(src[idx + 2]), u32::from(src[idx + 6]),
-            u32::from(src[idx + 10]), u32::from(src[idx + 14])]);
-        let sa = u32x4::from([u32::from(src[idx + 3]), u32::from(src[idx + 7]),
-            u32::from(src[idx + 11]), u32::from(src[idx + 15])]);
-        let dr = u32x4::from([u32::from(dst[idx]), u32::from(dst[idx + 4]),
-            u32::from(dst[idx + 8]), u32::from(dst[idx + 12])]);
-        let dg = u32x4::from([u32::from(dst[idx + 1]), u32::from(dst[idx + 5]),
-            u32::from(dst[idx + 9]), u32::from(dst[idx + 13])]);
-        let db = u32x4::from([u32::from(dst[idx + 2]), u32::from(dst[idx + 6]),
-            u32::from(dst[idx + 10]), u32::from(dst[idx + 14])]);
-        let da = u32x4::from([u32::from(dst[idx + 3]), u32::from(dst[idx + 7]),
-            u32::from(dst[idx + 11]), u32::from(dst[idx + 15])]);
+        let sr = u32x4::from([
+            u32::from(src[idx]),
+            u32::from(src[idx + 4]),
+            u32::from(src[idx + 8]),
+            u32::from(src[idx + 12]),
+        ]);
+        let sg = u32x4::from([
+            u32::from(src[idx + 1]),
+            u32::from(src[idx + 5]),
+            u32::from(src[idx + 9]),
+            u32::from(src[idx + 13]),
+        ]);
+        let sb = u32x4::from([
+            u32::from(src[idx + 2]),
+            u32::from(src[idx + 6]),
+            u32::from(src[idx + 10]),
+            u32::from(src[idx + 14]),
+        ]);
+        let sa = u32x4::from([
+            u32::from(src[idx + 3]),
+            u32::from(src[idx + 7]),
+            u32::from(src[idx + 11]),
+            u32::from(src[idx + 15]),
+        ]);
+        let dr = u32x4::from([
+            u32::from(dst[idx]),
+            u32::from(dst[idx + 4]),
+            u32::from(dst[idx + 8]),
+            u32::from(dst[idx + 12]),
+        ]);
+        let dg = u32x4::from([
+            u32::from(dst[idx + 1]),
+            u32::from(dst[idx + 5]),
+            u32::from(dst[idx + 9]),
+            u32::from(dst[idx + 13]),
+        ]);
+        let db = u32x4::from([
+            u32::from(dst[idx + 2]),
+            u32::from(dst[idx + 6]),
+            u32::from(dst[idx + 10]),
+            u32::from(dst[idx + 14]),
+        ]);
+        let da = u32x4::from([
+            u32::from(dst[idx + 3]),
+            u32::from(dst[idx + 7]),
+            u32::from(dst[idx + 11]),
+            u32::from(dst[idx + 15]),
+        ]);
 
         // SIMD: all heavy multiplies
         let inv_sa = one - sa;

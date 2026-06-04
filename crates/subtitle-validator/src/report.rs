@@ -233,7 +233,11 @@ impl fmt::Display for OverlapWarning {
             self.event_b_idx,
             self.overlap_duration,
             self.overlap_start,
-            if self.karaoke_involved { " (karaoke)" } else { "" }
+            if self.karaoke_involved {
+                " (karaoke)"
+            } else {
+                ""
+            }
         )
     }
 }
@@ -419,7 +423,9 @@ impl ValidationReport {
     ///
     /// * `overlap` - The [`OverlapWarning`] to record.
     pub fn add_overlap(&mut self, overlap: OverlapWarning) {
-        if overlap.severity == OverlapSeverity::Critical || overlap.severity == OverlapSeverity::High {
+        if overlap.severity == OverlapSeverity::Critical
+            || overlap.severity == OverlapSeverity::High
+        {
             self.stats.critical_overlaps += 1;
         }
         self.stats.total_overlaps += 1;
@@ -430,7 +436,10 @@ impl ValidationReport {
     ///
     /// Errors indicate problems that prevent safe conversion to SUP/PGS format.
     pub fn errors(&self) -> Vec<&ValidationFinding> {
-        self.findings.iter().filter(|f| f.severity == Severity::Error).collect()
+        self.findings
+            .iter()
+            .filter(|f| f.severity == Severity::Error)
+            .collect()
     }
 
     /// Returns all findings with `Warning` severity.
@@ -438,7 +447,10 @@ impl ValidationReport {
     /// Warnings indicate potential issues that may affect rendering quality
     /// but do not block conversion.
     pub fn warnings(&self) -> Vec<&ValidationFinding> {
-        self.findings.iter().filter(|f| f.severity == Severity::Warning).collect()
+        self.findings
+            .iter()
+            .filter(|f| f.severity == Severity::Warning)
+            .collect()
     }
 
     /// Returns a one-line summary of the validation results.

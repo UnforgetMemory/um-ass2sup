@@ -109,7 +109,9 @@ mod tests {
         let cache = FrameCache::new(2);
 
         for i in 0..4 {
-            let key = FrameCacheKey { timestamp_ms: i as u64 * 1000 };
+            let key = FrameCacheKey {
+                timestamp_ms: i as u64 * 1000,
+            };
             cache.insert(key, test_frame((i as u64) * 1000));
         }
 
@@ -180,13 +182,17 @@ mod tests {
     fn test_cache_insert_past_capacity_evicts_multiple() {
         let cache = FrameCache::new(2);
         for i in 0..6 {
-            let key = FrameCacheKey { timestamp_ms: i as u64 * 1000 };
+            let key = FrameCacheKey {
+                timestamp_ms: i as u64 * 1000,
+            };
             cache.insert(key, test_frame(i as u64 * 1000));
         }
         assert_eq!(cache.len(), 2, "cache should never exceed max_entries");
         let present: Vec<_> = (0..6)
             .filter(|i| {
-                let k = FrameCacheKey { timestamp_ms: *i as u64 * 1000 };
+                let k = FrameCacheKey {
+                    timestamp_ms: *i as u64 * 1000,
+                };
                 cache.contains(&k)
             })
             .collect();
@@ -253,8 +259,16 @@ mod tests {
         k2.hash(&mut h2);
         k3.hash(&mut h3);
 
-        assert_eq!(h1.finish(), h2.finish(), "same keys should produce same hash");
-        assert_ne!(h1.finish(), h3.finish(), "different keys should produce different hashes");
+        assert_eq!(
+            h1.finish(),
+            h2.finish(),
+            "same keys should produce same hash"
+        );
+        assert_ne!(
+            h1.finish(),
+            h3.finish(),
+            "different keys should produce different hashes"
+        );
     }
 
     #[test]

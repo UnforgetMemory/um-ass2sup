@@ -1,6 +1,6 @@
-use subtitle_renderer::{FrameCache, FrameCacheKey, RenderedFrame, make_frame_key};
 use std::sync::Arc;
 use std::thread;
+use subtitle_renderer::{make_frame_key, FrameCache, FrameCacheKey, RenderedFrame};
 
 fn test_frame(pts_ms: u64) -> RenderedFrame {
     RenderedFrame {

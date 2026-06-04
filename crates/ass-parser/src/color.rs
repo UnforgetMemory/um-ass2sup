@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::error::ParseError;
+use std::fmt;
 
 /// ASS subtitle color in `&HAABBGGRR` format.
 ///
@@ -25,14 +25,34 @@ pub struct AssColor {
 
 impl AssColor {
     /// Fully transparent black (alpha=0, all channels 0).
-    pub const TRANSPARENT: Self = Self { alpha: 0, blue: 0, green: 0, red: 0 };
+    pub const TRANSPARENT: Self = Self {
+        alpha: 0,
+        blue: 0,
+        green: 0,
+        red: 0,
+    };
     /// Opaque white (alpha=0, B/G/R = 255).
-    pub const WHITE: Self = Self { alpha: 0, blue: 255, green: 255, red: 255 };
+    pub const WHITE: Self = Self {
+        alpha: 0,
+        blue: 255,
+        green: 255,
+        red: 255,
+    };
     /// Opaque black (alpha=0, all channels 0). Same bytes as `TRANSPARENT` but semantically different.
-    pub const BLACK: Self = Self { alpha: 0, blue: 0, green: 0, red: 0 };
+    pub const BLACK: Self = Self {
+        alpha: 0,
+        blue: 0,
+        green: 0,
+        red: 0,
+    };
 
     pub fn new(alpha: u8, blue: u8, green: u8, red: u8) -> Self {
-        Self { alpha, blue, green, red }
+        Self {
+            alpha,
+            blue,
+            green,
+            red,
+        }
     }
 
     /// Parses an ASS hex color string like `&HAABBGGRR` or `&HBBGGRR`.
@@ -44,17 +64,28 @@ impl AssColor {
     ///
     /// Returns [`ParseError::InvalidColor`] if the format is wrong or hex parsing fails.
     pub fn from_ass_hex(s: &str) -> Result<Self, ParseError> {
-        let s = s.strip_prefix("&H").ok_or_else(|| ParseError::InvalidColor(s.to_string()))?;
+        let s = s
+            .strip_prefix("&H")
+            .ok_or_else(|| ParseError::InvalidColor(s.to_string()))?;
         let s = s.strip_prefix("H").unwrap_or(s);
         let s = s.trim_end_matches('&');
         if s.len() != 8 {
             return Err(ParseError::InvalidColor(s.to_string()));
         }
-        let alpha = u8::from_str_radix(&s[0..2], 16).map_err(|_| ParseError::InvalidColor(s.to_string()))?;
-        let blue = u8::from_str_radix(&s[2..4], 16).map_err(|_| ParseError::InvalidColor(s.to_string()))?;
-        let green = u8::from_str_radix(&s[4..6], 16).map_err(|_| ParseError::InvalidColor(s.to_string()))?;
-        let red = u8::from_str_radix(&s[6..8], 16).map_err(|_| ParseError::InvalidColor(s.to_string()))?;
-        Ok(Self { alpha, blue, green, red })
+        let alpha = u8::from_str_radix(&s[0..2], 16)
+            .map_err(|_| ParseError::InvalidColor(s.to_string()))?;
+        let blue = u8::from_str_radix(&s[2..4], 16)
+            .map_err(|_| ParseError::InvalidColor(s.to_string()))?;
+        let green = u8::from_str_radix(&s[4..6], 16)
+            .map_err(|_| ParseError::InvalidColor(s.to_string()))?;
+        let red = u8::from_str_radix(&s[6..8], 16)
+            .map_err(|_| ParseError::InvalidColor(s.to_string()))?;
+        Ok(Self {
+            alpha,
+            blue,
+            green,
+            red,
+        })
     }
 
     /// Creates an opaque color from an ABGR u32 value (SSA v4 decimal color format).
@@ -70,12 +101,22 @@ impl AssColor {
 
     /// Creates an opaque color from RGB channels (alpha=0 in ASS convention = opaque).
     pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
-        Self { alpha: 0, blue: b, green: g, red: r }
+        Self {
+            alpha: 0,
+            blue: b,
+            green: g,
+            red: r,
+        }
     }
 
     /// Creates a color from RGBA channels (alpha uses ASS convention: 0=opaque, 255=transparent).
     pub fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { alpha: a, blue: b, green: g, red: r }
+        Self {
+            alpha: a,
+            blue: b,
+            green: g,
+            red: r,
+        }
     }
 
     /// Converts to standard `[R, G, B, A]` format where A=255 means fully opaque.
@@ -85,7 +126,10 @@ impl AssColor {
 
     /// Serializes to ASS hex format `&HAABBGGRR`.
     pub fn to_ass_hex(&self) -> String {
-        format!("&H{:02X}{:02X}{:02X}{:02X}", self.alpha, self.blue, self.green, self.red)
+        format!(
+            "&H{:02X}{:02X}{:02X}{:02X}",
+            self.alpha, self.blue, self.green, self.red
+        )
     }
 
     /// Returns a copy with the alpha channel replaced.

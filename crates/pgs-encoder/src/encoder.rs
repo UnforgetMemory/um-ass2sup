@@ -1,7 +1,7 @@
-use color_quantizer::QuantizedFrame;
-use crate::types::*;
-use crate::rle::{rle_encode, chunk_rle_data};
 use crate::color::build_palette;
+use crate::rle::{chunk_rle_data, rle_encode};
+use crate::types::*;
+use color_quantizer::QuantizedFrame;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -73,7 +73,12 @@ impl PgsEncoder {
     ///
     /// Produces a full display set (PCS+WDS+PDS+ODS+END) for the given frame.
     /// Returns a list of segments that can be serialized with [`Segment::to_bytes`].
-    pub fn encode_frame(&mut self, frame: &QuantizedFrame, pts_ms: u64, duration_ms: u64) -> Vec<Segment> {
+    pub fn encode_frame(
+        &mut self,
+        frame: &QuantizedFrame,
+        pts_ms: u64,
+        duration_ms: u64,
+    ) -> Vec<Segment> {
         let pts = self.ms_to_90khz(pts_ms);
         let dts = pts;
         let pts_end = self.ms_to_90khz(pts_ms + duration_ms);
@@ -101,7 +106,12 @@ impl PgsEncoder {
     ///
     /// Convenience wrapper around [`encode_frame`](Self::encode_frame) that serializes all segments
     /// to bytes in one call.
-    pub fn encode_frame_to_bytes(&mut self, frame: &QuantizedFrame, pts_ms: u64, duration_ms: u64) -> Vec<u8> {
+    pub fn encode_frame_to_bytes(
+        &mut self,
+        frame: &QuantizedFrame,
+        pts_ms: u64,
+        duration_ms: u64,
+    ) -> Vec<u8> {
         let segments = self.encode_frame(frame, pts_ms, duration_ms);
         let mut output = Vec::new();
         for seg in &segments {
@@ -133,13 +143,24 @@ impl PgsEncoder {
 
         let segments = if use_multi_window {
             self.build_multi_window_display_set(
-                frame, pts, dts, pts, &palette_entries, &rle,
-                composition_state, palette_changed,
+                frame,
+                pts,
+                dts,
+                pts,
+                &palette_entries,
+                &rle,
+                composition_state,
+                palette_changed,
             )
         } else {
             self.build_single_window_display_set(
-                frame, pts, dts, &palette_entries, &rle,
-                composition_state, palette_changed,
+                frame,
+                pts,
+                dts,
+                &palette_entries,
+                &rle,
+                composition_state,
+                palette_changed,
             )
         };
 
@@ -154,7 +175,8 @@ impl PgsEncoder {
     fn build_epoch_split_display_set(
         &self,
         frame: &QuantizedFrame,
-        pts: u64, dts: u64,
+        pts: u64,
+        dts: u64,
         composition_state: CompositionState,
         palette_changed: bool,
     ) -> Vec<Segment> {
@@ -189,8 +211,13 @@ impl PgsEncoder {
             };
 
             let band_segments = self.build_single_window_display_set(
-                &band_frame, pts, dts, &palette_entries, &band_rle,
-                band_state, palette_changed,
+                &band_frame,
+                pts,
+                dts,
+                &palette_entries,
+                &band_rle,
+                band_state,
+                palette_changed,
             );
             all_segments.extend(band_segments);
         }
@@ -202,7 +229,8 @@ impl PgsEncoder {
     fn build_single_window_display_set(
         &self,
         frame: &QuantizedFrame,
-        pts: u64, dts: u64,
+        pts: u64,
+        dts: u64,
         palette_entries: &[PaletteEntry],
         rle: &[u8],
         composition_state: CompositionState,
@@ -215,7 +243,8 @@ impl PgsEncoder {
 
         segments.push(Segment {
             segment_type: SegmentType::Pcs,
-            pts, dts,
+            pts,
+            dts,
             payload: SegmentPayload::Pcs(PcsPayload {
                 width: self.display_width,
                 height: self.display_height,
@@ -230,21 +259,26 @@ impl PgsEncoder {
                     window_id: self.window_id,
                     cropped: false,
                     forced: false,
-                    x: obj_x, y: obj_y,
-                    crop_x: 0, crop_y: 0,
-                    crop_w: 0, crop_h: 0,
+                    x: obj_x,
+                    y: obj_y,
+                    crop_x: 0,
+                    crop_y: 0,
+                    crop_w: 0,
+                    crop_h: 0,
                 }],
             }),
         });
 
         segments.push(Segment {
             segment_type: SegmentType::Wds,
-            pts, dts,
+            pts,
+            dts,
             payload: SegmentPayload::Wds(WdsPayload {
                 num_windows: 1,
                 windows: vec![WindowDef {
                     window_id: self.window_id,
-                    x: obj_x, y: obj_y,
+                    x: obj_x,
+                    y: obj_y,
                     width: frame.width as u16,
                     height: frame.height as u16,
                 }],
@@ -253,7 +287,8 @@ impl PgsEncoder {
 
         segments.push(Segment {
             segment_type: SegmentType::Pds,
-            pts, dts,
+            pts,
+            dts,
             payload: SegmentPayload::Pds(PdsPayload {
                 palette_id: self.palette_id,
                 version: self.frame_count as u8,
@@ -265,7 +300,8 @@ impl PgsEncoder {
         for (i, chunk) in chunks.iter().enumerate() {
             segments.push(Segment {
                 segment_type: SegmentType::Ods,
-                pts, dts,
+                pts,
+                dts,
                 payload: SegmentPayload::Ods(OdsPayload {
                     object_id: self.object_id,
                     object_version: self.object_version,
@@ -284,7 +320,9 @@ impl PgsEncoder {
     fn build_multi_window_display_set(
         &self,
         frame: &QuantizedFrame,
-        pts: u64, dts: u64, _pts_end: u64,
+        pts: u64,
+        dts: u64,
+        _pts_end: u64,
         palette_entries: &[PaletteEntry],
         _rle: &[u8],
         composition_state: CompositionState,
@@ -301,7 +339,8 @@ impl PgsEncoder {
 
         segments.push(Segment {
             segment_type: SegmentType::Pcs,
-            pts, dts,
+            pts,
+            dts,
             payload: SegmentPayload::Pcs(PcsPayload {
                 width: self.display_width,
                 height: self.display_height,
@@ -319,8 +358,10 @@ impl PgsEncoder {
                         forced: false,
                         x: ((i32::from(self.display_width) - frame.width as i32) / 2).max(0) as u16,
                         y: obj1_y,
-                        crop_x: 0, crop_y: 0,
-                        crop_w: 0, crop_h: 0,
+                        crop_x: 0,
+                        crop_y: 0,
+                        crop_w: 0,
+                        crop_h: 0,
                     },
                     ObjectComposition {
                         object_id: self.object_id + 1,
@@ -329,8 +370,10 @@ impl PgsEncoder {
                         forced: false,
                         x: ((i32::from(self.display_width) - frame.width as i32) / 2).max(0) as u16,
                         y: obj2_y,
-                        crop_x: 0, crop_y: 0,
-                        crop_w: 0, crop_h: 0,
+                        crop_x: 0,
+                        crop_y: 0,
+                        crop_w: 0,
+                        crop_h: 0,
                     },
                 ],
             }),
@@ -338,7 +381,8 @@ impl PgsEncoder {
 
         segments.push(Segment {
             segment_type: SegmentType::Wds,
-            pts, dts,
+            pts,
+            dts,
             payload: SegmentPayload::Wds(WdsPayload {
                 num_windows: 2,
                 windows: vec![
@@ -362,7 +406,8 @@ impl PgsEncoder {
 
         segments.push(Segment {
             segment_type: SegmentType::Pds,
-            pts, dts,
+            pts,
+            dts,
             payload: SegmentPayload::Pds(PdsPayload {
                 palette_id: self.palette_id,
                 version: self.frame_count as u8,
@@ -370,24 +415,38 @@ impl PgsEncoder {
             }),
         });
 
-        let rle_top = rle_encode(&frame.indices[..(frame.width * split_row) as usize], frame.width, u32::from(top_height));
+        let rle_top = rle_encode(
+            &frame.indices[..(frame.width * split_row) as usize],
+            frame.width,
+            u32::from(top_height),
+        );
         let rle_bottom = rle_encode(
             &frame.indices[(frame.width * split_row) as usize..],
-            frame.width, u32::from(bottom_height),
+            frame.width,
+            u32::from(bottom_height),
         );
 
-        for (obj_idx, (obj_rle, obj_id)) in [(rle_top, self.object_id), (rle_bottom, self.object_id + 1)].iter().enumerate() {
+        for (obj_idx, (obj_rle, obj_id)) in
+            [(rle_top, self.object_id), (rle_bottom, self.object_id + 1)]
+                .iter()
+                .enumerate()
+        {
             let chunks = chunk_rle_data(obj_rle, MAX_ODS_CHUNK);
             for (i, chunk) in chunks.iter().enumerate() {
                 segments.push(Segment {
                     segment_type: SegmentType::Ods,
-                    pts, dts,
+                    pts,
+                    dts,
                     payload: SegmentPayload::Ods(OdsPayload {
                         object_id: *obj_id,
                         object_version: self.object_version,
                         last_in_sequence: i == chunks.len() - 1,
                         width: frame.width as u16,
-                        height: if obj_idx == 0 { top_height } else { bottom_height },
+                        height: if obj_idx == 0 {
+                            top_height
+                        } else {
+                            bottom_height
+                        },
                         rle_data: chunk.clone(),
                     }),
                 });
@@ -492,9 +551,7 @@ pub fn frame_rate_code(fps: f64) -> u8 {
 /// `ms * 90000 * 1001 / 1000000` instead of `ms * 90` to avoid
 /// long-term PTS drift (~337ms/hour).
 fn is_ntsc_fps(fps: f64) -> bool {
-    (fps - 23.976).abs() < 0.01
-        || (fps - 29.97).abs() < 0.01
-        || (fps - 59.94).abs() < 0.01
+    (fps - 23.976).abs() < 0.01 || (fps - 29.97).abs() < 0.01 || (fps - 59.94).abs() < 0.01
 }
 
 /// Compute a hash of a palette for change detection.
