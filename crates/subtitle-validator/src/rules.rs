@@ -7,6 +7,9 @@ use crate::report::{
     ValidationReport, ValidationStage,
 };
 
+/// Runs all validation stages (encoding, structure, style, event, semantic)
+/// plus overlap detection against the parsed ASS file, returning a
+/// [`ValidationReport`] describing all findings and statistics.
 pub fn validate(ass: &AssFile, overlap_config: &OverlapConfig) -> ValidationReport {
     let mut report = ValidationReport::new();
 
@@ -47,7 +50,10 @@ fn validate_encoding(info: &ScriptInfo, report: &mut ValidationReport) {
             severity: Severity::Warning,
             line: None,
             column: None,
-            message: format!("Unrecognized ScriptType: '{}', expected v4.00+", info.script_type),
+            message: format!(
+                "Unrecognized ScriptType: '{}', expected v4.00+",
+                info.script_type
+            ),
             suggestion: Some("Set ScriptType to v4.00+ for ASS v4+".to_string()),
         });
     }
@@ -60,7 +66,10 @@ fn validate_encoding(info: &ScriptInfo, report: &mut ValidationReport) {
             severity: Severity::Error,
             line: None,
             column: None,
-            message: format!("Invalid PlayResX/PlayResY: {}x{}", info.play_res_x, info.play_res_y),
+            message: format!(
+                "Invalid PlayResX/PlayResY: {}x{}",
+                info.play_res_x, info.play_res_y
+            ),
             suggestion: Some("Set valid resolution, e.g. 1920x1080".to_string()),
         });
     }
@@ -128,7 +137,10 @@ fn validate_styles(styles: &[Style], report: &mut ValidationReport) {
                 severity: Severity::Warning,
                 line: None,
                 column: None,
-                message: format!("Style '{}' has invalid font size: {}", style.name, style.font_size),
+                message: format!(
+                    "Style '{}' has invalid font size: {}",
+                    style.name, style.font_size
+                ),
                 suggestion: Some("Set font_size > 0".to_string()),
             });
         }
@@ -269,9 +281,10 @@ fn validate_semantics(ass: &AssFile, report: &mut ValidationReport) {
     // V014: Karaoke events with missing karaoke tags
     for (i, event) in ass.events.iter().enumerate() {
         if event.has_karaoke() {
-            let has_k_tag = event.override_tags.iter().any(|t| {
-                matches!(t, OverrideTag::Karaoke { .. })
-            });
+            let has_k_tag = event
+                .override_tags
+                .iter()
+                .any(|t| matches!(t, OverrideTag::Karaoke { .. }));
             if !has_k_tag {
                 report.add_finding(ValidationFinding {
                     rule_id: RuleId::V014,
@@ -283,7 +296,9 @@ fn validate_semantics(ass: &AssFile, report: &mut ValidationReport) {
                         "Event #{}: karaoke segments detected without \\k override tag",
                         i
                     ),
-                    suggestion: Some("Add \\k<duration> override tag or remove karaoke segments".to_string()),
+                    suggestion: Some(
+                        "Add \\k<duration> override tag or remove karaoke segments".to_string(),
+                    ),
                 });
             }
         }
@@ -375,11 +390,7 @@ fn get_event_position(event: &Event, _play_res_x: u32, _play_res_y: u32) -> Even
 }
 
 /// Build an interval-sorted structure and check for overlaps
-pub fn detect_overlaps(
-    events: &[Event],
-    config: &OverlapConfig,
-    report: &mut ValidationReport,
-) {
+pub fn detect_overlaps(events: &[Event], config: &OverlapConfig, report: &mut ValidationReport) {
     let play_res_x = 1920u32; // Default for overlap estimation
     let play_res_y = 1080u32;
 
@@ -433,7 +444,8 @@ pub fn detect_overlaps(
             }
 
             // Determine severity
-            let severity = if visual_overlap && overlap_duration == event_a.duration_ms()
+            let severity = if visual_overlap
+                && overlap_duration == event_a.duration_ms()
                 && overlap_duration == event_b.duration_ms()
             {
                 OverlapSeverity::Critical // Full overlap at same position
@@ -532,7 +544,11 @@ mod tests {
         };
         let mut report = ValidationReport::new();
         validate_semantics(&ass, &mut report);
-        let v014: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V014).collect();
+        let v014: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.rule_id == RuleId::V014)
+            .collect();
         assert!(v014.is_empty(), "Non-karaoke event should not trigger V014");
     }
 
@@ -562,7 +578,11 @@ mod tests {
         .unwrap();
         let mut report = ValidationReport::new();
         validate_semantics(&ass, &mut report);
-        let v014: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V014).collect();
+        let v014: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.rule_id == RuleId::V014)
+            .collect();
         assert!(
             v014.is_empty(),
             "Parsed karaoke event with \\k tag should not trigger V014: {:?}",
@@ -602,7 +622,11 @@ mod tests {
         };
         let mut report = ValidationReport::new();
         validate_semantics(&ass, &mut report);
-        let v014: Vec<_> = report.findings.iter().filter(|f| f.rule_id == RuleId::V014).collect();
+        let v014: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.rule_id == RuleId::V014)
+            .collect();
         assert_eq!(v014.len(), 1, "Should trigger exactly one V014 warning");
         assert_eq!(v014[0].severity, Severity::Warning);
         assert_eq!(v014[0].stage, ValidationStage::Semantic);

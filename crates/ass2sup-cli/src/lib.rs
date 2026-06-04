@@ -1,4 +1,6 @@
 //! CLI application wiring all ass2sup crates together.
+
+#![warn(missing_docs)]
 //!
 //! This crate provides the command-line interface for converting ASS/SSA/SRT
 //! subtitle files to Blu-ray PGS/SUP format. It orchestrates parsing,
@@ -137,16 +139,23 @@ pub struct Args {
     pub to_bdn: bool,
 }
 
+/// Output display resolution parsed from `WIDTHxHEIGHT` strings.
 #[derive(Debug)]
 pub struct Resolution {
+    /// Display width in pixels.
     pub width: u32,
+    /// Display height in pixels.
     pub height: u32,
 }
 
+/// Per-file conversion statistics returned by [`convert_file`].
 #[derive(Debug)]
 pub struct ConversionStats {
+    /// Number of dialogue events processed from the input.
     pub events_processed: u64,
+    /// Number of PGS frames successfully encoded.
     pub frames_encoded: u64,
+    /// Size of the output SUP file in bytes.
     pub output_size: usize,
 }
 
@@ -156,7 +165,9 @@ pub enum CliError {
     /// Invalid resolution format or dimensions.
     #[error("Invalid resolution '{input}': {message}")]
     InvalidResolution {
+        /// The malformed input string the user provided.
         input: String,
+        /// Human-readable explanation of why the value is invalid.
         message: String,
     },
 
@@ -183,11 +194,21 @@ pub enum CliError {
     /// Batch conversion completed with some failures.
     #[error("Batch conversion: {successes} succeeded, {failures} failed")]
     BatchFailed {
+        /// Number of files that converted successfully.
         successes: usize,
+        /// Number of files that failed to convert.
         failures: usize,
     },
 }
 
+/// Parses a `WIDTHxHEIGHT` resolution string into a [`Resolution`].
+///
+/// Both width and height must be non-zero unsigned 32-bit integers.
+///
+/// # Errors
+///
+/// Returns `Err` with a human-readable message if the input is malformed,
+/// contains non-numeric components, or has a zero dimension.
 pub fn parse_resolution(s: &str) -> Result<Resolution, String> {
     let parts: Vec<&str> = s.split('x').collect();
     if parts.len() != 2 {
@@ -207,6 +228,12 @@ pub fn parse_resolution(s: &str) -> Result<Resolution, String> {
     Ok(Resolution { width, height })
 }
 
+/// Initialises the global `tracing` subscriber with the appropriate level filter.
+///
+/// Level selection:
+/// - `quiet`: `ERROR` only
+/// - `verbose`: `DEBUG`
+/// - otherwise: `INFO`
 pub fn setup_logging(verbose: bool, quiet: bool) {
     let level = if quiet {
         tracing::level_filters::LevelFilter::ERROR
@@ -224,6 +251,10 @@ pub fn setup_logging(verbose: bool, quiet: bool) {
         .init();
 }
 
+/// Resolves the user's color preference string into a boolean.
+///
+/// `always`/`never` force the decision; any other value (typically `"auto"`)
+/// defers to whether stdout is a TTY.
 pub fn should_use_color(color: &str) -> bool {
     match color {
         "always" => true,
@@ -232,6 +263,9 @@ pub fn should_use_color(color: &str) -> bool {
     }
 }
 
+/// Creates a styled `indicatif` progress bar with the cyan/blue theme used
+/// throughout the CLI. `len` is the total unit count; `message` is shown
+/// alongside the bar.
 pub fn create_progress_bar(len: u64, message: &str) -> ProgressBar {
     let pb = ProgressBar::new(len);
     pb.set_style(
@@ -270,7 +304,10 @@ pub fn collect_input_files(args: &Args) -> Vec<PathBuf> {
 /// Use glob crate to match files in current directory (non-recursive).
 fn collect_flat_glob(pattern: &str) -> Vec<PathBuf> {
     match glob(pattern) {
-        Ok(entries) => entries.filter_map(|e| e.ok()).filter(|e| e.is_file()).collect(),
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.is_file())
+            .collect(),
         Err(e) => {
             warn!("Invalid glob pattern '{}': {}", pattern, e);
             Vec::new()
@@ -304,6 +341,11 @@ fn collect_recursive_glob(pattern: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Converts a single subtitle file to the configured output format.
+///
+/// Handles format detection, validation (when enabled), render, quantize, and
+/// encode in a single pass. Returns [`ConversionStats`] describing what was
+/// processed, or an error string on failure.
 pub fn convert_file(
     input: &Path,
     output: &Path,
@@ -312,8 +354,8 @@ pub fn convert_file(
 ) -> Result<ConversionStats, String> {
     info!("Processing: {}", input.display());
 
-    let content = std::fs::read_to_string(input)
-        .map_err(|e| format!("Failed to read input file: {e}"))?;
+    let content =
+        std::fs::read_to_string(input).map_err(|e| format!("Failed to read input file: {e}"))?;
 
     let format = SubtitleFormat::detect(input).unwrap_or(SubtitleFormat::Ass);
     info!("Detected format: {:?}", format);
@@ -321,8 +363,7 @@ pub fn convert_file(
     let mut ass = match format {
         SubtitleFormat::Srt => ass_parser::srt::parse_srt(&content)
             .map_err(|e| format!("Failed to parse SRT subtitle: {e}"))?,
-        _ => AssFile::parse(&content)
-            .map_err(|e| format!("Failed to parse subtitle: {e}"))?,
+        _ => AssFile::parse(&content).map_err(|e| format!("Failed to parse subtitle: {e}"))?,
     };
 
     info!(
@@ -472,9 +513,9 @@ pub fn convert_file(
             frame_data
                 .par_iter()
                 .map(|(_event, frame_opt, _pts, _dur)| {
-                    frame_opt.as_ref().map(|frame| {
-                        quantizer.quantize(&frame.bitmap, frame.width, frame.height)
-                    })
+                    frame_opt
+                        .as_ref()
+                        .map(|frame| quantizer.quantize(&frame.bitmap, frame.width, frame.height))
                 })
                 .collect()
         } else {
@@ -526,8 +567,7 @@ pub fn convert_file(
     };
 
     let output_size = sup_data.len();
-    std::fs::write(output, &sup_data)
-        .map_err(|e| format!("Failed to write output: {e}"))?;
+    std::fs::write(output, &sup_data).map_err(|e| format!("Failed to write output: {e}"))?;
 
     info!(
         "Output: {} ({} bytes, {} frames)",
@@ -556,8 +596,8 @@ pub fn convert_to_bdn(
 ) -> Result<ConversionStats, String> {
     info!("Processing for BDN: {}", input.display());
 
-    let content = std::fs::read_to_string(input)
-        .map_err(|e| format!("Failed to read input file: {e}"))?;
+    let content =
+        std::fs::read_to_string(input).map_err(|e| format!("Failed to read input file: {e}"))?;
 
     let format = SubtitleFormat::detect(input).unwrap_or(SubtitleFormat::Ass);
     info!("Detected format: {:?}", format);
@@ -565,8 +605,7 @@ pub fn convert_to_bdn(
     let mut ass = match format {
         SubtitleFormat::Srt => ass_parser::srt::parse_srt(&content)
             .map_err(|e| format!("Failed to parse SRT subtitle: {e}"))?,
-        _ => AssFile::parse(&content)
-            .map_err(|e| format!("Failed to parse subtitle: {e}"))?,
+        _ => AssFile::parse(&content).map_err(|e| format!("Failed to parse subtitle: {e}"))?,
     };
 
     info!(
@@ -575,8 +614,7 @@ pub fn convert_to_bdn(
         ass.events.len()
     );
 
-    std::fs::create_dir_all(output_dir)
-        .map_err(|e| format!("Failed to create output dir: {e}"))?;
+    std::fs::create_dir_all(output_dir).map_err(|e| format!("Failed to create output dir: {e}"))?;
 
     let render_config = RenderConfig {
         width: res.width,
@@ -630,7 +668,11 @@ pub fn convert_to_bdn(
             let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
 
             // Convert quantizer Vec<Rgba> to Vec<[u8; 4]> for bdn-xml
-            let palette: Vec<[u8; 4]> = quantized.palette.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
+            let palette: Vec<[u8; 4]> = quantized
+                .palette
+                .iter()
+                .map(|c| [c.r, c.g, c.b, c.a])
+                .collect();
 
             let png_filename = format!("{:04}.png", i + 1);
             let png_path = output_dir.join(&png_filename);
@@ -665,11 +707,10 @@ pub fn convert_to_bdn(
         events_processed += 1;
     }
 
-    let xml = bdn_xml::generate_xml(&bdn)
-        .map_err(|e| format!("Failed to generate BDN XML: {e}"))?;
+    let xml =
+        bdn_xml::generate_xml(&bdn).map_err(|e| format!("Failed to generate BDN XML: {e}"))?;
     let xml_path = output_dir.join("BDN.xml");
-    std::fs::write(&xml_path, &xml)
-        .map_err(|e| format!("Failed to write BDN XML: {e}"))?;
+    std::fs::write(&xml_path, &xml).map_err(|e| format!("Failed to write BDN XML: {e}"))?;
 
     info!(
         "BDN output: {} ({} events, {} PNGs, ~{} bytes total)",
@@ -759,8 +800,7 @@ pub fn run(args: Args) -> Result<(), CliError> {
             } else {
                 PathBuf::from(stem)
             };
-            convert_to_bdn(input, &output_dir, &args, &res)
-                .map_err(CliError::Conversion)?;
+            convert_to_bdn(input, &output_dir, &args, &res).map_err(CliError::Conversion)?;
             info!("{} → {}/", input.display(), output_dir.display());
         }
         return Ok(());
@@ -770,7 +810,10 @@ pub fn run(args: Args) -> Result<(), CliError> {
         "ass2sup v{} - ASS/SRT to SUP/PGS converter",
         env!("CARGO_PKG_VERSION")
     );
-    info!("Resolution: {}x{}, FPS: {}", res.width, res.height, args.fps);
+    info!(
+        "Resolution: {}x{}, FPS: {}",
+        res.width, res.height, args.fps
+    );
 
     if inputs.len() == 1 {
         let input = &inputs[0];
@@ -810,7 +853,10 @@ pub fn run(args: Args) -> Result<(), CliError> {
         }
     }
 
-    let output_dir = args.output_dir.clone().unwrap_or_else(|| PathBuf::from("."));
+    let output_dir = args
+        .output_dir
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("."));
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir).map_err(|e| {
             CliError::CreateDirError(output_dir.display().to_string(), e.to_string())

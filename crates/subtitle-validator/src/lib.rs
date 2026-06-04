@@ -1,4 +1,6 @@
 //! # subtitle-validator
+
+#![warn(missing_docs)]
 //!
 //! ASS/SSA subtitle syntax validation and overlap detection for the ass2sup
 //! conversion pipeline. This crate checks subtitle files for structural errors,
@@ -23,7 +25,9 @@
 //! }
 //! ```
 
+/// Validation report types and statistics.
 pub mod report;
+/// Validation rule implementations.
 pub mod rules;
 
 use ass_parser::AssFile;

@@ -1,4 +1,6 @@
 //! Color quantization for ASS/PGS subtitle rendering.
+
+#![warn(missing_docs)]
 //!
 //! Reduces 32-bit RGBA frames to indexed-palette images with at most 255
 //! opaque colors, which is required by the PGS (Presentation Graphic Stream)
@@ -10,12 +12,12 @@
 //! [`quantize_with_palette`] enables palette reuse across consecutive frames
 //! to improve temporal compression in the final PGS stream.
 
-mod types;
-mod median_cut;
 mod dithering;
+mod median_cut;
+mod types;
 
-pub use types::{DitherMethod, QuantizedFrame, Rgba};
 pub use median_cut::find_nearest_index;
+pub use types::{DitherMethod, QuantizedFrame, Rgba};
 
 /// ASS subtitle color quantizer — reduces 32-bit RGBA frames to an
 /// indexed-palette image with at most 255 opaque colors plus one
@@ -119,11 +121,7 @@ impl Quantizer {
             .map(|c| Rgba::new(c[0], c[1], c[2], c[3]))
             .collect();
 
-        let opaque_pixels: Vec<Rgba> = pixels
-            .iter()
-            .filter(|p| p.a > 0)
-            .copied()
-            .collect();
+        let opaque_pixels: Vec<Rgba> = pixels.iter().filter(|p| p.a > 0).copied().collect();
 
         let mut palette = if opaque_pixels.len() <= self.max_colors {
             let mut deduped: Vec<Rgba> = Vec::new();
@@ -302,25 +300,35 @@ mod kdtree_parity_tests {
         }
 
         // Test 2: 2-color palette
-        let p2 = vec![
-            Rgba::new(0, 0, 0, 255),
-            Rgba::new(255, 255, 255, 255),
-        ];
+        let p2 = vec![Rgba::new(0, 0, 0, 255), Rgba::new(255, 255, 255, 255)];
         assert_eq!(find_nearest_index(&Rgba::new(0, 0, 0, 255), &p2), 0);
         assert_eq!(find_nearest_index(&Rgba::new(255, 255, 255, 255), &p2), 1);
 
         // Test 3: 8-color palette (typical median-cut output)
-        let p3: Vec<Rgba> = (0..8u8).map(|i| Rgba::new(i * 32, i * 16, 128, 255)).collect();
+        let p3: Vec<Rgba> = (0..8u8)
+            .map(|i| Rgba::new(i * 32, i * 16, 128, 255))
+            .collect();
         for c in &p3 {
             let idx = find_nearest_index(c, &p3);
-            assert_eq!(p3[idx as usize], *c, "color {:?} -> index {} = {:?}", c, idx, p3[idx as usize]);
+            assert_eq!(
+                p3[idx as usize], *c,
+                "color {:?} -> index {} = {:?}",
+                c, idx, p3[idx as usize]
+            );
         }
 
         // Test 4: 255-color palette (max PGS palette)
-        let p4: Vec<Rgba> = (0..255u32).map(|i| {
-            let i = i as u8;
-            Rgba::new(i.wrapping_mul(3), i.wrapping_mul(7), i.wrapping_mul(11), 255)
-        }).collect();
+        let p4: Vec<Rgba> = (0..255u32)
+            .map(|i| {
+                let i = i as u8;
+                Rgba::new(
+                    i.wrapping_mul(3),
+                    i.wrapping_mul(7),
+                    i.wrapping_mul(11),
+                    255,
+                )
+            })
+            .collect();
         for c in &p4 {
             let idx = find_nearest_index(c, &p4);
             assert_eq!(p4[idx as usize], *c);
@@ -329,12 +337,14 @@ mod kdtree_parity_tests {
         // Test 5: 64-color palette with 1024 random queries
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        let p5: Vec<Rgba> = (0..64u32).map(|i| {
-            let mut h = DefaultHasher::new();
-            i.hash(&mut h);
-            let v = h.finish();
-            Rgba::new((v >> 24) as u8, (v >> 16) as u8, (v >> 8) as u8, 255)
-        }).collect();
+        let p5: Vec<Rgba> = (0..64u32)
+            .map(|i| {
+                let mut h = DefaultHasher::new();
+                i.hash(&mut h);
+                let v = h.finish();
+                Rgba::new((v >> 24) as u8, (v >> 16) as u8, (v >> 8) as u8, 255)
+            })
+            .collect();
         for i in 0..1024u32 {
             let mut h = DefaultHasher::new();
             i.hash(&mut h);
@@ -342,15 +352,22 @@ mod kdtree_parity_tests {
             let q = Rgba::new((v >> 24) as u8, (v >> 16) as u8, (v >> 8) as u8, 255);
             let idx = find_nearest_index(&q, &p5);
             // Recompute linear scan to compare
-            let linear_idx = p5.iter().enumerate()
+            let linear_idx = p5
+                .iter()
+                .enumerate()
                 .min_by_key(|(_, p)| {
                     let dr = q.r as i32 - p.r as i32;
                     let dg = q.g as i32 - p.g as i32;
                     let db = q.b as i32 - p.b as i32;
-                    dr*dr + dg*dg + db*db
+                    dr * dr + dg * dg + db * db
                 })
-                .unwrap().0 as u8;
-            assert_eq!(idx, linear_idx, "query {:?} idx {} != linear {}", q, idx, linear_idx);
+                .unwrap()
+                .0 as u8;
+            assert_eq!(
+                idx, linear_idx,
+                "query {:?} idx {} != linear {}",
+                q, idx, linear_idx
+            );
         }
     }
 
@@ -360,18 +377,22 @@ mod kdtree_parity_tests {
         use std::hash::{Hash, Hasher};
         let width = 100u32;
         let height = 100u32;
-        let pixels: Vec<Rgba> = (0..(width*height)).map(|i| {
-            let mut h = DefaultHasher::new();
-            i.hash(&mut h);
-            let v = h.finish();
-            Rgba::new((v >> 24) as u8, (v >> 16) as u8, (v >> 8) as u8, 255)
-        }).collect();
+        let pixels: Vec<Rgba> = (0..(width * height))
+            .map(|i| {
+                let mut h = DefaultHasher::new();
+                i.hash(&mut h);
+                let v = h.finish();
+                Rgba::new((v >> 24) as u8, (v >> 16) as u8, (v >> 8) as u8, 255)
+            })
+            .collect();
         let rgba: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b, p.a]).collect();
         let q = Quantizer::new(64).with_dither(DitherMethod::None);
         let frame = q.quantize(&rgba, width, height);
 
         let mut h = DefaultHasher::new();
-        for c in &frame.palette { c.hash(&mut h); }
+        for c in &frame.palette {
+            c.hash(&mut h);
+        }
         frame.indices.hash(&mut h);
         let hash = format!("{:x}", h.finish());
         println!("KDTREE_E2E_HASH={}", hash);
@@ -435,12 +456,14 @@ mod dedup_parity_tests {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         use std::time::Instant;
-        let pixels: Vec<Rgba> = (0..1920 * 1080).map(|i| {
-            let mut h = DefaultHasher::new();
-            i.hash(&mut h);
-            let v = h.finish();
-            Rgba::new((v >> 24) as u8, (v >> 16) as u8, (v >> 8) as u8, 255)
-        }).collect();
+        let pixels: Vec<Rgba> = (0..1920 * 1080)
+            .map(|i| {
+                let mut h = DefaultHasher::new();
+                i.hash(&mut h);
+                let v = h.finish();
+                Rgba::new((v >> 24) as u8, (v >> 16) as u8, (v >> 8) as u8, 255)
+            })
+            .collect();
         let rgba: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b, p.a]).collect();
         let q = Quantizer::new(255).with_dither(DitherMethod::None);
         let start = Instant::now();

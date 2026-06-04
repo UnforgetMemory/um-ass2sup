@@ -19,10 +19,14 @@ impl BoundingBox {
             return None;
         }
         let mut bx = BoundingBox {
-            r_min: 255, r_max: 0,
-            g_min: 255, g_max: 0,
-            b_min: 255, b_max: 0,
-            a_min: 255, a_max: 0,
+            r_min: 255,
+            r_max: 0,
+            g_min: 255,
+            g_max: 0,
+            b_min: 255,
+            b_max: 0,
+            a_min: 255,
+            a_max: 0,
         };
         for p in pixels {
             bx.r_min = bx.r_min.min(p.r);
@@ -75,6 +79,13 @@ impl Cube {
     }
 }
 
+/// Reduces a slice of RGBA pixels to a palette of at most `max_colors` entries
+/// using the median-cut algorithm.
+///
+/// Recursively splits the bounding box with the longest colour-channel range
+/// at the median until the desired number of cubes is reached, then averages
+/// each cube to produce the final palette. Returns an empty `Vec` if
+/// `pixels` is empty or `max_colors` is zero.
 pub fn median_cut(pixels: &[Rgba], max_colors: usize) -> Vec<Rgba> {
     if pixels.is_empty() || max_colors == 0 {
         return Vec::new();
@@ -225,9 +236,7 @@ fn build_kdtree(indices: &[usize], palette: &[Rgba]) -> KdNode {
     let axis = longest_axis_of_indices(indices, palette);
 
     let mut sorted = indices.to_vec();
-    sorted.sort_by(|&a, &b| {
-        channel(&palette[a], axis).cmp(&channel(&palette[b], axis))
-    });
+    sorted.sort_by(|&a, &b| channel(&palette[a], axis).cmp(&channel(&palette[b], axis)));
 
     let mid = sorted.len() / 2;
     let threshold = channel(&palette[sorted[mid]], axis);

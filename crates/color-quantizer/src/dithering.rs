@@ -7,6 +7,13 @@ const BAYER_4X4: [[f64; 4]; 4] = [
     [15.0 / 16.0, 7.0 / 16.0, 13.0 / 16.0, 5.0 / 16.0],
 ];
 
+/// Applies Floyd–Steinberg error-diffusion dithering to an RGBA image,
+/// mapping each pixel to the nearest palette entry and distributing the
+/// quantization error to neighbouring pixels (7/16, 3/16, 5/16, 1/16 weights).
+///
+/// `transparent_index` is the palette index used to seed the output buffer
+/// and is written into transparent pixels. Returns a flat `Vec<u8>` of
+/// palette indices in row-major order.
 pub fn floyd_steinberg_dither(
     rgba: &[u8],
     width: u32,
@@ -87,6 +94,13 @@ pub fn floyd_steinberg_dither(
     indices
 }
 
+/// Applies 4×4 Bayer ordered dithering to an RGBA image by adding a fixed
+/// threshold (from the Bayer matrix) to each channel before palette mapping.
+///
+/// Produces a visible cross-hatch pattern but is much faster than
+/// Floyd–Steinberg. `transparent_index` seeds the output buffer and is
+/// written into transparent pixels. Returns a flat `Vec<u8>` of palette
+/// indices in row-major order.
 pub fn ordered_dither(
     rgba: &[u8],
     width: u32,
