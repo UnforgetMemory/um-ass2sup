@@ -573,7 +573,7 @@ Comment: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,This is a comment
 
     assert_eq!(report.stats.total_events, 4, "4 events total (3 dialogue + 1 comment)");
     assert_eq!(report.stats.total_styles, 2, "2 styles");
-    assert_eq!(report.stats.karaoke_events, 0, "karaoke_segments not populated by parser");
+    assert_eq!(report.stats.karaoke_events, 1, "1 event has karaoke tags");
 }
 
 // ─────────────────────── ValidationReport Methods ───────────────────────
