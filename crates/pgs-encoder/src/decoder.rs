@@ -593,7 +593,7 @@ mod tests {
         data[1] = 0x47;
         data[10] = 0x17;
         let mut payload = vec![6u8];
-        payload.extend(std::iter::repeat(0u8).take(48));
+        payload.extend(std::iter::repeat_n(0u8, 48));
         data[11] = ((payload.len() >> 8) & 0xFF) as u8;
         data[12] = (payload.len() & 0xFF) as u8;
         data.extend_from_slice(&payload);
