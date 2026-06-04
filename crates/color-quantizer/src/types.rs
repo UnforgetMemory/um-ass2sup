@@ -12,7 +12,7 @@
 /// let pixel = Rgba::new(255, 128, 0, 255); // opaque orange
 /// let transparent = Rgba::new(0, 0, 0, 0); // fully transparent
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rgba {
     /// Red channel.
     pub r: u8,

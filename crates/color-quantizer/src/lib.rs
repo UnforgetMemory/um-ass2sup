@@ -127,8 +127,9 @@ impl Quantizer {
 
         let mut palette = if opaque_pixels.len() <= self.max_colors {
             let mut deduped: Vec<Rgba> = Vec::new();
+            let mut seen: std::collections::HashSet<Rgba> = std::collections::HashSet::new();
             for p in &opaque_pixels {
-                if !deduped.contains(p) {
+                if seen.insert(*p) {
                     deduped.push(*p);
                 }
             }
@@ -284,4 +285,72 @@ pub fn quantize_with_palette(
     }
 
     quantizer.quantize(rgba, width, height)
+}
+
+#[cfg(test)]
+mod dedup_parity_tests {
+    use super::*;
+    use crate::types::Rgba;
+
+    #[test]
+    fn dedup_preserves_first_occurrence_order() {
+        // Direct test of the dedup pattern: first occurrence wins, order preserved
+        let pixels = vec![
+            Rgba::new(1, 2, 3, 255),
+            Rgba::new(4, 5, 6, 255),
+            Rgba::new(1, 2, 3, 255),  // dup of first
+            Rgba::new(7, 8, 9, 255),
+            Rgba::new(4, 5, 6, 255),  // dup of second
+            Rgba::new(1, 2, 3, 255),  // dup of first
+        ];
+        let max_colors = 10; // trigger small-palette dedup path
+        let q = Quantizer::new(max_colors);
+        let rgba: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b, p.a]).collect();
+        let frame = q.quantize(&rgba, pixels.len() as u32, 1);
+        // Expected palette: 3 unique colors (no transparent pixel in input,
+        // so transparent_index=0 but no transparent entry is appended)
+        assert_eq!(frame.palette_size(), 3);
+        // Palette entries should be the unique colors in first-occurrence order
+        assert_eq!(frame.palette[0], Rgba::new(1, 2, 3, 255));
+        assert_eq!(frame.palette[1], Rgba::new(4, 5, 6, 255));
+        assert_eq!(frame.palette[2], Rgba::new(7, 8, 9, 255));
+    }
+
+    #[test]
+    fn dedup_handles_all_same_color() {
+        // 100 pixels with max_colors=200 triggers the small-palette dedup path
+        let pixels = vec![Rgba::new(5, 5, 5, 255); 100];
+        let q = Quantizer::new(200);
+        let rgba: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b, p.a]).collect();
+        let frame = q.quantize(&rgba, 100, 1);
+        assert_eq!(frame.palette_size(), 1); // 1 unique opaque, no transparent pixel in input
+    }
+
+    #[test]
+    fn dedup_handles_empty() {
+        // max_colors=0 should short-circuit
+        let q = Quantizer::new(0);
+        let rgba: Vec<u8> = vec![];
+        let frame = q.quantize(&rgba, 0, 0);
+        assert_eq!(frame.palette_size(), 0);
+    }
+
+    #[test]
+    fn parity_bench() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let pixels: Vec<Rgba> = (0..1920 * 1080).map(|i| {
+            let mut h = DefaultHasher::new();
+            i.hash(&mut h);
+            let v = h.finish();
+            Rgba::new((v >> 24) as u8, (v >> 16) as u8, (v >> 8) as u8, 255)
+        }).collect();
+        let rgba: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b, p.a]).collect();
+        let q = Quantizer::new(255).with_dither(DitherMethod::None);
+        let frame = q.quantize(&rgba, 1920, 1080);
+        let mut h = DefaultHasher::new();
+        frame.palette.hash(&mut h);
+        frame.indices.hash(&mut h);
+        println!("PARITY_HASH={:x}", h.finish());
+    }
 }
