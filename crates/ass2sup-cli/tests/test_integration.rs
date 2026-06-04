@@ -926,7 +926,7 @@ fn test_parse_file_handles_srt() {
     let path = workspace_fixtures_dir().join("basic.srt");
     let ass = AssFile::parse_file(&path).expect("SRT via parse_file should succeed");
     assert!(
-        ass.events.len() > 0,
+        !ass.events.is_empty(),
         "SRT should produce events via parse_file (got 0)"
     );
 }

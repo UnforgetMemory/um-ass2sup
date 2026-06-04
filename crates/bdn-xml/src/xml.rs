@@ -182,8 +182,7 @@ pub fn ms_to_timecode(ms: u64, fps: f64) -> String {
 /// let indices = vec![0u8; 1920 * 1080];
 /// let png = generate_png(&palette, &indices, 1920, 1080).unwrap();
 /// ```
-pub fn generate_png(palette: &[[u8; 4]], indices: &[u8], width: u32, height: u32) -> Result<Vec<u8>, BdnError> {
-    use png::Encoder;
+pub fn generate_png(palette: &[[u8; 4]], indices: &[u8], width: u32, height: u32) -> Result<Vec<u8>, BdnError> {    use png::Encoder;
 
     let mut buf = Vec::new();
     {
@@ -228,6 +227,18 @@ pub fn generate_png(palette: &[[u8; 4]], indices: &[u8], width: u32, height: u32
 ///
 /// Returns [`BdnError::Png`] if PNG encoding fails, or an I/O error if the
 /// file cannot be written.
+pub fn save_frame_png(
+    path: &std::path::Path,
+    palette: &[[u8; 4]],
+    indices: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<(), BdnError> {
+    let data = generate_png(palette, indices, width, height)?;
+    std::fs::write(path, data)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,16 +309,4 @@ mod tests {
             assert!(frames < 23, "frame {frames} should be < 23 for 23.976 fps");
         }
     }
-}
-
-pub fn save_frame_png(
-    path: &std::path::Path,
-    palette: &[[u8; 4]],
-    indices: &[u8],
-    width: u32,
-    height: u32,
-) -> Result<(), BdnError> {
-    let data = generate_png(palette, indices, width, height)?;
-    std::fs::write(path, data)?;
-    Ok(())
 }

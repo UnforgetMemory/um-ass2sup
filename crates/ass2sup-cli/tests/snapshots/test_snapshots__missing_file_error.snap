@@ -1,0 +1,5 @@
+---
+source: crates/ass2sup-cli/tests/test_snapshots.rs
+expression: stderr.into_owned()
+---
+

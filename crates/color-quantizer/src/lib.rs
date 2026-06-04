@@ -360,7 +360,7 @@ mod kdtree_parity_tests {
         use std::hash::{Hash, Hasher};
         let width = 100u32;
         let height = 100u32;
-        let pixels: Vec<Rgba> = (0..(width*height) as u32).map(|i| {
+        let pixels: Vec<Rgba> = (0..(width*height)).map(|i| {
             let mut h = DefaultHasher::new();
             i.hash(&mut h);
             let v = h.finish();
@@ -390,13 +390,13 @@ mod dedup_parity_tests {
     #[test]
     fn dedup_preserves_first_occurrence_order() {
         // Direct test of the dedup pattern: first occurrence wins, order preserved
-        let pixels = vec![
+        let pixels = [
             Rgba::new(1, 2, 3, 255),
             Rgba::new(4, 5, 6, 255),
-            Rgba::new(1, 2, 3, 255),  // dup of first
+            Rgba::new(1, 2, 3, 255),
             Rgba::new(7, 8, 9, 255),
-            Rgba::new(4, 5, 6, 255),  // dup of second
-            Rgba::new(1, 2, 3, 255),  // dup of first
+            Rgba::new(4, 5, 6, 255),
+            Rgba::new(1, 2, 3, 255),
         ];
         let max_colors = 10; // trigger small-palette dedup path
         let q = Quantizer::new(max_colors);

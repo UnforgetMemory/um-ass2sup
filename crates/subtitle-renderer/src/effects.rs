@@ -186,10 +186,10 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 let top_idx = (top_y * w + x) * 4;
                 let bot_idx = (bot_y * w + x) * 4;
 
-                col_sum_r[x] = col_sum_r[x] - data[top_idx] as u32 + data[bot_idx] as u32;
-                col_sum_g[x] = col_sum_g[x] - data[top_idx + 1] as u32 + data[bot_idx + 1] as u32;
-                col_sum_b[x] = col_sum_b[x] - data[top_idx + 2] as u32 + data[bot_idx + 2] as u32;
-                col_sum_a[x] = col_sum_a[x] - data[top_idx + 3] as u32 + data[bot_idx + 3] as u32;
+                col_sum_r[x] = col_sum_r[x].saturating_sub(data[top_idx] as u32) + data[bot_idx] as u32;
+                col_sum_g[x] = col_sum_g[x].saturating_sub(data[top_idx + 1] as u32) + data[bot_idx + 1] as u32;
+                col_sum_b[x] = col_sum_b[x].saturating_sub(data[top_idx + 2] as u32) + data[bot_idx + 2] as u32;
+                col_sum_a[x] = col_sum_a[x].saturating_sub(data[top_idx + 3] as u32) + data[bot_idx + 3] as u32;
             }
 
             for x in 0..w {

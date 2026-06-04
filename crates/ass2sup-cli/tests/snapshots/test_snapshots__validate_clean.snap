@@ -1,0 +1,8 @@
+---
+source: crates/ass2sup-cli/tests/test_snapshots.rs
+expression: combined
+---
+exit=0
+stdout=
+
+stderr=
