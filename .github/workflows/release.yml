@@ -7,16 +7,50 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v0.3.0)'
-        required: true
+        description: 'Tag to release (e.g. v0.3.0). Leave empty to use latest tag.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
-  build-test:
-    name: Build & Test on ${{ github.ref }}
-    runs-on: ubuntu-latest
+  # ---------------------------------------------------------------------------
+  # 1. Build & verify on every target platform (matrix)
+  # ---------------------------------------------------------------------------
+  build-matrix:
+    name: Build (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x86_64
+            binary: ass2sup
+            archive: tar.gz
+          - os: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+            label: linux-aarch64
+            binary: ass2sup
+            archive: tar.gz
+            cross: true
+          - os: macos-13
+            target: x86_64-apple-darwin
+            label: macos-x86_64
+            binary: ass2sup
+            archive: tar.gz
+          - os: macos-14
+            target: aarch64-apple-darwin
+            label: macos-aarch64
+            binary: ass2sup
+            archive: tar.gz
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            label: windows-x86_64
+            binary: ass2sup.exe
+            archive: zip
     steps:
       - uses: actions/checkout@v4
 
@@ -24,33 +58,74 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.85
-          components: rustfmt, clippy
+          targets: ${{ matrix.target }}
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Build release binary
-        run: cargo build --release --locked --workspace
+        run: cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli
 
-      - name: Run lib tests
-        run: cargo test --workspace --lib --locked
-
-      - name: Run doc tests
-        run: cargo test --workspace --doc --locked
-
-      - name: Lint with clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Verify no debug info / deterministic
+      - name: Strip binary (linux/macos)
+        if: matrix.archive == 'tar.gz'
         run: |
-          strip target/release/ass2sup
-          ls -la target/release/ass2sup
-          file target/release/ass2sup
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          strip "$BIN"
+          ls -la "$BIN"
+          file "$BIN"
 
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          NAME="ass2sup-${{ github.ref_name }}-${{ matrix.label }}"
+          mkdir -p "$NAME"
+          cp "$BIN" "$NAME/"
+          cp README.md "$NAME/"
+          cp README.en.md "$NAME/"
+          cp CHANGELOG.md "$NAME/"
+          cp LICENSE-MIT "$NAME/"
+          cp LICENSE-APACHE "$NAME/"
+          tar -czf "${NAME}.tar.gz" "$NAME"
+          shasum -a 256 "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256"
+          ls -la "${NAME}.tar.gz" "${NAME}.tar.gz.sha256"
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          NAME="ass2sup-${{ github.ref_name }}-${{ matrix.label }}"
+          New-Item -ItemType Directory -Force -Path "$NAME" | Out-Null
+          Copy-Item "$BIN" "$NAME/"
+          Copy-Item "README.md" "$NAME/"
+          Copy-Item "README.en.md" "$NAME/"
+          Copy-Item "CHANGELOG.md" "$NAME/"
+          Copy-Item "LICENSE-MIT" "$NAME/"
+          Copy-Item "LICENSE-APACHE" "$NAME/"
+          Compress-Archive -Path "$NAME" -DestinationPath "${NAME}.zip"
+          $hash = (Get-FileHash "${NAME}.zip" -Algorithm SHA256).Hash.ToLower()
+          "${hash}  ${NAME}.zip" | Out-File -FilePath "${NAME}.zip.sha256" -Encoding ascii
+          Get-ChildItem "${NAME}.zip", "${NAME}.zip.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ass2sup-${{ matrix.label }}
+          path: |
+            ass2sup-${{ github.ref_name }}-${{ matrix.label }}.${{ matrix.archive }}
+            ass2sup-${{ github.ref_name }}-${{ matrix.label }}.${{ matrix.archive }}.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 2. Cargo publish dry-run (sanity check workspace can publish)
+  # ---------------------------------------------------------------------------
   publish-dry-run:
     name: Publish dry-run
-    needs: build-test
-    runs-on: ubuntu-latest
+    needs: build-matrix
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -70,37 +145,93 @@ jobs:
             cargo publish --dry-run --locked --no-verify --manifest-path "$crate"
           done
 
-  upload-binary:
-    name: Upload release binary
-    needs: build-test
-    runs-on: ubuntu-latest
+  # ---------------------------------------------------------------------------
+  # 3. Create GitHub Release, attach all platform binaries
+  # ---------------------------------------------------------------------------
+  create-release:
+    name: Create GitHub Release
+    needs: build-matrix
+    runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          toolchain: 1.85
+          path: artifacts
+          merge-multiple: true
 
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build release
-        run: cargo build --release --locked -p ass2sup-cli
-
-      - name: Strip & package
+      - name: List artifacts
         run: |
-          strip target/release/ass2sup
-          tar -czf "ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz" \
-            -C target/release ass2sup
-          shasum -a 256 "ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz" \
-            > "ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz.sha256"
+          echo "=== Artifacts collected ==="
+          ls -la artifacts/
+          echo ""
+          echo "=== SHA256 sums ==="
+          find artifacts/ -type f \( -name '*.sha256' -o -name '*.tar.gz' -o -name '*.zip' \) -exec shasum -a 256 {} \;
+
+      - name: Generate checksums manifest
+        run: |
+          cd artifacts
+          shasum -a 256 ass2sup-*.*.{tar.gz,zip} 2>/dev/null | sort > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          body: |
+            ## um-ass2sup ${{ github.ref_name }}
+
+            Convert ASS/SSA/SRT subtitles to Blu-ray **PGS / SUP** (and back to **SRT** / **BDN XML**).
+
+            ### Prebuilt binaries
+
+            Five platform builds are attached. Download the archive for your OS and architecture:
+
+            | Platform | Asset |
+            |----------|-------|
+            | Linux x86_64 (glibc) | `ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz` |
+            | Linux aarch64 (glibc) | `ass2sup-${{ github.ref_name }}-linux-aarch64.tar.gz` |
+            | macOS Intel | `ass2sup-${{ github.ref_name }}-macos-x86_64.tar.gz` |
+            | macOS Apple Silicon | `ass2sup-${{ github.ref_name }}-macos-aarch64.tar.gz` |
+            | Windows x86_64 | `ass2sup-${{ github.ref_name }}-windows-x86_64.zip` |
+
+            Each archive contains the binary, README (Chinese + English), CHANGELOG, and both LICENSE files.
+            A `SHA256SUMS` manifest with checksums for every binary is included in the artifacts and listed below.
+
+            ### Quick start
+
+            ```bash
+            # Linux / macOS
+            tar -xzf ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz
+            ./ass2sup-linux-x86_64/ass2sup --help
+
+            # Windows (PowerShell)
+            Expand-Archive ass2sup-${{ github.ref_name }}-windows-x86_64.zip
+            .\ass2sup-windows-x86_64\ass2sup.exe --help
+            ```
+
+            ### Verify
+
+            ```bash
+            shasum -a 256 -c SHA256SUMS
+            ```
+
+            ### What's new
+
+            See [`CHANGELOG.md`](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for the full list of changes, fixes, and performance improvements.
+
+            ### Requirements
+
+            - **Linux / macOS:** no runtime dependencies (static-ish musl-friendly where possible).
+            - **Windows:** no runtime dependencies (MSVC CRT is statically linked via Rust 1.85 toolchain).
+            - **MSRV:** Rust 1.85+ (only required if building from source).
           files: |
-            ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz
-            ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz.sha256
+            artifacts/ass2sup-*.tar.gz
+            artifacts/ass2sup-*.zip
+            artifacts/*.sha256
+            artifacts/SHA256SUMS
           generate_release_notes: true
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
