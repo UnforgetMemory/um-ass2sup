@@ -269,11 +269,13 @@ pub fn collect_input_files(args: &Args) -> Vec<PathBuf> {
 
 /// Use glob crate to match files in current directory (non-recursive).
 fn collect_flat_glob(pattern: &str) -> Vec<PathBuf> {
-    glob(pattern)
-        .expect("Invalid glob pattern")
-        .filter_map(|e| e.ok())
-        .filter(|e| e.is_file())
-        .collect()
+    match glob(pattern) {
+        Ok(entries) => entries.filter_map(|e| e.ok()).filter(|e| e.is_file()).collect(),
+        Err(e) => {
+            warn!("Invalid glob pattern '{}': {}", pattern, e);
+            Vec::new()
+        }
+    }
 }
 
 /// Use walkdir to traverse directories, filtering filenames with the glob pattern.
@@ -285,7 +287,13 @@ fn collect_recursive_glob(pattern: &str) -> Vec<PathBuf> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| pattern.to_string());
 
-    let globber = glob::Pattern::new(&file_pattern).expect("Invalid glob pattern");
+    let globber = match glob::Pattern::new(&file_pattern) {
+        Ok(p) => p,
+        Err(e) => {
+            warn!("Invalid glob pattern '{}': {}", file_pattern, e);
+            return Vec::new();
+        }
+    };
 
     WalkDir::new(base_dir)
         .into_iter()
@@ -307,11 +315,15 @@ pub fn convert_file(
     let content = std::fs::read_to_string(input)
         .map_err(|e| format!("Failed to read input file: {e}"))?;
 
-    let format = SubtitleFormat::detect(input);
+    let format = SubtitleFormat::detect(input).unwrap_or(SubtitleFormat::Ass);
     info!("Detected format: {:?}", format);
 
-    let mut ass = AssFile::parse(&content)
-        .map_err(|e| format!("Failed to parse subtitle: {e}"))?;
+    let mut ass = match format {
+        SubtitleFormat::Srt => ass_parser::srt::parse_srt(&content)
+            .map_err(|e| format!("Failed to parse SRT subtitle: {e}"))?,
+        _ => AssFile::parse(&content)
+            .map_err(|e| format!("Failed to parse subtitle: {e}"))?,
+    };
 
     info!(
         "Parsed: {} styles, {} events",
@@ -527,8 +539,15 @@ pub fn convert_to_bdn(
     let content = std::fs::read_to_string(input)
         .map_err(|e| format!("Failed to read input file: {e}"))?;
 
-    let mut ass = AssFile::parse(&content)
-        .map_err(|e| format!("Failed to parse subtitle: {e}"))?;
+    let format = SubtitleFormat::detect(input).unwrap_or(SubtitleFormat::Ass);
+    info!("Detected format: {:?}", format);
+
+    let mut ass = match format {
+        SubtitleFormat::Srt => ass_parser::srt::parse_srt(&content)
+            .map_err(|e| format!("Failed to parse SRT subtitle: {e}"))?,
+        _ => AssFile::parse(&content)
+            .map_err(|e| format!("Failed to parse subtitle: {e}"))?,
+    };
 
     info!(
         "Parsed: {} styles, {} events",

@@ -6,6 +6,7 @@
 use ass_parser::AssFile;
 use color_quantizer::Quantizer;
 use pgs_encoder::PgsEncoder;
+use std::path::PathBuf;
 use subtitle_renderer::{RenderConfig, Renderer};
 use subtitle_validator::validate;
 
@@ -911,6 +912,63 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,Test";
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SRT Dispatch Tests (RED - these fail before the fix)
+// ═══════════════════════════════════════════════════════════════════
+
+fn workspace_fixtures_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures")
+}
+
+#[test]
+fn test_parse_file_handles_srt() {
+    let path = workspace_fixtures_dir().join("basic.srt");
+    let ass = AssFile::parse_file(&path).expect("SRT via parse_file should succeed");
+    assert!(
+        ass.events.len() > 0,
+        "SRT should produce events via parse_file (got 0)"
+    );
+}
+
+#[test]
+fn test_cli_convert_srt_to_sup_produces_nonzero_output() {
+    use assert_cmd::Command;
+    let tmp = std::env::temp_dir().join("h1_srt_test.sup");
+    let _ = std::fs::remove_file(&tmp);
+    Command::cargo_bin("ass2sup")
+        .unwrap()
+        .args([
+            workspace_fixtures_dir().join("basic.srt").to_str().unwrap(),
+            "-o",
+        ])
+        .arg(&tmp)
+        .assert()
+        .success();
+    let metadata = std::fs::metadata(&tmp).expect("output should exist");
+    assert!(metadata.len() > 0, "SRT conversion must produce > 0 bytes");
+    let _ = std::fs::remove_file(&tmp);
+}
+
+#[test]
+fn test_cli_convert_chinese_srt_produces_nonzero_output() {
+    use assert_cmd::Command;
+    let tmp = std::env::temp_dir().join("h1_cn_srt_test.sup");
+    let _ = std::fs::remove_file(&tmp);
+    Command::cargo_bin("ass2sup")
+        .unwrap()
+        .args([
+            workspace_fixtures_dir().join("chinese.srt").to_str().unwrap(),
+            "-o",
+        ])
+        .arg(&tmp)
+        .assert()
+        .success();
+    let metadata = std::fs::metadata(&tmp).expect("output should exist");
+    assert!(metadata.len() > 0, "Chinese SRT must produce > 0 bytes");
+    let _ = std::fs::remove_file(&tmp);
+}
+
 #[test]
 fn test_render_with_negative_duration() {
     let ass = "\
@@ -932,4 +990,26 @@ Dialogue: 0,0:00:05.00,0:00:01.00,Default,,0,0,0,,Reverse Time";
     let ass = result.unwrap();
     let renderer = Renderer::new(RenderConfig::default());
     let _frame = renderer.render_ass(&ass, 3000);
+}
+
+#[test]
+fn test_invalid_glob_does_not_panic() {
+    use assert_cmd::Command;
+    // Before fix: binary panics on bad glob
+    // After fix: graceful "No input files found" or similar error, exit code != 0 but NO panic
+    let output = Command::cargo_bin("ass2sup")
+        .unwrap()
+        .args(["--glob", "[invalid-glob-pattern"])
+        .output()
+        .expect("binary should run");
+
+    // The binary should NOT panic. Panics in Rust print "thread 'main' panicked" to stderr.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("panicked") && !stderr.contains("Invalid glob pattern: "),
+        "Binary should not panic on invalid glob, but stderr was: {}",
+        stderr
+    );
+    // Exit code should be non-zero (no files found)
+    assert!(!output.status.success(), "Binary should exit non-zero when no files found");
 }

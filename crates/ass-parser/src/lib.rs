@@ -284,7 +284,10 @@ impl AssFile {
     pub fn parse_file(path: &Path) -> Result<Self, ParseError> {
         let content = std::fs::read_to_string(path)?;
         let format = SubtitleFormat::detect(path).unwrap_or(SubtitleFormat::Ass);
-        let mut ass = Self::parse(&content)?;
+        let mut ass = match format {
+            SubtitleFormat::Srt => crate::srt::parse_srt(&content)?,
+            _ => Self::parse(&content)?,
+        };
         ass.format = format;
         Ok(ass)
     }
