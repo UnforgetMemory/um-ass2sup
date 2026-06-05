@@ -37,11 +37,6 @@ jobs:
             archive: tar.gz
             cross: true
             strip_tool: aarch64-linux-gnu-strip
-          - os: macos-13
-            target: x86_64-apple-darwin
-            label: macos-x86_64
-            binary: ass2sup
-            archive: tar.gz
           - os: macos-14
             target: aarch64-apple-darwin
             label: macos-aarch64
@@ -202,14 +197,13 @@ jobs:
 
             ### Prebuilt binaries
 
-            Five platform builds are attached. Download the archive for your OS and architecture:
+            Four platform builds are attached. Download the archive for your OS and architecture:
 
             | Platform | Asset |
             |----------|-------|
             | Linux x86_64 (glibc) | `ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz` |
             | Linux aarch64 (glibc) | `ass2sup-${{ github.ref_name }}-linux-aarch64.tar.gz` |
-            | macOS Intel | `ass2sup-${{ github.ref_name }}-macos-x86_64.tar.gz` |
-            | macOS Apple Silicon | `ass2sup-${{ github.ref_name }}-macos-aarch64.tar.gz` |
+            | macOS (Apple Silicon, runs Intel via Rosetta 2) | `ass2sup-${{ github.ref_name }}-macos-aarch64.tar.gz` |
             | Windows x86_64 | `ass2sup-${{ github.ref_name }}-windows-x86_64.zip` |
 
             Each archive contains the binary, README (Chinese + English), CHANGELOG, and both LICENSE files.
