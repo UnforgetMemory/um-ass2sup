@@ -364,7 +364,17 @@ fn parse_single_tag(s: &str) -> Option<OverrideTag> {
             .split(',')
             .filter_map(|n| n.trim().parse().ok())
             .collect();
-        if nums.len() >= 2 {
+        if nums.len() >= 7 {
+            return Some(OverrideTag::FadeComplex {
+                alpha_start: nums[0] as u8,
+                alpha_mid: nums[1] as u8,
+                alpha_end: nums[2] as u8,
+                t1: nums[3],
+                t2: nums[4],
+                t3: nums[5],
+                t4: nums[6],
+            });
+        } else if nums.len() >= 2 {
             return Some(OverrideTag::Fade {
                 duration_in: nums[0],
                 duration_out: nums[1],

@@ -120,11 +120,11 @@ impl PgsEncoder {
         output
     }
 
-    pub fn build_display_set(&self, frame: &QuantizedFrame, pts: u64, dts: u64) -> Vec<Segment> {
+    pub fn build_display_set(&mut self, frame: &QuantizedFrame, pts: u64, dts: u64) -> Vec<Segment> {
         let palette_entries = build_palette(&frame.palette);
         let palette_hash = hash_palette(&palette_entries);
 
-        let rle = rle_encode(&frame.indices, frame.width, frame.height);
+        let rle = rle_encode(&frame.indices, frame.width, frame.height, frame.transparent_index);
         let rle_hash = hash_bytes(&rle);
 
         let palette_changed = self.prev_palette_hash != Some(palette_hash);
@@ -165,11 +165,14 @@ impl PgsEncoder {
         };
 
         let total_size: usize = segments.iter().map(|s| s.to_bytes().len()).sum();
-        if total_size > MAX_DECODE_BUFFER * 3 / 4 {
+        let result = if total_size > MAX_DECODE_BUFFER * 3 / 4 {
             self.build_epoch_split_display_set(frame, pts, dts, composition_state, palette_changed)
         } else {
             segments
-        }
+        };
+        self.prev_palette_hash = Some(palette_hash);
+        self.prev_object_rle_hash = Some(rle_hash);
+        result
     }
 
     fn build_epoch_split_display_set(
@@ -203,7 +206,7 @@ impl PgsEncoder {
                 transparent_index: frame.transparent_index,
             };
 
-            let band_rle = rle_encode(&band_frame.indices, band_frame.width, band_frame.height);
+            let band_rle = rle_encode(&band_frame.indices, band_frame.width, band_frame.height, band_frame.transparent_index);
             let band_state = if band_idx == 0 {
                 composition_state
             } else {
@@ -251,7 +254,7 @@ impl PgsEncoder {
                 frame_rate: self.frame_rate,
                 composition_number: self.composition_number,
                 composition_state,
-                palette_update: !palette_changed && self.frame_count > 0,
+                palette_update: palette_changed,
                 palette_id: self.palette_id,
                 num_objects: 1,
                 compositions: vec![ObjectComposition {
@@ -328,7 +331,7 @@ impl PgsEncoder {
         composition_state: CompositionState,
         palette_changed: bool,
     ) -> Vec<Segment> {
-        let split_row = self.find_split_row(&frame.indices, frame.width, frame.height);
+        let split_row = self.find_split_row(&frame.indices, frame.width, frame.height, frame.transparent_index);
         let top_height = split_row as u16;
         let bottom_height = (frame.height as u16).saturating_sub(top_height);
 
@@ -347,7 +350,7 @@ impl PgsEncoder {
                 frame_rate: self.frame_rate,
                 composition_number: self.composition_number,
                 composition_state,
-                palette_update: !palette_changed && self.frame_count > 0,
+                palette_update: palette_changed,
                 palette_id: self.palette_id,
                 num_objects: 2,
                 compositions: vec![
@@ -419,11 +422,13 @@ impl PgsEncoder {
             &frame.indices[..(frame.width * split_row) as usize],
             frame.width,
             u32::from(top_height),
+            frame.transparent_index,
         );
         let rle_bottom = rle_encode(
             &frame.indices[(frame.width * split_row) as usize..],
             frame.width,
             u32::from(bottom_height),
+            frame.transparent_index,
         );
 
         for (obj_idx, (obj_rle, obj_id)) in
@@ -456,7 +461,7 @@ impl PgsEncoder {
         segments
     }
 
-    fn find_split_row(&self, indices: &[u8], width: u32, height: u32) -> u32 {
+    fn find_split_row(&self, indices: &[u8], width: u32, height: u32, transparent_index: u8) -> u32 {
         let mid = height / 2;
         let mut best_row = mid;
         let mut best_score = 0u32;
@@ -470,7 +475,7 @@ impl PgsEncoder {
             if end > indices.len() || offset >= indices.len() {
                 continue;
             }
-            let transparent_count = indices[offset..end].iter().filter(|&&c| c == 0).count() as u32;
+            let transparent_count = indices[offset..end].iter().filter(|&&c| c == transparent_index).count() as u32;
             if transparent_count > best_score {
                 best_score = transparent_count;
                 best_row = row;

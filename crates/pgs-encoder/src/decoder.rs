@@ -394,6 +394,54 @@ pub fn verify_roundtrip(original: &[u8]) -> Result<(), String> {
         }
     }
 
+    // PGS spec enforcement: the FIRST display set must advertise
+    // `palette_update = true`. Otherwise the player never loads any palette
+    // and every subsequent subtitle is lost — this is the "unusable SUP"
+    // bug the encoder regression of v0.3.2 was hardening the verifier to
+    // prevent.
+    if let Some(first_ds) = display_sets.first() {
+        for seg in &first_ds.segments {
+            if let ParsedPayload::PresentationComposition {
+                palette_update: false,
+                ..
+            } = &seg.payload
+            {
+                return Err(
+                    "first display set has palette_update=false; player will never load any palette"
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    // PGS spec enforcement: if a PCS advertises `palette_update = true`,
+    // the SAME display set must contain a PDS. Otherwise the player is
+    // told to load a new palette that isn't there.
+    for (i, ds) in display_sets.iter().enumerate() {
+        let mut pcs_advertises_palette_update = false;
+        let mut has_pds = false;
+        for seg in &ds.segments {
+            match &seg.payload {
+                ParsedPayload::PresentationComposition {
+                    palette_update, ..
+                } => {
+                    if *palette_update {
+                        pcs_advertises_palette_update = true;
+                    }
+                }
+                ParsedPayload::PaletteDefinition { .. } => {
+                    has_pds = true;
+                }
+                _ => {}
+            }
+        }
+        if pcs_advertises_palette_update && !has_pds {
+            return Err(format!(
+                "display set {i} has PCS palette_update=true but contains no PDS"
+            ));
+        }
+    }
+
     Ok(())
 }
 
@@ -522,6 +570,99 @@ mod tests {
         data[10] = 0x14; // PDS (not END)
         let result = verify_roundtrip(&data);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_roundtrip_rejects_first_set_palette_update_false() {
+        // Regression guard for the 0.3.2 "unusable SUP" fix: a SUP whose
+        // FIRST display set has `palette_update = false` will never have its
+        // palette loaded by the player. `verify_roundtrip` must catch this
+        // even if the encoder regresses.
+        use crate::encoder::PgsEncoder;
+        use color_quantizer::{QuantizedFrame, Rgba};
+
+        let mut enc = PgsEncoder::new(1920, 1080, 23.976);
+        let frame = QuantizedFrame {
+            width: 4,
+            height: 2,
+            palette: vec![Rgba::new(0, 0, 0, 0), Rgba::new(255, 0, 0, 255)],
+            indices: vec![1; 8],
+            transparent_index: 0,
+        };
+        let mut sup = enc.encode_frame_to_bytes(&frame, 0, 1000);
+
+        verify_roundtrip(&sup).expect("freshly encoded SUP must pass verify_roundtrip");
+
+        // The first display set's PCS is the very first segment. Layout:
+        //   [0..2]   "PG" magic
+        //   [2..10]  PTS+DTS
+        //   [10]     segment type (0x16 = PCS)
+        //   [11..13] payload size (BE u16)
+        //   [13..21] PCS payload: width(2) + height(2) + frame_rate(1) +
+        //             composition_number(2) + composition_state(1) =
+        //             8 bytes
+        //   [21]     palette_update_high_bit | palette_id_low_7
+        assert_ne!(
+            sup[21] & 0x80,
+            0,
+            "precondition: freshly encoded first PCS must have palette_update = true"
+        );
+        sup[21] &= 0x7F;
+
+        let err = verify_roundtrip(&sup)
+            .expect_err("verify_roundtrip must reject first-set palette_update=false");
+        assert!(
+            err.contains("palette_update"),
+            "error must mention palette_update, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_verify_roundtrip_rejects_palette_update_without_pds() {
+        // Regression guard: a PCS that advertises `palette_update = true`
+        // but whose display set has no PDS is malformed — the player looks
+        // for a palette update that isn't there. Strip the PDS segment from
+        // a freshly encoded SUP and assert `verify_roundtrip` rejects it.
+        use crate::encoder::PgsEncoder;
+        use color_quantizer::{QuantizedFrame, Rgba};
+
+        let mut enc = PgsEncoder::new(1920, 1080, 23.976);
+        let frame = QuantizedFrame {
+            width: 4,
+            height: 2,
+            palette: vec![Rgba::new(0, 0, 0, 0), Rgba::new(255, 0, 0, 255)],
+            indices: vec![1; 8],
+            transparent_index: 0,
+        };
+        let sup = enc.encode_frame_to_bytes(&frame, 0, 1000);
+
+        verify_roundtrip(&sup).expect("freshly encoded SUP must pass verify_roundtrip");
+
+        let mut stripped = Vec::with_capacity(sup.len());
+        let mut i = 0;
+        while i < sup.len() {
+            assert!(i + 13 <= sup.len(), "truncated segment header at {i}");
+            let seg_type = sup[i + 10];
+            let seg_size = u16::from_be_bytes([sup[i + 11], sup[i + 12]]) as usize;
+            let seg_total = 13 + seg_size;
+            assert!(
+                i + seg_total <= sup.len(),
+                "truncated segment payload at {i}"
+            );
+            if seg_type != 0x14 {
+                stripped.extend_from_slice(&sup[i..i + seg_total]);
+            }
+            i += seg_total;
+        }
+
+        assert_ne!(stripped, sup, "test bug: PDS was not stripped");
+
+        let err = verify_roundtrip(&stripped)
+            .expect_err("verify_roundtrip must reject palette_update=true without PDS");
+        assert!(
+            err.contains("no PDS"),
+            "error must mention missing PDS, got: {err}"
+        );
     }
 
     #[test]

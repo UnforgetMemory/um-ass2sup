@@ -93,7 +93,7 @@ fn test_rle_all_same_color_maximum_compression() {
     let height = 1u32;
     let indices = vec![5u8; 100];
 
-    let encoded = rle_encode(&indices, width, height);
+    let encoded = rle_encode(&indices, width, height, 0);
 
     // Should be very compact: color byte + run length encoding
     // 100 > 63, so it's a long run: 3 bytes
@@ -114,7 +114,7 @@ fn test_rle_alternating_colors_minimum_compression() {
     let height = 1u32;
     let indices = vec![1u8, 2, 1, 2, 1, 2, 1, 2, 1, 2];
 
-    let encoded = rle_encode(&indices, width, height);
+    let encoded = rle_encode(&indices, width, height, 0);
 
     // Each non-transparent pixel of length 1 = 1 byte (just the color)
     assert_eq!(
@@ -133,7 +133,7 @@ fn test_rle_long_run_over_63() {
     let height = 1u32;
     let indices = vec![7u8; 100];
 
-    let encoded = rle_encode(&indices, width, height);
+    let encoded = rle_encode(&indices, width, height, 0);
 
     // Long run opaque: color + (0x80 | len_hi) + len_lo = 3 bytes
     assert_eq!(encoded.len(), 3);
@@ -153,7 +153,7 @@ fn test_rle_very_long_run_over_16383() {
     let height = 1u32;
     let indices = vec![3u8; 20000];
 
-    let encoded = rle_encode(&indices, width, height);
+    let encoded = rle_encode(&indices, width, height, 0);
 
     // Should not panic, should produce valid output
     assert!(!encoded.is_empty());
@@ -174,7 +174,7 @@ fn test_rle_multi_row_row_separator() {
     let height = 2u32;
     let indices = vec![1u8, 1, 1, 1, 2, 2, 2, 2];
 
-    let encoded = rle_encode(&indices, width, height);
+    let encoded = rle_encode(&indices, width, height, 0);
 
     // Row 1: [1, 0x44] = 2 bytes
     // Separator: [0x00, 0x00] = 2 bytes
@@ -555,7 +555,7 @@ fn test_encode_large_pts_values() {
 fn test_rle_transparent_short_run() {
     // 5 transparent pixels
     let indices = vec![0u8; 5];
-    let encoded = rle_encode(&indices, 5, 1);
+    let encoded = rle_encode(&indices, 5, 1, 0);
 
     // Transparent short run: [0x00] [len] = 2 bytes
     assert_eq!(encoded.len(), 2);
@@ -567,7 +567,7 @@ fn test_rle_transparent_short_run() {
 fn test_rle_transparent_long_run() {
     // 100 transparent pixels
     let indices = vec![0u8; 100];
-    let encoded = rle_encode(&indices, 100, 1);
+    let encoded = rle_encode(&indices, 100, 1, 0);
 
     // Transparent long run: [0x40 | len_hi] [len_lo] = 2 bytes
     assert_eq!(encoded.len(), 2);
@@ -595,4 +595,167 @@ fn test_build_palette_alpha_variations() {
     assert_eq!(entries[0].y, entries[1].y);
     assert_eq!(entries[0].cb, entries[1].cb);
     assert_eq!(entries[0].cr, entries[1].cr);
+}
+
+// ─────────────────────── PCS palette_update spec compliance ───────────────────────
+
+/// Extract the first PCS `palette_update` bit from each decoded display set.
+fn pcs_palette_updates(frames_bytes: &[Vec<u8>]) -> Vec<bool> {
+    use pgs_encoder::decode_sup;
+    let mut out = Vec::new();
+    for bytes in frames_bytes {
+        let sets = decode_sup(bytes).expect("decode_sup must succeed");
+        assert_eq!(
+            sets.len(),
+            1,
+            "each frame should produce exactly one display set"
+        );
+        let mut found = None;
+        for seg in &sets[0].segments {
+            if let pgs_encoder::ParsedPayload::PresentationComposition { palette_update, .. } =
+                &seg.payload
+            {
+                found = Some(*palette_update);
+            }
+        }
+        out.push(found.expect("display set must contain a PCS"));
+    }
+    out
+}
+
+#[test]
+fn test_pcs_palette_update_spec_compliance() {
+    // PGS spec: PCS `palette_update_flag` (high bit of byte 8) means
+    //   1 = the palette IS being updated in this composition (a new PDS is provided)
+    //   0 = the palette is unchanged; use the previous display set's palette
+    //
+    // The first frame has no previous palette, so it must advertise
+    // `palette_update = true`. A subsequent frame with the IDENTICAL palette
+    // must advertise `palette_update = false` so the player does not look
+    // for a new PDS. A frame with a CHANGED palette must again advertise
+    // `palette_update = true`.
+    let mut enc = PgsEncoder::new(1920, 1080, 23.976);
+
+    let frame_red_new = make_single_color_frame(4, 2, Rgba::new(255, 0, 0, 255));
+    let frame_red_unchanged = make_single_color_frame(4, 2, Rgba::new(255, 0, 0, 255));
+    let frame_green_changed = make_single_color_frame(4, 2, Rgba::new(0, 255, 0, 255));
+
+    let bytes1 = enc.encode_frame_to_bytes(&frame_red_new, 0, 1000);
+    let bytes2 = enc.encode_frame_to_bytes(&frame_red_unchanged, 1000, 1000);
+    let bytes3 = enc.encode_frame_to_bytes(&frame_green_changed, 2000, 1000);
+
+    let updates = pcs_palette_updates(&[bytes1, bytes2, bytes3]);
+    assert_eq!(updates, vec![true, false, true]);
+}
+
+#[test]
+fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
+    // End-to-end: two frames with the same palette must produce a SUP file
+    // whose SECOND display set has `palette_update = false` in the PCS.
+    let mut enc = PgsEncoder::new(1920, 1080, 23.976);
+    let frame = make_single_color_frame(8, 4, Rgba::new(255, 0, 0, 255));
+
+    let mut sup = Vec::new();
+    sup.extend(enc.encode_frame_to_bytes(&frame, 0, 1000));
+    sup.extend(enc.encode_frame_to_bytes(&frame, 1000, 1000));
+
+    let sets = pgs_encoder::decode_sup(&sup).expect("decode_sup must succeed");
+    assert_eq!(sets.len(), 2, "two display sets expected");
+
+    let mut pcs_updates = Vec::new();
+    for ds in &sets {
+        for seg in &ds.segments {
+            if let pgs_encoder::ParsedPayload::PresentationComposition { palette_update, .. } =
+                &seg.payload
+            {
+                pcs_updates.push(*palette_update);
+            }
+        }
+    }
+    assert_eq!(
+        pcs_updates,
+        vec![true, false],
+        "first frame must advertise a new palette, second frame must not"
+    );
+}
+
+#[test]
+fn test_pcs_palette_update_spec_compliance_multi_window() {
+    // The multi-window branch (`rle_size_est > MAX_DECODE_BUFFER / 2 &&
+    // height > 100`) takes a different code path in `build_display_set` and
+    // had its own `palette_update` expression at the second call site of the
+    // 0.3.2 fix. The 1500x800 alternating-index frame below forces the
+    // multi-window path: 1,200,000 alternating pixels → RLE ~1.14 MiB
+    // (alternating 1-pixel opaque runs are 1 byte each, plus a 2-byte row
+    // separator per row), well over the 1 MiB threshold; height 800 > 100.
+    // The `ods_ids.len() == 2` check below confirms the multi-window path
+    // was actually taken.
+    use std::collections::HashSet;
+    let w = 1500u32;
+    let h = 800u32;
+    let n = (w * h) as usize;
+    let mut indices = Vec::with_capacity(n);
+    for i in 0..n {
+        indices.push(if i % 2 == 0 { 1u8 } else { 2u8 });
+    }
+
+    let palette_red = vec![
+        Rgba::new(0, 0, 0, 0),
+        Rgba::new(255, 0, 0, 255),
+        Rgba::new(0, 0, 255, 255),
+    ];
+    let palette_green = vec![
+        Rgba::new(0, 0, 0, 0),
+        Rgba::new(0, 255, 0, 255),
+        Rgba::new(255, 255, 0, 255),
+    ];
+
+    let frame_red_new = QuantizedFrame {
+        width: w,
+        height: h,
+        palette: palette_red.clone(),
+        indices: indices.clone(),
+        transparent_index: 0,
+    };
+    let frame_red_unchanged = QuantizedFrame {
+        width: w,
+        height: h,
+        palette: palette_red,
+        indices: indices.clone(),
+        transparent_index: 0,
+    };
+    let frame_green_changed = QuantizedFrame {
+        width: w,
+        height: h,
+        palette: palette_green,
+        indices,
+        transparent_index: 0,
+    };
+
+    let mut enc = PgsEncoder::new(1920, 1080, 23.976);
+    let bytes1 = enc.encode_frame_to_bytes(&frame_red_new, 0, 1000);
+    let bytes2 = enc.encode_frame_to_bytes(&frame_red_unchanged, 1000, 1000);
+    let bytes3 = enc.encode_frame_to_bytes(&frame_green_changed, 2000, 1000);
+
+    let set1 = pgs_encoder::decode_sup(&bytes1).expect("decode_sup must succeed");
+    let ods_ids: HashSet<u16> = set1[0]
+        .segments
+        .iter()
+        .filter_map(|s| match &s.payload {
+            pgs_encoder::ParsedPayload::ObjectDefinition { object_id, .. } => Some(*object_id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        ods_ids.len(),
+        2,
+        "expected multi-window path (2 distinct object_ids), got {ods_ids:?}"
+    );
+
+    let updates = pcs_palette_updates(&[bytes1, bytes2, bytes3]);
+    assert_eq!(
+        updates,
+        vec![true, false, true],
+        "multi-window branch must honor palette_update = palette_changed"
+    );
 }

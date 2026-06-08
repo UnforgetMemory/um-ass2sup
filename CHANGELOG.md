@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.2] - 2026-06-07
+
+### Fixed
+- **Generated `.sup` was unusable: PGS PCS `palette_update_flag` was inverted.** The encoder wrote `palette_update = !palette_changed && frame_count > 0`, which on every frame after the first signaled "no new palette" while the PDS carried a duplicate — but with a different `version` byte (u8 cast from `frame_count`), causing players to reject the PDS and lose all subsequent subtitles. Spec-correct behavior is `palette_update = palette_changed` (`1` ⇒ new palette in PDS, `0` ⇒ reuse previous).
+- **`prev_palette_hash` / `prev_object_rle_hash` were never written** in `PgsEncoder` — the fields were only read (for `palette_changed` / `object_changed` computation) but never updated after each `build_display_set` call, so the change detector was always `None != Some(hash) == true`. `build_display_set` now takes `&mut self` and stores both hashes at the end of each call.
+
+### Tests
+- 2 new TDD tests in `crates/pgs-encoder/tests/test_edge_cases.rs`:
+  - `test_pcs_palette_update_spec_compliance` — encodes 3 frames (new/unchanged/changed) and asserts PCS `palette_update = [true, false, true]`.
+  - `test_pcs_palette_update_roundtrips_through_sup_bytes` — encodes 2 identical red frames, decodes via `decode_sup`, asserts `[true, false]`.
+
+---
+
 ## [0.3.1] - 2026-06-04
 
 ### Highlights
