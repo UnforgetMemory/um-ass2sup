@@ -227,3 +227,23 @@ fn test_golden_all_fixtures_produce_output() {
         assert_eq!(bytes[1], b'G', "fixture '{}' should start with PG", fixture);
     }
 }
+
+#[test]
+fn test_golden_korean_drama_island_disappeared() {
+    // Korean drama "Island of the Disappeared" - Chinese subtitles
+    // Tests CJK text rendering with Microsoft YaHei font
+    let bytes = run_pipeline("island_disappeared.ass", 23.976);
+    assert!(
+        !bytes.is_empty(),
+        "island_disappeared should produce SUP output"
+    );
+    assert!(bytes.len() >= 13, "island_disappeared output too small");
+    assert_eq!(bytes[0], b'P', "island_disappeared should start with PG");
+    assert_eq!(bytes[1], b'G', "island_disappeared should start with PG");
+
+    // Verify PTS timing is present
+    let segments = parse_sup_segments(&bytes);
+    assert!(!segments.is_empty(), "should have valid PGS segments");
+    let has_nonzero_pts = segments.iter().any(|&(pts, _, _, _)| pts > 0);
+    assert!(has_nonzero_pts, "at least one segment should have PTS > 0");
+}

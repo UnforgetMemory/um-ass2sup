@@ -225,7 +225,11 @@ impl Renderer {
         event_end_ms: u64,
     ) -> RenderContext {
         let mut ctx = RenderContext {
-            font_name: style.font_name.clone(),
+            font_name: if style.font_name.is_empty() {
+                self.config.default_font.clone()
+            } else {
+                style.font_name.clone()
+            },
             font_size: style.font_size as f32,
             primary_color: style.primary_color.to_rgba(),
             secondary_color: style.secondary_color.to_rgba(),
@@ -585,7 +589,18 @@ impl Renderer {
                 .query_with_fallback(&ctx.font_name, ctx.bold, ctx.italic)
             {
                 Some(id) => id,
-                None => return,
+                None => {
+                    // Final fallback: use config.default_font if the style's
+                    // font was not found by any level of the fallback chain.
+                    match self.font_manager.query_with_fallback(
+                        &self.config.default_font,
+                        ctx.bold,
+                        ctx.italic,
+                    ) {
+                        Some(id) => id,
+                        None => return,
+                    }
+                }
             };
 
         if event.has_karaoke() && !event.karaoke_segments.is_empty() {

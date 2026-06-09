@@ -14,6 +14,7 @@
 //! ass2sup input.ass -o output.sup -r 1920x1080 -f 29.97
 //! ```
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
@@ -27,8 +28,10 @@ use ass_parser::{AssFile, SubtitleFormat};
 use bdn_xml::{BdnEvent, BdnXml};
 use color_quantizer::{quantize_with_palette, DitherMethod, Quantizer, Rgba};
 use pgs_encoder::PgsEncoder;
-use subtitle_renderer::{RenderConfig, Renderer};
+use subtitle_renderer::{FontManager, RenderConfig, Renderer};
 use subtitle_validator::{OverlapConfig, OverlapSeverity, Validator};
+
+pub mod ocr;
 
 /// Maximum input file size in bytes (100 MiB).
 ///
@@ -144,6 +147,16 @@ pub struct Args {
     /// Convert to BDN XML + PNG format (Blu-ray authoring)
     #[arg(long, conflicts_with = "to_srt")]
     pub to_bdn: bool,
+
+    /// Skip font availability check (fonts missing from the system will silently
+    /// fall back to a substitute, potentially producing blank subtitle output)
+    #[arg(long)]
+    pub no_check_fonts: bool,
+
+    /// Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2".
+    /// Can be repeated multiple times.
+    #[arg(long, value_name = "STYLE:FALLBACKS")]
+    pub font_map: Vec<String>,
 }
 
 /// Output display resolution parsed from `WIDTHxHEIGHT` strings.
@@ -359,6 +372,114 @@ fn collect_recursive_glob(pattern: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Font map: style name -> ordered list of fallback font names.
+type FontMap = HashMap<String, Vec<String>>;
+
+/// Parses "StyleName:fallback1,fallback2" entries into a FontMap.
+/// Returns an error with the offending entry if any line is malformed.
+fn parse_font_map(entries: &[String]) -> Result<FontMap, String> {
+    let mut map = FontMap::new();
+    for entry in entries {
+        let Some((style, fallbacks)) = entry.split_once(':') else {
+            return Err(format!(
+                "Invalid font-map entry '{}': expected 'StyleName:fallback1,fallback2'",
+                entry
+            ));
+        };
+        let style = style.trim();
+        let fb_list: Vec<String> = fallbacks
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if style.is_empty() {
+            return Err(format!("Empty style name in font-map entry '{}'", entry));
+        }
+        map.insert(style.to_string(), fb_list);
+    }
+    Ok(map)
+}
+
+/// Checks all font families used in an ASS file and returns an error listing
+/// every font that is missing from the system. The `font_map` provides per-style
+/// fallback chains; the `global_fallback` is the --font CLI argument value.
+fn check_ass_fonts(
+    ass: &AssFile,
+    font_manager: &FontManager,
+    font_map: &FontMap,
+    global_fallback: &str,
+    no_check: bool,
+) -> Result<(), String> {
+    if no_check {
+        return Ok(());
+    }
+
+    let mut missing: Vec<String> = Vec::new();
+
+    for style in &ass.styles {
+        let primary = if style.font_name.is_empty() {
+            global_fallback
+        } else {
+            &style.font_name
+        };
+
+        if font_manager
+            .query_with_score(primary, false, false)
+            .is_some()
+        {
+            continue;
+        }
+
+        // Try per-style fallback chain from --font-map
+        if let Some(fallbacks) = font_map.get(&style.name) {
+            let all_missing = fallbacks
+                .iter()
+                .all(|fb| font_manager.query_with_score(fb, false, false).is_none());
+            if !all_missing {
+                continue;
+            }
+        }
+
+        // Try global fallback (--font)
+        if global_fallback != primary
+            && !global_fallback.is_empty()
+            && global_fallback != "Arial"
+            && font_manager
+                .query_with_score(global_fallback, false, false)
+                .is_some()
+        {
+            continue;
+        }
+
+        // Build the failure description
+        let fb_chain: Vec<&str> = font_map
+            .get(&style.name)
+            .map(|v| v.iter().map(|s| s.as_str()).collect())
+            .unwrap_or_default();
+        let desc = if fb_chain.is_empty() {
+            format!("'{}' (no fallback configured)", primary)
+        } else {
+            let fb_str = fb_chain.join(", ");
+            format!("'{}' (fallbacks: {}) not installed", primary, fb_str)
+        };
+        missing.push(desc);
+    }
+
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        let mut msg = String::from("Font check failed — missing font(s):\n");
+        for m in &missing {
+            msg.push_str(&format!("  • {}\n", m));
+        }
+        msg.push_str(
+            "Install the fonts above or re-run with --no-check-fonts to skip this check.\n",
+        );
+        msg.push_str("Hint: for CJK subtitles install fonts-noto-cjk (Debian/Ubuntu) or embed fonts via the ASS [Fonts] section.");
+        Err(msg)
+    }
+}
+
 /// Converts a single subtitle file to the configured output format.
 ///
 /// Handles format detection, validation (when enabled), render, quantize, and
@@ -465,6 +586,15 @@ pub fn convert_file(
     for (_font_name, font_data) in font_data_list {
         let _id = renderer.font_manager_mut().load_font_data(font_data);
     }
+
+    let font_map = parse_font_map(&args.font_map).map_err(|e| e)?;
+    check_ass_fonts(
+        &ass,
+        renderer.font_manager(),
+        &font_map,
+        &args.font,
+        args.no_check_fonts,
+    )?;
 
     let dither_method = match args.dither.as_str() {
         "none" => DitherMethod::None,
@@ -649,6 +779,15 @@ pub fn convert_to_bdn(
     for (_font_name, font_data) in font_data_list {
         let _id = renderer.font_manager_mut().load_font_data(font_data);
     }
+
+    let font_map = parse_font_map(&args.font_map).map_err(|e| e)?;
+    check_ass_fonts(
+        &ass,
+        renderer.font_manager(),
+        &font_map,
+        &args.font,
+        args.no_check_fonts,
+    )?;
 
     let dither_method = match args.dither.as_str() {
         "none" => DitherMethod::None,

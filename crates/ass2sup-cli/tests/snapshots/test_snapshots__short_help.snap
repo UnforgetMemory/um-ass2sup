@@ -35,5 +35,7 @@ Options:
       --color <COLOR>                Color output mode (auto/always/never) [default: auto] [possible values: auto, always, never]
       --to-srt                       Convert to SRT format instead of SUP/PGS
       --to-bdn                       Convert to BDN XML + PNG format (Blu-ray authoring)
+      --no-check-fonts               Skip font availability check (fonts missing from the system will silently fall back to a substitute, potentially producing blank subtitle output)
+      --font-map <STYLE:FALLBACKS>   Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
   -h, --help                         Print help
   -V, --version                      Print version

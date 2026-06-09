@@ -1,0 +1,4 @@
+# PaddleOCR harness dependencies
+# Install via: source .venv313/bin/activate && pip install -r scripts/ocr-requirements.txt
+paddlepaddle>=3.0
+paddleocr>=2.7.0

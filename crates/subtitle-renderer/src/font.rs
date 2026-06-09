@@ -184,13 +184,24 @@ impl FontManager {
         bold: bool,
         italic: bool,
     ) -> Option<fontdb::ID> {
+        // 1. Try exact-ish match via scoring against all loaded faces.
         if let Some(id) = self.query_with_score(family, bold, italic) {
             return Some(id);
         }
+
+        // 2. Hardcoded fallback font names — includes CJK-capable families
+        //    so that Chinese, Japanese, and Korean subtitles render legibly
+        //    even when no system CJK font is configured.
         let fallbacks = [
             "Liberation Sans",
             "DejaVu Sans",
             "Noto Sans",
+            "Noto Sans CJK SC",
+            "Noto Sans CJK TC",
+            "WenQuanYi Micro Hei",
+            "Source Han Sans CN",
+            "IPAGothic",
+            "NanumGothic",
             "Arial",
             "Helvetica",
         ];
@@ -199,6 +210,25 @@ impl FontManager {
                 return Some(id);
             }
         }
+
+        // 3. Generic sans-serif query — lets fontconfig resolve the best
+        //    available system font (often picks a CJK font when the locale
+        //    is zh/ja/ko).
+        let ss_query = Query {
+            families: &[fontdb::Family::SansSerif],
+            weight: Weight(if bold { 700 } else { 400 }),
+            style: if italic {
+                fontdb::Style::Italic
+            } else {
+                fontdb::Style::Normal
+            },
+            ..Default::default()
+        };
+        if let Some(id) = self.db.query(&ss_query) {
+            return Some(id);
+        }
+
+        // 4. Last resort: any available face.
         self.db.faces().next().map(|f| f.id)
     }
 

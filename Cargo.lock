@@ -109,12 +109,16 @@ dependencies = [
  "bdn-xml",
  "clap",
  "color-quantizer",
+ "flate2",
  "glob",
  "indicatif",
  "insta",
  "pgs-encoder",
  "predicates",
  "rayon",
+ "serde",
+ "serde_json",
+ "strsim 0.4.1",
  "subtitle-renderer",
  "subtitle-validator",
  "tempfile",
@@ -264,7 +268,7 @@ dependencies = [
  "anstream",
  "anstyle",
  "clap_lex",
- "strsim",
+ "strsim 0.11.1",
 ]
 
 [[package]]
@@ -825,6 +829,7 @@ version = "0.3.1"
 dependencies = [
  "color-quantizer",
  "criterion",
+ "png",
  "proptest",
  "thiserror",
  "tracing",
@@ -1265,6 +1270,12 @@ name = "strict-num"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6637bab7722d379c8b41ba849228d680cc12d0a45ba1fa2b48f2a30577a06731"
+
+[[package]]
+name = "strsim"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d5f575d5ced6634a5c4cb842163dab907dc7e9148b28dc482d81b8855cbe985"
 
 [[package]]
 name = "strsim"

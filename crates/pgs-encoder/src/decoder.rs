@@ -422,9 +422,7 @@ pub fn verify_roundtrip(original: &[u8]) -> Result<(), String> {
         let mut has_pds = false;
         for seg in &ds.segments {
             match &seg.payload {
-                ParsedPayload::PresentationComposition {
-                    palette_update, ..
-                } => {
+                ParsedPayload::PresentationComposition { palette_update, .. } => {
                     if *palette_update {
                         pcs_advertises_palette_update = true;
                     }

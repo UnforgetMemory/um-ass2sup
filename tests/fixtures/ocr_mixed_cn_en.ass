@@ -1,0 +1,22 @@
+[Script Info]
+Title: Chinese-English Mixed OCR Fixture — Island of the Disappeared
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Microsoft YaHei,52,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: DefaultEn,Arial,44,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,8,10,10,52,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:17.98,0:00:20.90,Default,,0,0,0,,{\fnMicrosoft YaHei}三秀影业出品{\r}{\fnArial}Sanxu Pictures Presents
+Dialogue: 0,0:00:25.94,0:00:28.82,Default,,0,0,0,,{\fnMicrosoft YaHei}电影工厂制作{\r}{\fnArial}Film Factory Production
+Dialogue: 0,0:00:29.90,0:00:33.91,Default,,0,0,0,,{\fnMicrosoft YaHei}本片根据真实事件改编,人物均为虚构{\r}{\fnArial}Based on true events. All characters are fictional.
+Dialogue: 0,0:00:33.91,0:00:37.54,Default,,0,0,0,,{\fnMicrosoft YaHei}李教授就这起案件,接受过多次采访{\r}{\fnArial}Professor Li has given many interviews about this case.
+Dialogue: 0,0:00:37.79,0:00:43.08,Default,,0,0,0,,{\fnMicrosoft YaHei}盐田老板许成九和他的儿子是主要嫌疑人{\r}{\fnArial}Salt farm owner Seo Seung-gu and his son are the main suspects.
+Dialogue: 0,0:00:43.63,0:00:49.38,Default,,0,0,0,,{\fnMicrosoft YaHei}这么说来,他们杀了自己的妻子或母亲{\r}{\fnArial}So you're saying they killed their own wives or mothers?
+Dialogue: 0,0:00:50.05,0:00:51.01,Default,,0,0,0,,{\fnMicrosoft YaHei}您怎么看?{\r}{\fnArial}What's your opinion?
+Dialogue: 0,0:00:51.09,0:00:53.47,Default,,0,0,0,,{\fnMicrosoft YaHei}这种冷血杀戮,是心理变态者的特征{\r}{\fnArial}Such cold-blooded killing is a sign of psychopathy.

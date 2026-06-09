@@ -1,0 +1,22 @@
+[Script Info]
+Title: OCR Chinese Traditional Fixture — Island of the Disappeared
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,PMingLiU,62,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,8,10,10,52,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:17.98,0:00:20.90,Default,,0,0,0,,三秀影業出品
+Dialogue: 0,0:00:25.94,0:00:28.82,Default,,0,0,0,,電影工廠製作
+Dialogue: 0,0:00:29.90,0:00:33.91,Default,,0,0,0,,本片根據真實事件改編,人物均為虛構
+Dialogue: 0,0:00:33.91,0:00:37.54,Default,,0,0,0,,李教授就這起案件,接受過多次採訪
+Dialogue: 0,0:00:37.79,0:00:43.08,Default,,0,0,0,,鹽田老板許成九和他的兒子是主要嫌疑人
+Dialogue: 0,0:00:43.63,0:00:49.38,Default,,0,0,0,,這麼說來,他們殺了自己的妻子或母親
+Dialogue: 0,0:00:50.05,0:00:51.01,Default,,0,0,0,,您怎麼看?
+Dialogue: 0,0:00:51.09,0:00:53.47,Default,,0,0,0,,我在多次採訪中,都提到過這一點
+Dialogue: 0,0:00:53.64,0:00:57.72,Default,,0,0,0,,這種冷血殺戮,是心理變態者的特徵
