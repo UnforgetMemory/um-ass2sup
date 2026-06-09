@@ -66,3 +66,14 @@ easyavs2bdnxml-analysis-report.html
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# ── Python virtual environments / bytecode ─────────────────────────
+.venv/
+.venv*/
+__pycache__/
+*.pyc
+*.pyo
+
+# ── Local dev config (per-machine, not shared) ─────────────────────
+.localref/
+.opencode/

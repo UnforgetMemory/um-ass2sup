@@ -234,8 +234,6 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
         let png_data = frame_to_png(&rgba).expect("RGBA should encode to PNG");
         std::fs::write(&png_path, &png_data).expect("PNG should write");
         eprintln!("PNG written to {}", png_path.display());
-        // Save to fixed path for manual inspection
-        let _ = std::fs::write("/tmp/ocr_debug_frame.png", &png_data);
     } else {
         panic!("renderer should produce a frame for {fixture_name} at start");
     }
