@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-06-09
+
+### Highlights
+- **OCR verification pipeline**: Full SUP→PNG decode + PaddleOCR text comparison for end-to-end subtitle quality verification.
+- **CJK font support**: Extended font fallback chain with `Noto Sans CJK SC/TC`, `WenQuanYi Micro Hei`, `Source Han Sans CN`, `IPAGothic`, `NanumGothic`.
+- **Per-style font fallback**: New `--font-map` CLI flag for per-ASS-style font fallback chains.
+
+### Added
+- **`crates/pgs-encoder/src/color.rs`**: `ycbcr_to_rgba()` (BT.601 inverse) and `palette_to_rgba()` — symmetric inverse of existing `rgba_to_ycbcr()`.
+- **`crates/pgs-encoder/src/decode_to_image.rs`**: `decode_frame_to_rgba()` and `frame_to_png()` — SUP→RGBA→PNG decode pipeline supporting multi-window/epoch-split compositing.
+- **`crates/ass2sup-cli/src/ocr.rs`**: OCR toolkit — `run_ocr()`, `strip_ass_tags()`, `normalized_similarity()`, `parse_ocr_json()`, `is_match()`.
+- **`scripts/ocr_harness.py`**: PaddleOCR CLI harness for `scripts/ocr-requirements.txt`.
+- E2E OCR roundtrip test (`crates/ass2sup-cli/tests/test_ocr_e2e.rs`) with 6 fixtures — runs automatically in `cargo test` and skips gracefully when PaddlePaddle is unavailable.
+- **`docs/sup-ocr-validation.md`**: Documents the full OCR validation pipeline architecture.
+- **`docs/FONT_REQUIREMENTS.md`**: Documents font fallback chain, CJK font installation, and CLI `--font` / `--font-map` usage.
+- **`check_ass_fonts()`**: Pre-render font availability check that enumerates all missing fonts before failing.
+- **`--font-map`**: New repeatable CLI flag (`StyleName:fallback1,fallback2`) for per-style font fallback configuration.
+- **`--no-check-fonts`**: Existing flag now checks all ASS style fonts, not just the global `--font` argument.
+
+### Changed
+- **Font fallback chain** (`subtitle-renderer/src/font.rs`): Extended from 5 Latin-only fonts to 11 including CJK-capable families; `fontconfig SansSerif` query added as step 3.
+- **`RenderConfig.default_font`** is now properly consulted when a style's `font_name` is empty (was previously dead code).
+- E2E OCR test now runs as part of the normal test suite — no `#[ignore]` removal needed.
+
+---
+
 ## [0.3.2] - 2026-06-07
 
 ### Fixed
