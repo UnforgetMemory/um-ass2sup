@@ -71,6 +71,7 @@ fn encode_run(output: &mut Vec<u8>, color: u8, length: usize, transparent_index:
         output.push(0x01);
     } else if length == 1 && !color_in_collision_range {
         output.push(color);
+        output.push(0x40);
     } else if length == 1 {
         output.push(color);
         output.push(0x80);
@@ -206,6 +207,7 @@ pub fn rle_decode(
                 // len==0 means this is not a valid short opaque run.
                 // The 0x40 byte is the start of a transparent long run.
                 output.push(color);
+                i += 1;
                 continue;
             }
             return Err(format!("invalid run length {len}"));
@@ -276,7 +278,7 @@ mod tests {
     fn test_single_pixel_opaque() {
         let indices = [5u8];
         let encoded = rle_encode(&indices, 1, 1, 0);
-        assert_eq!(encoded, vec![5]);
+        assert_eq!(encoded, vec![5, 0x40]);
     }
 
     #[test]
@@ -304,7 +306,7 @@ mod tests {
     fn test_mixed_pixels() {
         let indices = [1u8, 1, 2, 0, 0];
         let encoded = rle_encode(&indices, 5, 1, 0);
-        assert_eq!(encoded, vec![1, 0x42, 2, 0x00, 0x02]);
+        assert_eq!(encoded, vec![1, 0x42, 2, 0x40, 0x00, 0x02]);
     }
 
     #[test]
