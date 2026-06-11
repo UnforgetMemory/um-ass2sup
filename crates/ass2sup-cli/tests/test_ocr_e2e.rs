@@ -208,13 +208,6 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
         );
         let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
         let sup_bytes = encoder.encode_frame_to_bytes(&quantized, pts_ms, frame.duration_ms);
-        eprintln!(
-            "Q DEBUG: palette_len={}, indices_len={}, sup_bytes={}, transparent_index={}",
-            quantized.palette.len(),
-            quantized.indices.len(),
-            sup_bytes.len(),
-            quantized.transparent_index
-        );
 
         // Decode SUP → display sets → RGBA → PNG
         let display_sets = decode_sup(&sup_bytes).expect("SUP should decode");

@@ -126,11 +126,17 @@ impl PgsEncoder {
         pts: u64,
         dts: u64,
     ) -> Vec<Segment> {
-        let palette_entries = build_palette(&frame.palette);
+        // Remap collision-range indices (0x40-0x7F) to safe values (0x80-0xBF)
+        // to avoid ambiguity with transparent long-run headers in the RLE format.
+        // The decoder's transparent-first disambiguation would otherwise misinterpret
+        // opaque runs with collision-range colors as transparent runs.
+        let (remapped_indices, remapped_palette) = remap_collision_range(frame);
+
+        let palette_entries = build_palette(&remapped_palette);
         let palette_hash = hash_palette(&palette_entries);
 
         let rle = rle_encode(
-            &frame.indices,
+            &remapped_indices,
             frame.width,
             frame.height,
             frame.transparent_index,
@@ -612,6 +618,55 @@ fn hash_bytes(data: &[u8]) -> u64 {
     let mut hasher = DefaultHasher::new();
     data.hash(&mut hasher);
     hasher.finish()
+}
+
+/// Remap indices in the collision range (0x40-0x7F) to safe values (0x80+).
+///
+/// The PGS RLE format uses transparent long-run headers `[0x40|len_hi, len_lo]`.
+/// When an opaque color happens to be in 0x40-0x7F and the next byte has bit 7
+/// set, the decoder's ambiguous-case handler tries transparent interpretation first,
+/// misinterpreting opaque runs as transparent runs.
+///
+/// This function remaps any used collision-range index to an unused slot in 0x80-0xBF,
+/// updating both the index array and the palette to match.
+fn remap_collision_range(frame: &QuantizedFrame) -> (Vec<u8>, Vec<color_quantizer::Rgba>) {
+    let mut indices = frame.indices.clone();
+    let mut palette = frame.palette.clone();
+    while palette.len() < 256 {
+        palette.push(color_quantizer::Rgba::new(0, 0, 0, 0));
+    }
+
+    // Find which indices are actually used
+    let mut used = [false; 256];
+    for &idx in &indices {
+        used[idx as usize] = true;
+    }
+
+    let mut remap = [0u8; 256];
+    for (i, item) in remap.iter_mut().enumerate() {
+        *item = i as u8;
+    }
+
+    let mut next_target: u8 = 0x80;
+    for i in 0x40..0x80u8 {
+        let i_usize = i as usize;
+        if used[i_usize] && i != frame.transparent_index && i != 0 {
+            while next_target < 0xC0 && used[next_target as usize] {
+                next_target += 1;
+            }
+            if next_target < 0xC0 {
+                remap[i_usize] = next_target;
+                used[next_target as usize] = true;
+                next_target += 1;
+            }
+        }
+    }
+
+    for idx in indices.iter_mut() {
+        *idx = remap[*idx as usize];
+    }
+
+    (indices, palette)
 }
 
 #[cfg(test)]

@@ -167,10 +167,12 @@ fn composite_objects(
         return Err(DecodeImageError::NoPalette);
     }
 
-    // Reconstruct palette to match RLE's index space when transparent_index != 0.
-    // The encoder swaps colors (0 ↔ transparent_index) and encodes with enc_transparent=0.
-    // The SUP palette uses original indices, so we must swap entries 0 and transparent_index
-    // BEFORE the object loop to avoid double-swap in multi-window compositions.
+    // When transparent_index != 0, the encoder swaps colors (0 ↔ transparent_index)
+    // before RLE encoding with enc_transparent=0. The RLE decode produces:
+    //   - Old-opaque pixels → index 0
+    //   - Old-transparent pixels → index transparent_index
+    // But the SUP palette uses ORIGINAL indices. We must swap palette entries
+    // 0 and transparent_index to match the RLE's index space.
     if transparent_index != 0 {
         if let (Some(zero_entry), Some(ti_entry)) = (
             ctx.palette.get(&0).cloned(),
@@ -200,6 +202,9 @@ fn composite_objects(
 
         let rle_data = &obj_data.rle_data;
 
+        // The encoder always uses enc_transparent=0 (swapping colors when transparent_index != 0).
+        // So the RLE data always treats index 0 as the transparent format marker.
+        // We must pass 0 to rle_decode regardless of the actual transparent_index.
         let palette_indices = rle_decode(
             rle_data,
             u32::from(obj_data.width),
