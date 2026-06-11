@@ -275,19 +275,8 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
     let combined = ocr::extract_text(&ocr_result);
     eprintln!("OCR extracted: '{combined}'");
 
-    // Collect ASS text lines (stripped of tags)
-    let ass_texts: Vec<String> = ass
-        .events
-        .iter()
-        .filter_map(|e| {
-            if e.layer == 0 {
-                Some(ocr::strip_ass_tags(&e.text))
-            } else {
-                None
-            }
-        })
-        .collect();
-    let reference = ass_texts.join(" ");
+    // Collect ASS text for the rendered event only
+    let reference = ocr::strip_ass_tags(&first.text);
     eprintln!("ASS reference: '{reference}'");
 
     let sim = ocr::normalized_similarity(&combined, &reference);
