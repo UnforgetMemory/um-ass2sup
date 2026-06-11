@@ -227,14 +227,6 @@ fn composite_objects(
             obj_rgba[offset..offset + 4].copy_from_slice(&rgba_color);
         }
 
-        if transparent_index != 0 {
-            for pixel in obj_rgba.chunks_exact_mut(4) {
-                let idx = pixel[3];
-                let swapped = swap(idx, transparent_index);
-                pixel[3] = swapped;
-            }
-        }
-
         let abs_x = u32::from(window.x).saturating_add(u32::from(obj_comp.x));
         let abs_y = u32::from(window.y).saturating_add(u32::from(obj_comp.y));
 
