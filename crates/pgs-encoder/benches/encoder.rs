@@ -38,7 +38,12 @@ fn bench_rle_small(c: &mut Criterion) {
     let frame = make_test_frame(64, 32, 16);
     c.bench_function("rle_small_64x32", |b| {
         b.iter(|| {
-            let _ = black_box(rle_encode(black_box(&frame.indices), 64, 32));
+            let _ = black_box(rle_encode(
+                black_box(&frame.indices),
+                64,
+                32,
+                frame.transparent_index,
+            ));
         });
     });
 }
@@ -47,7 +52,12 @@ fn bench_rle_medium(c: &mut Criterion) {
     let frame = make_test_frame(320, 180, 64);
     c.bench_function("rle_medium_320x180", |b| {
         b.iter(|| {
-            let _ = black_box(rle_encode(black_box(&frame.indices), 320, 180));
+            let _ = black_box(rle_encode(
+                black_box(&frame.indices),
+                320,
+                180,
+                frame.transparent_index,
+            ));
         });
     });
 }
@@ -56,7 +66,12 @@ fn bench_rle_large(c: &mut Criterion) {
     let frame = make_test_frame(1920, 1080, 256);
     c.bench_function("rle_large_1920x1080", |b| {
         b.iter(|| {
-            let _ = black_box(rle_encode(black_box(&frame.indices), 1920, 1080));
+            let _ = black_box(rle_encode(
+                black_box(&frame.indices),
+                1920,
+                1080,
+                frame.transparent_index,
+            ));
         });
     });
 }

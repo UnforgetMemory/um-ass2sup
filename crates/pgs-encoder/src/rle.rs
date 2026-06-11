@@ -64,31 +64,36 @@ fn swap(val: u8, pivot: u8) -> u8 {
 fn encode_run(output: &mut Vec<u8>, color: u8, length: usize, transparent_index: u8) {
     debug_assert!(length > 0 && length <= 0x3FFF);
     let is_transparent = color == transparent_index;
+    let color_in_collision_range = color & 0xC0 == 0x40;
 
-    if length == 1 && (color & 0xC0) == 0 && !is_transparent {
-        output.push(color);
-    } else if length == 1 && is_transparent {
+    if length == 1 && is_transparent {
         output.push(0x00);
         output.push(0x01);
-    } else if length == 1 {
-        let len_lo = 1u8;
-        let len_hi = 0u8;
+    } else if length == 1 && !color_in_collision_range {
         output.push(color);
-        output.push(0x80 | len_hi);
-        output.push(len_lo);
-    } else if length <= 0x3F {
-        let len = length as u8;
-        if is_transparent {
-            output.push(0x00);
-            output.push(len);
-        } else {
-            output.push(color);
-            output.push(0x40 | len);
-        }
+    } else if length == 1 {
+        output.push(color);
+        output.push(0x80);
+        output.push(0x01);
+    } else if is_transparent && length <= 0x3F {
+        output.push(0x00);
+        output.push(length as u8);
+    } else if length <= 0x3F && !color_in_collision_range {
+        output.push(color);
+        output.push(0x40 | length as u8);
     } else {
         let len_lo = (length & 0xFF) as u8;
         let len_hi = ((length >> 8) & 0x3F) as u8;
-        if is_transparent {
+        if is_transparent && (len_lo & 0xC0 == 0x80) {
+            let first_len = (length & 0xFF00) | 0x7F;
+            encode_run(output, transparent_index, first_len, transparent_index);
+            encode_run(
+                output,
+                transparent_index,
+                length - first_len,
+                transparent_index,
+            );
+        } else if is_transparent {
             output.push(0x40 | len_hi);
             output.push(len_lo);
         } else {
@@ -121,12 +126,13 @@ pub fn rle_decode(
                 if n == 0x00 {
                     let pos_in_row = output.len() % row_pixels;
                     if pos_in_row > 0 {
-                        let fill = row_pixels - pos_in_row;
-                        output.extend(std::iter::repeat(0u8).take(fill));
+                        let fill = (row_pixels - pos_in_row).min(total_pixels - output.len());
+                        output.extend(std::iter::repeat_n(0u8, fill));
                     }
                     i += 2;
                 } else if n < 0x40 {
-                    output.extend(std::iter::repeat(0u8).take(n as usize));
+                    let fill = (n as usize).min(total_pixels - output.len());
+                    output.extend(std::iter::repeat_n(0u8, fill));
                     i += 2;
                 } else {
                     output.push(0u8);
@@ -139,18 +145,28 @@ pub fn rle_decode(
         if b & 0xC0 == 0x40 {
             let next = if i + 1 < data.len() { data[i + 1] } else { 0 };
             if next & 0xC0 == 0x80 {
+                // Ambiguous: could be transparent [0x40|len_hi, len_lo] with len_lo >= 0x80,
+                // or opaque [color, 0x80|len_hi, len_lo] with color in 0x40..0x7F.
+                // Try transparent interpretation first.
+                let transparent_len = ((b & 0x3F) as usize) << 8 | (next as usize);
+                let remaining = total_pixels - output.len();
+                if transparent_len > 0 && transparent_len <= remaining {
+                    i += 2;
+                    output.extend(std::iter::repeat_n(0u8, transparent_len));
+                    continue;
+                }
+                // Transparent failed; try opaque.
                 let color = b;
-                i += 1;
-                let len_hi = (next & 0x3F) as usize;
-                i += 1;
+                i += 2;
                 if i >= data.len() {
                     return Err("unexpected end of data in long opaque run".to_string());
                 }
                 let len_lo = data[i] as usize;
                 i += 1;
+                let len_hi = (next & 0x3F) as usize;
                 let len = (len_hi << 8) | len_lo;
-                if len > 0 && len <= total_pixels - output.len() {
-                    output.extend(std::iter::repeat(color).take(len));
+                if len > 0 && len <= remaining {
+                    output.extend(std::iter::repeat_n(color, len));
                     continue;
                 }
                 return Err(format!("invalid run length {len}"));
@@ -166,7 +182,7 @@ pub fn rle_decode(
             if len == 0 || len > total_pixels - output.len() {
                 return Err(format!("invalid run length {len}"));
             }
-            output.extend(std::iter::repeat(0u8).take(len));
+            output.extend(std::iter::repeat_n(0u8, len));
             continue;
         }
 
@@ -182,8 +198,14 @@ pub fn rle_decode(
         if n & 0xC0 == 0x40 {
             let len = (n & 0x3F) as usize;
             if len > 0 && len <= total_pixels - output.len() {
-                output.extend(std::iter::repeat(color).take(len));
+                output.extend(std::iter::repeat_n(color, len));
                 i += 1;
+                continue;
+            }
+            if len == 0 {
+                // len==0 means this is not a valid short opaque run.
+                // The 0x40 byte is the start of a transparent long run.
+                output.push(color);
                 continue;
             }
             return Err(format!("invalid run length {len}"));
@@ -197,7 +219,7 @@ pub fn rle_decode(
             i += 1;
             let len = (len_hi << 8) | len_lo;
             if len > 0 && len <= total_pixels - output.len() {
-                output.extend(std::iter::repeat(color).take(len));
+                output.extend(std::iter::repeat_n(color, len));
                 continue;
             }
             return Err(format!("invalid run length {len}"));
@@ -209,7 +231,7 @@ pub fn rle_decode(
     if output.len() < total_pixels {
         let consumed_in_row = output.len() % row_pixels;
         if consumed_in_row > 0 {
-            output.extend(std::iter::repeat(0u8).take(row_pixels - consumed_in_row));
+            output.extend(std::iter::repeat_n(0u8, row_pixels - consumed_in_row));
         }
     }
 
@@ -356,7 +378,7 @@ mod tests {
     #[test]
     fn test_decode_long_run_opaque() {
         // 200 pixels of value 7: len=0xC8 → len_hi=0, len_lo=0xC8
-        let mut encoded = vec![7, 0x80, 0xC8];
+        let encoded = vec![7, 0x80, 0xC8];
         let decoded = rle_decode(&encoded, 200, 1, 0).unwrap();
         assert_eq!(decoded, vec![7; 200]);
     }
@@ -372,7 +394,7 @@ mod tests {
     #[test]
     fn test_decode_long_run_opaque_hi() {
         // 300 pixels of value 9: len=0x12C → len_hi=1, len_lo=0x2C
-        let mut encoded = vec![9, 0x81, 0x2C];
+        let encoded = vec![9, 0x81, 0x2C];
         let decoded = rle_decode(&encoded, 300, 1, 0).unwrap();
         assert_eq!(decoded, vec![9; 300]);
     }

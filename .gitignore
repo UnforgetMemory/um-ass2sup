@@ -24,6 +24,8 @@ crates/*/fuzz/Cargo.lock
 
 # ── Coverage reports (regenerable) ────────────────────────────────
 coverage/
+*.profraw
+*.profdata
 
 # ── Repo-level build/test outputs ──────────────────────────────────
 # any .sup file anywhere
@@ -55,6 +57,7 @@ easyavs2bdnxml-analysis-report.html
 *.orig
 *.rej
 *.patch
+*.tmp
 
 # ── Environment files ──────────────────────────────────────────────
 .env

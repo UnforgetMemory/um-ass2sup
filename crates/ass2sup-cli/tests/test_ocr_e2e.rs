@@ -209,10 +209,11 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
         let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
         let sup_bytes = encoder.encode_frame_to_bytes(&quantized, pts_ms, frame.duration_ms);
         eprintln!(
-            "Q DEBUG: palette_len={}, indices_len={}, sup_bytes={}",
+            "Q DEBUG: palette_len={}, indices_len={}, sup_bytes={}, transparent_index={}",
             quantized.palette.len(),
             quantized.indices.len(),
-            sup_bytes.len()
+            sup_bytes.len(),
+            quantized.transparent_index
         );
 
         // Decode SUP → display sets → RGBA → PNG
@@ -222,7 +223,7 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
             "SUP should have at least one display set"
         );
         let mut ctx = RenderContext::default();
-        let rgba = decode_frame_to_rgba(&display_sets[0], &mut ctx, 0u8)
+        let rgba = decode_frame_to_rgba(&display_sets[0], &mut ctx, quantized.transparent_index)
             .expect("first display set should decode to RGBA");
         let non_zero_rgba = rgba.data.chunks(4).filter(|p| p[3] != 0).count();
         eprintln!(

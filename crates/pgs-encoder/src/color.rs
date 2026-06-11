@@ -199,7 +199,7 @@ mod tests {
         // Roundtrip: gray colors should be near-lossless
         for gray in [0u8, 32, 64, 128, 192, 224, 255] {
             let (y, cb, cr) = rgba_to_ycbcr(gray, gray, gray);
-            let [r, g, b, a] = ycbcr_to_rgba(y, cb, cr, 255);
+            let [r, g, b, _a] = ycbcr_to_rgba(y, cb, cr, 255);
             assert_eq!(r, gray, "gray={gray}: R mismatch");
             assert_eq!(g, gray, "gray={gray}: G mismatch");
             assert_eq!(b, gray, "gray={gray}: B mismatch");

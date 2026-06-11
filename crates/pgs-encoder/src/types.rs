@@ -332,8 +332,8 @@ impl OdsPayload {
         output.extend_from_slice(&self.width.to_be_bytes());
         // Height (u16 BE)
         output.extend_from_slice(&self.height.to_be_bytes());
-        // RLE data length (u32 BE) — includes the 4-byte length field itself
-        let data_len = self.rle_data.len() as u32 + 4;
+        // RLE data length (u32 BE)
+        let data_len = self.rle_data.len() as u32;
         output.extend_from_slice(&data_len.to_be_bytes());
         // RLE data
         output.extend(&self.rle_data);

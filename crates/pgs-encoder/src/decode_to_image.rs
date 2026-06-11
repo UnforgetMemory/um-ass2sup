@@ -51,12 +51,6 @@ impl RenderContext {
         self.has_palette = false;
         self.last_pcs_objects.clear();
     }
-
-    fn reset_palette_only(&mut self) {
-        self.palette.clear();
-        self.has_palette = false;
-        self.last_pcs_objects.clear();
-    }
 }
 
 pub fn decode_frame_to_rgba(
@@ -98,7 +92,7 @@ fn process_segment(
             ctx.palette_id = *palette_id;
             ctx.has_palette = true;
             for entry in entries {
-                ctx.palette.insert(entry.index, entry.clone());
+                ctx.palette.insert(entry.index, *entry);
             }
         }
 
@@ -159,7 +153,7 @@ fn process_segment(
 }
 
 fn composite_objects(
-    ctx: &RenderContext,
+    ctx: &mut RenderContext,
     rgba: &mut [u8],
     canvas_w: u32,
     canvas_h: u32,
@@ -173,6 +167,20 @@ fn composite_objects(
         return Err(DecodeImageError::NoPalette);
     }
 
+    // Reconstruct palette to match RLE's index space when transparent_index != 0.
+    // The encoder swaps colors (0 ↔ transparent_index) and encodes with enc_transparent=0.
+    // The SUP palette uses original indices, so we must swap entries 0 and transparent_index
+    // BEFORE the object loop to avoid double-swap in multi-window compositions.
+    if transparent_index != 0 {
+        if let (Some(zero_entry), Some(ti_entry)) = (
+            ctx.palette.get(&0).cloned(),
+            ctx.palette.get(&transparent_index).cloned(),
+        ) {
+            ctx.palette.insert(0, ti_entry);
+            ctx.palette.insert(transparent_index, zero_entry);
+        }
+    }
+
     for obj_comp in &ctx.last_pcs_objects {
         let Some(obj_data) = ctx.objects.get(&obj_comp.object_id) else {
             continue;
@@ -182,7 +190,7 @@ fn composite_objects(
             .windows
             .get(&obj_comp.window_id)
             .cloned()
-            .unwrap_or_else(|| WindowDef {
+            .unwrap_or(WindowDef {
                 window_id: 0,
                 x: 0,
                 y: 0,
@@ -190,17 +198,13 @@ fn composite_objects(
                 height: canvas_h as u16,
             });
 
-        let rle_data = if obj_data.rle_data.len() > 8 {
-            &obj_data.rle_data[8..]
-        } else {
-            &obj_data.rle_data
-        };
+        let rle_data = &obj_data.rle_data;
 
         let palette_indices = rle_decode(
             rle_data,
             u32::from(obj_data.width),
             u32::from(obj_data.height),
-            transparent_index,
+            0,
         )
         .map_err(DecodeImageError::RleDecodeFailed)?;
 

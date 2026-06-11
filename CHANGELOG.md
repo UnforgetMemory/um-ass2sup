@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.1] - 2026-06-11
+
+### Fixed
+- **PGS RLE encoding collision range**: Colors in `0x40..0x7F` no longer produce ambiguous byte patterns that collide with transparent long-run markers. The encoder now forces these colors into 3-byte long-run format to avoid decoder misinterpretation.
+- **PGS RLE decoding ambiguity**: The decoder now tries transparent interpretation first for ambiguous `[0x40|len_hi, len_lo]` byte sequences, with bounds checking to prevent false positives. Falls back to opaque interpretation when transparent fails.
+- **PCS header byte-layout mismatch**: The decoder now correctly reads `palette_update` (1 bit) + `palette_id` (7 bits) packed in a single byte, matching both the PGS spec and encoder serialization. `PCS_HEADER_SIZE` reduced from 11 to 10 bytes.
+- **ODS payload length field**: Removed erroneous `+4` from RLE data length calculation, fixing format compliance.
+- **RLE decode output bounds**: Added bounds checking for short transparent runs and row separators to prevent output from exceeding `total_pixels`.
+- **Palette double-swap in multi-window compositing**: Moved palette reconstruction for `transparent_index != 0` before the object loop to prevent double-swap with multiple display objects.
+
+### Changed
+- **`decode_to_image.rs`**: Removed `rle_data[8..]` offset skip (was compensating for the ODS length bug). Uses `rle_data` directly.
+- **`decode_to_image.rs`**: `composite_objects` now takes `&mut RenderContext` for palette reconstruction.
+- **`rle.rs`**: Replaced `repeat().take()` with `repeat_n()` throughout (clippy compliance).
+- **`color.rs`**: Fixed `clone_on_copy` warning on `PaletteEntry`.
+
+### Tests
+- Added `test_decode_roundtrip` integration tests (sparse glyph, bottom row, second-to-last row).
+- Removed duplicate `test_roundtrip2` test (was redundant with `test_decode_roundtrip`).
+- Updated benchmark `encoder.rs` to pass 4th argument to `rle_encode`.
+
+### Security
+- Added bounds checking in `rle_decode` for short transparent runs to prevent output exceeding `total_pixels`.
+
+---
+
 ## [0.4.0] - 2026-06-09
 
 ### Highlights

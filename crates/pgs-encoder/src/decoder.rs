@@ -275,10 +275,10 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
 ///
 /// PCS header layout (after segment header):
 ///   width(2) + height(2) + frame_rate(1) + composition_number(2) +
-///   state(1) + palette_update(1) + palette_id(1) + num_objects(1) = 11 bytes
+///   state(1) + palette_update(1bit)|palette_id(7bits)(1) + num_objects(1) = 10 bytes
 /// Each object composition: object_id(2) + window_id(1) + flags(1) + x(2) + y(2) = 8 bytes
 fn parse_pcs_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
-    const PCS_HEADER_SIZE: usize = 11;
+    const PCS_HEADER_SIZE: usize = 10;
     if data.len() < PCS_HEADER_SIZE {
         return Err(DecodeError::TruncatedPayload);
     }
@@ -293,9 +293,10 @@ fn parse_pcs_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
         0x80 => CompositionState::NormalCase,
         _ => CompositionState::NormalCase,
     };
-    let palette_update = data[8] != 0;
-    let palette_id = data[9];
-    let num_objects = data[10] as usize;
+    let palette_byte = data[8];
+    let palette_update = palette_byte & 0x80 != 0;
+    let palette_id = palette_byte & 0x7F;
+    let num_objects = data[9] as usize;
 
     let mut objects = Vec::new();
     let mut off = PCS_HEADER_SIZE;
@@ -697,8 +698,7 @@ mod tests {
         payload.push(0x10); // frame_rate = 24p
         payload.extend_from_slice(&1u16.to_be_bytes()); // composition_number
         payload.push(0x00); // EpochStart
-        payload.push(0); // palette_update = false
-        payload.push(0); // palette_id
+        payload.push(0x00); // palette_byte: update=0, id=0
         payload.push(1); // num_objects
                          // Object: id=0, window=0, not forced, x=100, y=200
         payload.extend_from_slice(&0u16.to_be_bytes()); // object_id
