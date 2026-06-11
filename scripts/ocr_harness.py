@@ -33,6 +33,48 @@ def main() -> int:
         print(f"Error: file not found: {png_path}", file=sys.stderr)
         return 1
 
+    # Preprocess: composite RGBA onto contrasting background, then auto-crop
+    try:
+        from PIL import Image
+        import numpy as np
+        img = Image.open(png_path)
+        if img.mode == 'RGBA':
+            # Determine background color based on text color
+            arr = np.array(img)
+            alpha = arr[:, :, 3]
+            text_mask = alpha > 0
+            if text_mask.any():
+                text_pixels = arr[text_mask]
+                avg_brightness = text_pixels[:, :3].mean()
+                bg_color = (0, 0, 0) if avg_brightness > 128 else (255, 255, 255)
+            else:
+                bg_color = (0, 0, 0)
+            bg = Image.new('RGB', img.size, bg_color)
+            bg.paste(img, mask=img.split()[3])
+            # Auto-crop to text bounding box
+            arr_bg = np.array(bg)
+            if bg_color == (0, 0, 0):
+                non_bg = np.any(arr_bg > 0, axis=2)
+            else:
+                non_bg = np.any(arr_bg < 255, axis=2)
+            rows = np.any(non_bg, axis=1)
+            cols = np.any(non_bg, axis=0)
+            if rows.any() and cols.any():
+                y_min, y_max = np.where(rows)[0][[0, -1]]
+                x_min, x_max = np.where(cols)[0][[0, -1]]
+                pad = 20
+                y_min = max(0, y_min - pad)
+                y_max = min(bg.height - 1, y_max + pad)
+                x_min = max(0, x_min - pad)
+                x_max = min(bg.width - 1, x_max + pad)
+                bg = bg.crop((x_min, y_min, x_max + 1, y_max + 1))
+            import tempfile
+            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            bg.save(tmp.name)
+            png_path = tmp.name
+    except ImportError:
+        pass  # PIL/numpy not available, use original image
+
     try:
         from paddleocr import PaddleOCR
     except ImportError as e:
@@ -69,15 +111,20 @@ def main() -> int:
                         box = box.tolist()
                     score = rec_scores[i] if i < len(rec_scores) else 1.0
                     lines.append([box, str(text), float(score)])
-            elif isinstance(page, list):
-                for res in page:
-                    if res is not None and len(res) >= 2:
-                        box = res[0] if len(res) > 0 else []
+            else:
+                # PaddleOCR v5+ returns OCRResult object; try subscript access
+                try:
+                    rec_texts = page["rec_texts"]
+                    rec_scores = page.get("rec_scores", [])
+                    rec_boxes = page.get("rec_boxes", page.get("dt_polys", []))
+                    for i, text in enumerate(rec_texts):
+                        box = rec_boxes[i] if i < len(rec_boxes) else []
                         if hasattr(box, 'tolist'):
                             box = box.tolist()
-                        text = res[1] if len(res) > 1 else ""
-                        score = res[2] if len(res) > 2 else 1.0
+                        score = rec_scores[i] if i < len(rec_scores) else 1.0
                         lines.append([box, str(text), float(score)])
+                except (KeyError, TypeError, IndexError):
+                    pass
 
         import json
         print(json.dumps(lines, ensure_ascii=False))

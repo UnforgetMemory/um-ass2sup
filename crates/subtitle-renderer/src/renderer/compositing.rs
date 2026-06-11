@@ -224,9 +224,11 @@ pub(super) fn compute_tight_bbox(
                 let gx = x + glyph.x_offset;
                 let gy = sl.line_y + glyph.y_offset;
                 min_x = min_x.min(gx + bbox.x_min);
-                min_y = min_y.min(gy + bbox.y_min);
                 max_x = max_x.max(gx + bbox.x_max);
-                max_y = max_y.max(gy + bbox.y_max);
+                // Font bbox y_min/y_max are in font coordinates (y up).
+                // Convert to screen coordinates (y down): top = gy - y_max, bottom = gy - y_min.
+                min_y = min_y.min(gy - bbox.y_max);
+                max_y = max_y.max(gy - bbox.y_min);
             }
             x += glyph.x_advance;
         }

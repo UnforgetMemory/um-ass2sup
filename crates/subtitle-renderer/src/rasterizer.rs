@@ -36,36 +36,38 @@ struct OutlineAdapter<'a> {
 
 impl ttf_parser::OutlineBuilder for OutlineAdapter<'_> {
     fn move_to(&mut self, x: f32, y: f32) {
+        // Font coordinates have y-up; screen coordinates have y-down.
+        // Negate y to convert from font space to screen space.
         self.builder.move_to(
             self.offset_x + x * self.scale,
-            self.offset_y + y * self.scale,
+            self.offset_y - y * self.scale,
         );
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
         self.builder.line_to(
             self.offset_x + x * self.scale,
-            self.offset_y + y * self.scale,
+            self.offset_y - y * self.scale,
         );
     }
 
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
         self.builder.quad_to(
             self.offset_x + x1 * self.scale,
-            self.offset_y + y1 * self.scale,
+            self.offset_y - y1 * self.scale,
             self.offset_x + x * self.scale,
-            self.offset_y + y * self.scale,
+            self.offset_y - y * self.scale,
         );
     }
 
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
         self.builder.cubic_to(
             self.offset_x + x1 * self.scale,
-            self.offset_y + y1 * self.scale,
+            self.offset_y - y1 * self.scale,
             self.offset_x + x2 * self.scale,
-            self.offset_y + y2 * self.scale,
+            self.offset_y - y2 * self.scale,
             self.offset_x + x * self.scale,
-            self.offset_y + y * self.scale,
+            self.offset_y - y * self.scale,
         );
     }
 
@@ -135,7 +137,8 @@ impl Rasterizer {
         if !has_outline {
             if let Some(bbox) = face.glyph_bounding_box(glyph_id) {
                 let rx = gx + f32::from(bbox.x_min) * scale;
-                let ry = gy + f32::from(bbox.y_min) * scale;
+                // Font y_min/y_max are y-up; convert to screen y-down
+                let ry = gy - f32::from(bbox.y_max) * scale;
                 let rw = f32::from(bbox.x_max - bbox.x_min) * scale;
                 let rh = f32::from(bbox.y_max - bbox.y_min) * scale;
 
