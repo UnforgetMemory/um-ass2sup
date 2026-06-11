@@ -48,9 +48,7 @@ The actual issue may be that the RLE data contains runs that exceed the frame di
 
 ## Status
 
-- [x] Root cause partially identified (palette swap logic)
-- [x] C1 fixed (palette double-swap moved before loop)
-- [x] HIGH-1 fixed (bounds checking in rle_decode)
-- [ ] Full fix for transparent_index=255 pipeline
-- [ ] test_ocr_e2e passes
-- [ ] No regressions in other tests
+- [x] Root cause confirmed: RLE decoder len==0 short-opaque path
+- [x] Fix implemented: len==0 treats byte as single pixel, lets 0x40 be re-read as transparent long run
+- [x] test_ocr_e2e passes (ASS→SUP→PNG pipeline verified)
+- [x] No regressions in other tests (280+ workspace tests pass)
