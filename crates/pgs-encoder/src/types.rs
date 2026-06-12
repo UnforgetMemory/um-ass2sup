@@ -308,12 +308,12 @@ impl PdsPayload {
         output.push(self.palette_id);
         // Version
         output.push(self.version);
-        // Palette entries: each is 5 bytes (index, Y, Cb, Cr, alpha)
+        // Palette entries: each is 5 bytes per PGS spec (index, Y, Cr, Cb, alpha)
         for entry in &self.entries {
             output.push(entry.index);
             output.push(entry.y);
-            output.push(entry.cb);
             output.push(entry.cr);
+            output.push(entry.cb);
             output.push(entry.alpha);
         }
         output
@@ -328,13 +328,13 @@ impl OdsPayload {
         // Object version
         output.push(self.object_version);
         // Last in sequence flag (1 bit) + reserved (7 bits)
-        // PGS spec: bit 7 = first_in_sequence, bit 0 = last_in_sequence
+        // PGS spec: bit 7 = first_in_sequence, bit 6 = last_in_sequence, bits 5-0 = reserved
         let mut flags = 0u8;
         if self.first_in_sequence {
             flags |= 0x80;
         }
         if self.last_in_sequence {
-            flags |= 0x01;
+            flags |= 0x40;
         }
         output.push(flags);
         // Width (u16 BE)

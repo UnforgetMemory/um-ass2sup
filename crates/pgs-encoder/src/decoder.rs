@@ -208,7 +208,7 @@ fn parse_pds_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
     let palette_id = data[0];
     let version = data[1];
 
-    // Each palette entry is 5 bytes: index(1) + Y(1) + Cb(1) + Cr(1) + alpha(1)
+    // Each palette entry is 5 bytes per PGS spec: index(1) + Y(1) + Cr(1) + Cb(1) + alpha(1)
     let entries_data = &data[2..];
     let entry_count = entries_data.len() / 5;
     let mut entries = Vec::with_capacity(entry_count);
@@ -221,8 +221,8 @@ fn parse_pds_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
         entries.push(PaletteEntry {
             index: entries_data[off],
             y: entries_data[off + 1],
-            cb: entries_data[off + 2],
-            cr: entries_data[off + 3],
+            cr: entries_data[off + 2],
+            cb: entries_data[off + 3],
             alpha: entries_data[off + 4],
         });
     }
