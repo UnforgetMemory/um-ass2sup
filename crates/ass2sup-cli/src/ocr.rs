@@ -27,9 +27,15 @@ pub fn run_ocr(png_path: &Path) -> Result<OcrResult, OcrError> {
     let harness = std::env::var("OCR_HARNESS")
         .unwrap_or_else(|_| "python3 scripts/ocr_harness.py".to_string());
 
-    let output = Command::new("sh")
-        .args(["-c", &format!("{harness} {}", png_path.display())])
-        .output()
+    let mut parts = harness.split_whitespace();
+    let program = parts.next().unwrap_or("python3");
+    let mut cmd = Command::new(program);
+    for arg in parts {
+        cmd.arg(arg);
+    }
+    cmd.arg(png_path);
+
+    let output = cmd.output()
         .map_err(|e| OcrError::NotFound(e.to_string()))?;
 
     if !output.status.success() {

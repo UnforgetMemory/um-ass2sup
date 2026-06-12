@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-06-12
+
+### Highlights
+- **CJK OCR verification**: 9 end-to-end OCR test fixtures (ASCII, French, Chinese Simplified/Traditional, Japanese, Korean, Mixed CN/EN, Effects, Chinese Styled) — all pass with PaddleOCR.
+- **Security hardening**: Integer overflow protection for SUP dimensions, shell injection fix in OCR command execution, temp file leak fix in Python harness.
+- **CJK rendering fixes**: Correct glyph Y-axis conversion (font→screen coordinate transform), top-aligned text baseline shift, CJK font fallback priority.
+
+### Fixed
+- **Shell injection in `ocr.rs`**: Replaced `sh -c` command interpolation with direct `Command::new(program).arg(path)` — unescaped file paths no longer pass through a shell.
+- **Integer overflow in SUP dimension calculations**: Added `checked_mul` in `decode_to_image.rs` and `rle.rs` — malicious SUP files with `width × height` exceeding `usize::MAX` now return `InvalidDimensions` error instead of silently wrapping.
+- **Spurious alpha-channel swap in `decode_to_image.rs`**: Removed dead code that read `pixel[3]` (alpha channel) as a palette index and applied `swap(idx, transparent_index)`, corrupting transparency for all frames with `transparent_index != 0`.
+- **Single-byte opaque RLE format ambiguity**: Encoder now emits `[color, 0x40]` (2-byte) instead of `[color]` (1-byte) for 1-pixel opaque runs, preventing misinterpretation by the decoder's transparent long-run parser.
+- **RLE collision-range palette index remap**: `remap_collision_range()` in `encoder.rs` remaps indices `0x40–0x7F` to unused slots in `0x80–0xBF` before encoding, eliminating ambiguity with transparent long-run format bytes.
+- **CJK font fallback priority**: Font resolution now checks CJK-capable fonts (Noto Sans CJK SC/TC/JP/KR, Microsoft YaHei) before Latin-only fonts (DejaVu Sans).
+- **Glyph Y-axis conversion**: `OutlineAdapter` in `rasterizer.rs` correctly negates Y coordinates (`offset_y - y * scale`), and `compute_tight_bbox` in `compositing.rs` uses proper `gy - bbox.y_max` / `gy - bbox.y_min` ordering.
+- **Top-aligned text clipping**: For ASS alignment 7/8/9 (top), baseline Y is shifted down by `font_size` to prevent glyphs from rendering above the frame boundary.
+- **Temp file leak in `ocr_harness.py`**: Split into `main()` + `_run_ocr()` with explicit `os.unlink()` cleanup after OCR completes.
+
+### Added
+- **9 OCR E2E test fixtures**: `simple.ass` (English), `ocr_fr.ass` (French), `ocr_zhcn.ass` (Chinese Simplified), `ocr_zhtw.ass` (Chinese Traditional), `ocr_ja.ass` (Japanese), `ocr_ko.ass` (Korean), `ocr_mixed_cn_en.ass`, `ocr_effects.ass`, `island_disappeared.ass`.
+- **`InvalidDimensions` variant** on `DecodeImageError` for overflow-safe dimension validation.
+- Japanese (`Noto Sans CJK JP`) and Korean (`Noto Sans CJK KR`) fonts installed for test environment.
+
+### Changed
+- **`decode_to_image.rs`**: Removed unused `swap` import (was leftover from the alpha-channel swap bug).
+- **`test_ocr_e2e.rs`**: OCR comparison now uses only the rendered event's text (was comparing against all events concatenated, producing artificially low similarity).
+
+### Security
+- H1: Integer overflow in `width × height × 4` buffer allocations → `checked_mul` with error propagation.
+- H2: Shell injection via `sh -c` with unescaped path → direct `Command::new().arg()` invocation.
+- M1: Temp file leak in `ocr_harness.py` → explicit cleanup with `os.unlink()`.
+
+---
+
 ## [0.4.1] - 2026-06-11
 
 ### Fixed

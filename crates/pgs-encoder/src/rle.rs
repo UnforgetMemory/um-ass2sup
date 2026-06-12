@@ -111,7 +111,9 @@ pub fn rle_decode(
     height: u32,
     transparent_index: u8,
 ) -> Result<Vec<u8>, String> {
-    let total_pixels = (width as usize) * (height as usize);
+    let total_pixels = (width as usize)
+        .checked_mul(height as usize)
+        .ok_or_else(|| format!("dimension overflow: {width}x{height}"))?;
     let row_pixels = width as usize;
     let mut output = Vec::with_capacity(total_pixels);
     let mut i = 0;

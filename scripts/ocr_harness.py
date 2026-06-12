@@ -20,9 +20,13 @@ from __future__ import annotations
 
 import sys
 import os
+import tempfile
+
+_tmp_file_path = None
 
 
 def main() -> int:
+    global _tmp_file_path
     if len(sys.argv) < 2:
         print("Usage: ocr_harness.py <image.png>", file=sys.stderr)
         return 1
@@ -68,12 +72,23 @@ def main() -> int:
                 x_min = max(0, x_min - pad)
                 x_max = min(bg.width - 1, x_max + pad)
                 bg = bg.crop((x_min, y_min, x_max + 1, y_max + 1))
-            import tempfile
-            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=True)
             bg.save(tmp.name)
+            _tmp_file_path = tmp.name
             png_path = tmp.name
     except ImportError:
         pass  # PIL/numpy not available, use original image
+
+    ret = _run_ocr(png_path)
+    if _tmp_file_path and os.path.exists(_tmp_file_path):
+        try:
+            os.unlink(_tmp_file_path)
+        except OSError:
+            pass
+    return ret
+
+
+def _run_ocr(png_path: str) -> int:
 
     try:
         from paddleocr import PaddleOCR

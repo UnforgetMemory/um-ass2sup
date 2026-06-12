@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::color::{swap, ycbcr_to_rgba};
+use crate::color::ycbcr_to_rgba;
 use crate::decoder::{DisplaySet, ParsedObjectComposition, ParsedPayload, ParsedSegment};
 use crate::rle::rle_decode;
 use crate::types::{CompositionState, PaletteEntry, WindowDef};
@@ -63,7 +63,11 @@ pub fn decode_frame_to_rgba(
     }
 
     let (width, height) = (ctx.width, ctx.height);
-    let mut rgba = vec![0u8; (width * height * 4) as usize];
+    let total = width
+        .checked_mul(height)
+        .and_then(|v| v.checked_mul(4))
+        .ok_or_else(|| DecodeImageError::InvalidDimensions(format!("{width}x{height} overflow")))?;
+    let mut rgba = vec![0u8; total as usize];
     composite_objects(ctx, &mut rgba, width, height, transparent_index)?;
 
     Ok(FramePixels {
@@ -215,7 +219,11 @@ fn composite_objects(
 
         let obj_w = u32::from(obj_data.width);
         let obj_h = u32::from(obj_data.height);
-        let mut obj_rgba = vec![0u8; (obj_w * obj_h * 4) as usize];
+        let obj_total = obj_w
+            .checked_mul(obj_h)
+            .and_then(|v| v.checked_mul(4))
+            .ok_or_else(|| DecodeImageError::InvalidDimensions(format!("object {obj_w}x{obj_h} overflow")))?;
+        let mut obj_rgba = vec![0u8; obj_total as usize];
 
         for (i, &idx) in palette_indices.iter().enumerate() {
             let rgba_color = if let Some(entry) = ctx.palette.get(&idx) {
@@ -282,6 +290,7 @@ pub enum DecodeImageError {
     RleDecodeFailed(String),
     NoPalette,
     OutOfBounds,
+    InvalidDimensions(String),
 }
 
 impl std::fmt::Display for DecodeImageError {
@@ -292,6 +301,7 @@ impl std::fmt::Display for DecodeImageError {
             Self::RleDecodeFailed(msg) => write!(f, "RLE decode failed: {msg}"),
             Self::NoPalette => write!(f, "no palette available"),
             Self::OutOfBounds => write!(f, "object position out of bounds"),
+            Self::InvalidDimensions(msg) => write!(f, "invalid dimensions: {msg}"),
         }
     }
 }

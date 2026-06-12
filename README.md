@@ -5,7 +5,7 @@
 [![Release](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Rust 1.75+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
 [![Coverage](https://img.shields.io/badge/coverage-88.13%25-brightgreen.svg)](COVERAGE.md)
 
 [English](README.en.md) | **简体中文**
@@ -331,12 +331,12 @@ ass2sup --glob "subs/**/*.srt" --parallel -d ./out/
 
 ```toml
 [dependencies]
-ass-parser        = "0.3"
-subtitle-validator = "0.3"
-subtitle-renderer = { version = "0.3", features = ["..."] }
-color-quantizer   = "0.3"
-pgs-encoder       = "0.3"
-bdn-xml           = "0.3"
+ass-parser        = "0.5"
+subtitle-validator = "0.5"
+subtitle-renderer = { version = "0.5", features = ["..."] }
+color-quantizer   = "0.5"
+pgs-encoder       = "0.5"
+bdn-xml           = "0.5"
 ```
 
 或 path 依赖：
