@@ -145,24 +145,24 @@ pub(super) fn composite_subregion(
     src: &[u8],
     dst_w: u32,
     dst_h: u32,
-    src_x: u32,
-    src_y: u32,
+    src_x: i32,
+    src_y: i32,
     src_w: u32,
     src_h: u32,
 ) {
     for ry in 0..src_h {
-        let dy = src_y + ry;
-        if dy >= dst_h {
+        let dy = src_y + ry as i32;
+        if dy < 0 || dy >= dst_h as i32 {
             continue;
         }
         for rx in 0..src_w {
-            let dx = src_x + rx;
-            if dx >= dst_w {
+            let dx = src_x + rx as i32;
+            if dx < 0 || dx >= dst_w as i32 {
                 continue;
             }
 
             let si = (ry * src_w + rx) as usize * 4;
-            let di = (dy * dst_w + dx) as usize * 4;
+            let di = ((dy as u32) * dst_w + (dx as u32)) as usize * 4;
 
             let sa = u32::from(src[si + 3]);
             if sa == 0 {

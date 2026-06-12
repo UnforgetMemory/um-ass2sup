@@ -701,12 +701,12 @@ impl Renderer {
             };
             let (ox, oy, lw, lh, use_sub) = if let Some((min_x, min_y, max_x, max_y)) = sub_bbox {
                 let pad = (pad_border + pad_shadow + ctx.blur).max(20.0);
-                let ox = (min_x - pad).floor().max(0.0) as u32;
-                let oy = (min_y - pad).floor().max(0.0) as u32;
+                let ox = (min_x - pad).floor() as i32;
+                let oy = (min_y - pad).floor() as i32;
                 let lw = ((max_x - min_x) + pad * 2.0).ceil().max(1.0) as u32;
                 let lh = ((max_y - min_y) + pad * 2.0).ceil().max(1.0) as u32;
-                let lw = lw.min(w.saturating_sub(ox)).max(1);
-                let lh = lh.min(h.saturating_sub(oy)).max(1);
+                let lw = lw.min(w.saturating_sub(ox.max(0) as u32)).max(1);
+                let lh = lh.min(h.saturating_sub(oy.max(0) as u32)).max(1);
                 (ox, oy, lw, lh, true)
             } else {
                 (0, 0, w, h, false)
@@ -962,6 +962,14 @@ impl Renderer {
             && ctx.clip_drawing_commands.is_none();
         let sub_bbox = if can_sub {
             compute_tight_bbox(&shaped_lines, &shaper, font_id, ctx.font_size, &ctx)
+                .map(|(min_x, min_y, max_x, max_y)| {
+                    // Clamp tight bbox to frame bounds so sub-region stays within frame.
+                    let min_x = min_x.max(0.0);
+                    let min_y = min_y.max(0.0);
+                    let max_x = max_x.min(self.config.width as f32);
+                    let max_y = max_y.min(self.config.height as f32);
+                    (min_x, min_y, max_x, max_y)
+                })
         } else {
             None
         };
@@ -980,12 +988,12 @@ impl Renderer {
         };
         let (ox, oy, lw, lh, use_sub) = if let Some((min_x, min_y, max_x, max_y)) = sub_bbox {
             let pad = (pad_border + pad_shadow + ctx.blur).max(20.0);
-            let ox = (min_x - pad).floor().max(0.0) as u32;
-            let oy = (min_y - pad).floor().max(0.0) as u32;
+            let ox = (min_x - pad).floor() as i32;
+            let oy = (min_y - pad).floor() as i32;
             let lw = ((max_x - min_x) + pad * 2.0).ceil().max(1.0) as u32;
             let lh = ((max_y - min_y) + pad * 2.0).ceil().max(1.0) as u32;
-            let lw = lw.min(w.saturating_sub(ox)).max(1);
-            let lh = lh.min(h.saturating_sub(oy)).max(1);
+            let lw = lw.min(w.saturating_sub(ox.max(0) as u32)).max(1);
+            let lh = lh.min(h.saturating_sub(oy.max(0) as u32)).max(1);
             (ox, oy, lw, lh, true)
         } else {
             (0, 0, w, h, false)
@@ -1378,12 +1386,12 @@ impl Renderer {
                 .max(ctx.outline_y_width);
             let shadow = ctx.shadow_depth.max(ctx.shadow_x).max(ctx.shadow_y);
             let pad = (border * 2.0 + shadow + ctx.blur).max(20.0);
-            let ox = (min_x - pad).floor().max(0.0) as u32;
-            let oy = (min_y - pad).floor().max(0.0) as u32;
+            let ox = (min_x - pad).floor() as i32;
+            let oy = (min_y - pad).floor() as i32;
             let lw = ((max_x - min_x) + pad * 2.0).ceil().max(1.0) as u32;
             let lh = ((max_y - min_y) + pad * 2.0).ceil().max(1.0) as u32;
-            let lw = lw.min(w.saturating_sub(ox)).max(1);
-            let lh = lh.min(h.saturating_sub(oy)).max(1);
+            let lw = lw.min(w.saturating_sub(ox.max(0) as u32)).max(1);
+            let lh = lh.min(h.saturating_sub(oy.max(0) as u32)).max(1);
             (ox, oy, lw, lh, true)
         } else {
             (0, 0, w, h, false)

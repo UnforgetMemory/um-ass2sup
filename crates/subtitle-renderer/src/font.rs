@@ -189,19 +189,20 @@ impl FontManager {
             return Some(id);
         }
 
-        // 2. Hardcoded fallback font names — includes CJK-capable families
+        // 2. Hardcoded fallback font names — CJK-capable families first
         //    so that Chinese, Japanese, and Korean subtitles render legibly
         //    even when no system CJK font is configured.
         let fallbacks = [
-            "Liberation Sans",
-            "DejaVu Sans",
-            "Noto Sans",
             "Noto Sans CJK SC",
             "Noto Sans CJK TC",
+            "Noto Sans CJK JP",
             "WenQuanYi Micro Hei",
             "Source Han Sans CN",
             "IPAGothic",
             "NanumGothic",
+            "Liberation Sans",
+            "DejaVu Sans",
+            "Noto Sans",
             "Arial",
             "Helvetica",
         ];
