@@ -5,6 +5,8 @@ use crate::decoder::{DisplaySet, ParsedObjectComposition, ParsedPayload, ParsedS
 use crate::rle::rle_decode;
 use crate::types::{CompositionState, PaletteEntry, WindowDef};
 
+const MAX_ODS_BYTES: usize = 1920 * 1080;
+
 pub struct FramePixels {
     pub width: u32,
     pub height: u32,
@@ -114,6 +116,12 @@ fn process_segment(
             });
             obj.width = *width;
             obj.height = *height;
+            let new_len = obj.rle_data.len() + data.len();
+            if new_len > MAX_ODS_BYTES {
+                return Err(DecodeImageError::InvalidDimensions(format!(
+                    "ODS data exceeds maximum: {new_len} > {MAX_ODS_BYTES}"
+                )));
+            }
             obj.rle_data.extend_from_slice(data);
         }
 

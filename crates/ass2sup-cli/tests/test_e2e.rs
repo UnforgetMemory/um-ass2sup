@@ -197,11 +197,11 @@ fn test_validation_before_render() {
     let content = std::fs::read_to_string(&path).unwrap();
     let ass = AssFile::parse(&content).unwrap();
     let report = subtitle_validator::validate(&ass);
-    if !report.is_valid {
-        for finding in report.errors() {
-            eprintln!("Validation error: {}", finding.message);
-        }
-    }
+    assert!(
+        report.is_valid,
+        "overlapping.ass should be parseable and valid, but got errors: {}",
+        report.summary()
+    );
 }
 
 #[test]

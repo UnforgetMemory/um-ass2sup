@@ -34,4 +34,4 @@ assert_cmd.workspace = true
 predicates.workspace = true
 tempfile.workspace = true
 insta.workspace = true
-flate2 = "1.0"
+png.workspace = true

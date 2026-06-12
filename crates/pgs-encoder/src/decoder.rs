@@ -162,10 +162,10 @@ pub fn decode_segment(data: &[u8], offset: usize) -> Result<(ParsedSegment, usiz
 
     // Parse header fields (big-endian)
     // PTS and DTS are 32-bit at 90kHz (bytes 2-5 and 6-9)
-    let pts = u64::from(read_be32(data, offset + 2));
-    let dts = u64::from(read_be32(data, offset + 6));
+    let pts = u64::from(read_be32(data, offset + 2).ok_or(DecodeError::TruncatedPayload)?);
+    let dts = u64::from(read_be32(data, offset + 6).ok_or(DecodeError::TruncatedPayload)?);
     let segment_type = data[offset + 10];
-    let payload_size = read_be16(data, offset + 11) as usize;
+    let payload_size = read_be16(data, offset + 11).ok_or(DecodeError::TruncatedPayload)? as usize;
 
     // Parse payload
     let payload_offset = offset + HEADER_SIZE;
@@ -240,11 +240,11 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
         return Err(DecodeError::TruncatedPayload);
     }
 
-    let object_id = read_be16(data, 0);
+    let object_id = read_be16(data, 0).ok_or(DecodeError::TruncatedPayload)?;
     let version = data[2];
     // byte 3: last_in_sequence flag
-    let width = read_be16(data, 4);
-    let height = read_be16(data, 6);
+    let width = read_be16(data, 4).ok_or(DecodeError::TruncatedPayload)?;
+    let height = read_be16(data, 6).ok_or(DecodeError::TruncatedPayload)?;
 
     // RLE data starts at offset 8, with a 4-byte length prefix
     if data.len() < 12 {
@@ -257,7 +257,7 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
         });
     }
 
-    let rle_len = read_be32(data, 8) as usize;
+    let rle_len = read_be32(data, 8).ok_or(DecodeError::TruncatedPayload)? as usize;
     let rle_start = 12;
     let rle_end = (rle_start + rle_len).min(data.len());
     let rle_data = data[rle_start..rle_end].to_vec();
@@ -283,10 +283,10 @@ fn parse_pcs_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
         return Err(DecodeError::TruncatedPayload);
     }
 
-    let width = read_be16(data, 0);
-    let height = read_be16(data, 2);
+    let width = read_be16(data, 0).ok_or(DecodeError::TruncatedPayload)?;
+    let height = read_be16(data, 2).ok_or(DecodeError::TruncatedPayload)?;
     let frame_rate = data[4];
-    let composition_number = read_be16(data, 5);
+    let composition_number = read_be16(data, 5).ok_or(DecodeError::TruncatedPayload)?;
     let composition_state = match data[7] {
         0x00 => CompositionState::EpochStart,
         0x40 => CompositionState::AcquirePoint,
@@ -305,11 +305,11 @@ fn parse_pcs_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
             break;
         }
         objects.push(ParsedObjectComposition {
-            object_id: read_be16(data, off),
+            object_id: read_be16(data, off).ok_or(DecodeError::TruncatedPayload)?,
             window_id: data[off + 2],
             forced: data[off + 3] & 0x40 != 0,
-            x: read_be16(data, off + 4),
-            y: read_be16(data, off + 6),
+            x: read_be16(data, off + 4).ok_or(DecodeError::TruncatedPayload)?,
+            y: read_be16(data, off + 6).ok_or(DecodeError::TruncatedPayload)?,
         });
         off += 8;
     }
@@ -342,10 +342,10 @@ fn parse_wds_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
         }
         windows.push(WindowDef {
             window_id: data[off],
-            x: read_be16(data, off + 1),
-            y: read_be16(data, off + 3),
-            width: read_be16(data, off + 5),
-            height: read_be16(data, off + 7),
+            x: read_be16(data, off + 1).ok_or(DecodeError::TruncatedPayload)?,
+            y: read_be16(data, off + 3).ok_or(DecodeError::TruncatedPayload)?,
+            width: read_be16(data, off + 5).ok_or(DecodeError::TruncatedPayload)?,
+            height: read_be16(data, off + 7).ok_or(DecodeError::TruncatedPayload)?,
         });
         off += 9;
     }
@@ -446,17 +446,23 @@ pub fn verify_roundtrip(original: &[u8]) -> Result<(), String> {
 
 // === Helper functions ===
 
-fn read_be16(data: &[u8], offset: usize) -> u16 {
-    u16::from_be_bytes([data[offset], data[offset + 1]])
+fn read_be16(data: &[u8], offset: usize) -> Option<u16> {
+    if offset + 2 > data.len() {
+        return None;
+    }
+    Some(u16::from_be_bytes([data[offset], data[offset + 1]]))
 }
 
-fn read_be32(data: &[u8], offset: usize) -> u32 {
-    u32::from_be_bytes([
+fn read_be32(data: &[u8], offset: usize) -> Option<u32> {
+    if offset + 4 > data.len() {
+        return None;
+    }
+    Some(u32::from_be_bytes([
         data[offset],
         data[offset + 1],
         data[offset + 2],
         data[offset + 3],
-    ])
+    ]))
 }
 
 // === Tests ===

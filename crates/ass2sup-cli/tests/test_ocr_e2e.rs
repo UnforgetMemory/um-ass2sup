@@ -357,116 +357,56 @@ fn test_ocr_roundtrip() {
 }
 
 fn is_png_blank(png_data: &[u8]) -> bool {
-    use std::io::Read;
-    if png_data.len() < 8 || &png_data[0..8] != b"\x89PNG\r\n\x1a\n" {
-        return false;
-    }
-    let mut r = png_data[8..].to_vec();
-    let mut pos = 0;
-    let mut width = 0u32;
-    let mut height = 0u32;
-    let mut bit_depth = 0u8;
-    let mut color_type = 0u8;
-    while pos + 12 <= r.len() {
-        let len = u32::from_be_bytes([r[pos], r[pos + 1], r[pos + 2], r[pos + 3]]) as usize;
-        let chunk = &r[pos + 4..pos + 8];
-        let chunk_data = if len > 0 && pos + 12 + len <= r.len() {
-            &r[pos + 8..pos + 8 + len]
-        } else {
-            &[]
-        };
-        if chunk == b"IHDR" && chunk_data.len() >= 13 {
-            width =
-                u32::from_be_bytes([chunk_data[0], chunk_data[1], chunk_data[2], chunk_data[3]]);
-            height =
-                u32::from_be_bytes([chunk_data[4], chunk_data[5], chunk_data[6], chunk_data[7]]);
-            bit_depth = chunk_data[8];
-            color_type = chunk_data[9];
-        }
-        if chunk == b"IDAT" && chunk_data.len() > 0 && width > 0 && height > 0 {
-            let bytes_per_pixel = match color_type {
-                0 => 1,
-                2 => 3,
-                4 => 2,
-                6 => 4,
-                _ => 1,
-            };
-            if bit_depth == 8 && (color_type == 0 || color_type == 2 || color_type == 6) {
-                if let Ok(decoded) =
-                    inflate_zlib(chunk_data, width as usize, height as usize, bytes_per_pixel)
-                {
-                    let threshold = 240u8;
-                    let mut non_blank = 0usize;
-                    for pixel in decoded.chunks(bytes_per_pixel as usize) {
-                        let brightness: u8 = match bytes_per_pixel {
-                            1 => pixel[0],
-                            3 => ((pixel[0] as u16 + pixel[1] as u16 + pixel[2] as u16) / 3) as u8,
-                            4 => ((pixel[0] as u16 + pixel[1] as u16 + pixel[2] as u16) / 3) as u8,
-                            _ => pixel[0],
-                        };
-                        if brightness < threshold {
-                            non_blank += 1;
-                        }
-                    }
-                    let total = (width * height) as f64;
-                    let non_blank_ratio = non_blank as f64 / total;
-                    return non_blank_ratio < 0.001;
+    let decoder = png::Decoder::new(std::io::Cursor::new(png_data));
+    let mut reader = match decoder.read_info() {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = match reader.next_frame(&mut buf) {
+        Ok(i) => i,
+        Err(_) => return false,
+    };
+    let bytes = &buf[..info.buffer_size()];
+    let threshold = 240u8;
+    let mut non_blank = 0usize;
+    match info.color_type {
+        png::ColorType::Grayscale => {
+            for &pixel in bytes {
+                if pixel < threshold {
+                    non_blank += 1;
                 }
             }
         }
-        pos += 12 + len;
-        if chunk == b"IEND" {
-            break;
+        png::ColorType::Rgb => {
+            for pixel in bytes.chunks(3) {
+                let brightness =
+                    ((pixel[0] as u16 + pixel[1] as u16 + pixel[2] as u16) / 3) as u8;
+                if brightness < threshold {
+                    non_blank += 1;
+                }
+            }
         }
-    }
-    false
-}
-
-fn inflate_zlib(
-    compressed: &[u8],
-    width: usize,
-    height: usize,
-    bytes_per_pixel: usize,
-) -> Result<Vec<u8>, ()> {
-    use std::io::Read;
-    let mut decoder = flate2::read::ZlibDecoder::new(compressed);
-    let mut out = Vec::new();
-    decoder.read_to_end(&mut out).map_err(|_| ())?;
-    let expected = width * height * bytes_per_pixel;
-    if out.len() >= expected {
-        return Ok(out[..expected].to_vec());
-    }
-    let scanline_len = width * bytes_per_pixel + 1;
-    let mut result = Vec::with_capacity(width * height * bytes_per_pixel);
-    let mut y = 0usize;
-    let mut pos = 0usize;
-    while y < height && pos + scanline_len <= out.len() {
-        let filter_type = out[pos];
-        let row = &out[pos + 1..pos + scanline_len];
-        let mut decoded_row = vec![0u8; width * bytes_per_pixel];
-        let mut last_pixel = [0u8; 4];
-        for x in 0..width {
-            let src = &row[x * bytes_per_pixel..(x + 1) * bytes_per_pixel];
-            let dst = &mut decoded_row[x * bytes_per_pixel..(x + 1) * bytes_per_pixel];
-            match filter_type {
-                0 => dst.copy_from_slice(src),
-                1 => {
-                    for i in 0..bytes_per_pixel {
-                        let left = if x > 0 { last_pixel[i] } else { 0 };
-                        dst[i] = src[i].wrapping_add(left);
+        png::ColorType::GrayscaleAlpha => {
+            for pixel in bytes.chunks(2) {
+                if pixel[0] < threshold {
+                    non_blank += 1;
+                }
+            }
+        }
+        png::ColorType::Rgba => {
+            for pixel in bytes.chunks(4) {
+                if pixel[3] != 0 {
+                    let brightness = ((pixel[0] as u16 + pixel[1] as u16 + pixel[2] as u16) / 3)
+                        as u8;
+                    if brightness < threshold {
+                        non_blank += 1;
                     }
                 }
-                _ => dst.copy_from_slice(src),
             }
-            last_pixel.copy_from_slice(dst);
         }
-        result.extend_from_slice(&decoded_row);
-        pos += scanline_len;
-        y += 1;
+        _ => return false,
     }
-    if result.len() >= expected {
-        Ok(result[..expected].to_vec())
-    } else {
-        Ok(result)
-    }
+    let total = (info.width * info.height) as f64;
+    (non_blank as f64 / total) < 0.001
 }

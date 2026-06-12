@@ -3357,14 +3357,15 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
 
 [Fonts]
-fontname: MissingFont, filename: /tmp/nonexistent_font_12345.ttf
+fontname: MissingFont, filename: nonexistent_font_12345.ttf
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,MissingTest
 "#;
+    let tmp = tempfile::TempDir::new().unwrap();
     let mut parsed = AssFile::parse(ass).unwrap();
-    let loaded = parsed.load_embedded_fonts(std::path::Path::new("/tmp/"));
+    let loaded = parsed.load_embedded_fonts(tmp.path());
     assert!(
         loaded.is_empty(),
         "load_embedded_fonts should return empty vec for missing file"
@@ -3389,8 +3390,9 @@ fontname: EmptyFont
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,EmptyTest
 "#;
+    let tmp = tempfile::TempDir::new().unwrap();
     let mut parsed = AssFile::parse(ass).unwrap();
-    let loaded = parsed.load_embedded_fonts(std::path::Path::new("/tmp/"));
+    let loaded = parsed.load_embedded_fonts(tmp.path());
     assert!(
         loaded.is_empty(),
         "load_embedded_fonts should return empty vec for empty filename"
