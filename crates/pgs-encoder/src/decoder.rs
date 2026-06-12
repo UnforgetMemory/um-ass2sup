@@ -71,6 +71,7 @@ pub enum ParsedPayload {
         version: u8,
         width: u16,
         height: u16,
+        first_in_sequence: bool,
         data: Vec<u8>,
     },
     /// Presentation Composition — frame layout and timing.
@@ -244,7 +245,6 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
     let version = data[2];
     let flags = data[3];
     let first_in_sequence = flags & 0x80 != 0;
-    let last_in_sequence = flags & 0x40 != 0;
 
     if first_in_sequence {
         // First segment: has total_size(3) + width(2) + height(2) + rle_data
@@ -262,6 +262,7 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
             version,
             width,
             height,
+            first_in_sequence: true,
             data: rle_data,
         })
     } else {
@@ -273,6 +274,7 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
             version,
             width: 0,
             height: 0,
+            first_in_sequence: false,
             data: rle_data,
         })
     }

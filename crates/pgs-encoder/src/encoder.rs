@@ -275,7 +275,7 @@ impl PgsEncoder {
                 frame_rate: self.frame_rate,
                 composition_number: self.composition_number,
                 composition_state,
-                palette_update: palette_changed,
+                palette_update: true,
                 palette_id: self.palette_id,
                 num_objects: 1,
                 compositions: vec![ObjectComposition {
@@ -383,7 +383,7 @@ impl PgsEncoder {
                 frame_rate: self.frame_rate,
                 composition_number: self.composition_number,
                 composition_state,
-                palette_update: palette_changed,
+                palette_update: true,
                 palette_id: self.palette_id,
                 num_objects: 2,
                 compositions: vec![

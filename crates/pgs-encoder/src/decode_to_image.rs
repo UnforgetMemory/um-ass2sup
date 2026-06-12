@@ -106,6 +106,7 @@ fn process_segment(
             object_id,
             width,
             height,
+            first_in_sequence,
             data,
             ..
         } => {
@@ -114,8 +115,12 @@ fn process_segment(
                 height: *height,
                 rle_data: Vec::new(),
             });
-            obj.width = *width;
-            obj.height = *height;
+            // Only update stored dimensions from first-in-sequence ODS segments;
+            // continuation segments have width=0, height=0.
+            if *first_in_sequence && *width > 0 {
+                obj.width = *width;
+                obj.height = *height;
+            }
             let new_len = obj.rle_data.len() + data.len();
             if new_len > MAX_ODS_BYTES {
                 return Err(DecodeImageError::InvalidDimensions(format!(
