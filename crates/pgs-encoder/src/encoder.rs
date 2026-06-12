@@ -315,20 +315,16 @@ impl PgsEncoder {
             }),
         });
 
-        // Only emit PDS when palette actually changed since last frame
-        // (avoids confusing players with redundant palette definitions)
-        if palette_changed {
-            segments.push(Segment {
-                segment_type: SegmentType::Pds,
-                pts,
-                dts,
-                payload: SegmentPayload::Pds(PdsPayload {
-                    palette_id: self.palette_id,
-                    version: self.frame_count as u8,
-                    entries: palette_entries.to_vec(),
-                }),
-            });
-        }
+        segments.push(Segment {
+            segment_type: SegmentType::Pds,
+            pts,
+            dts,
+            payload: SegmentPayload::Pds(PdsPayload {
+                palette_id: self.palette_id,
+                version: self.frame_count as u8,
+                entries: palette_entries.to_vec(),
+            }),
+        });
 
         let chunks = chunk_rle_data(rle, MAX_ODS_CHUNK);
         for (i, chunk) in chunks.iter().enumerate() {
@@ -444,18 +440,16 @@ impl PgsEncoder {
             }),
         });
 
-        if palette_changed {
-            segments.push(Segment {
-                segment_type: SegmentType::Pds,
-                pts,
-                dts,
-                payload: SegmentPayload::Pds(PdsPayload {
-                    palette_id: self.palette_id,
-                    version: self.frame_count as u8,
-                    entries: palette_entries.to_vec(),
-                }),
-            });
-        }
+        segments.push(Segment {
+            segment_type: SegmentType::Pds,
+            pts,
+            dts,
+            payload: SegmentPayload::Pds(PdsPayload {
+                palette_id: self.palette_id,
+                version: self.frame_count as u8,
+                entries: palette_entries.to_vec(),
+            }),
+        });
 
         let rle_top = rle_encode(
             &frame.indices[..(frame.width * split_row) as usize],

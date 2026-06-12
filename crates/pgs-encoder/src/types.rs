@@ -327,8 +327,7 @@ impl OdsPayload {
         output.extend_from_slice(&self.object_id.to_be_bytes());
         // Object version
         output.push(self.object_version);
-        // Last in sequence flag (1 bit) + reserved (7 bits)
-        // PGS spec: bit 7 = first_in_sequence, bit 6 = last_in_sequence, bits 5-0 = reserved
+        // Sequence descriptor: bit 7 = first_in_sequence, bit 6 = last_in_sequence
         let mut flags = 0u8;
         if self.first_in_sequence {
             flags |= 0x80;
@@ -337,13 +336,18 @@ impl OdsPayload {
             flags |= 0x40;
         }
         output.push(flags);
-        // Width (u16 BE)
-        output.extend_from_slice(&self.width.to_be_bytes());
-        // Height (u16 BE)
-        output.extend_from_slice(&self.height.to_be_bytes());
-        // RLE data length (u32 BE)
-        let data_len = self.rle_data.len() as u32;
-        output.extend_from_slice(&data_len.to_be_bytes());
+        // First segment carries total object size (3 BE, includes width+height+data)
+        // followed by width+height. Continuation segments have only RLE data.
+        if self.first_in_sequence {
+            let total_size = (4 + self.rle_data.len()) as u32; // width(2) + height(2) + data
+            output.push((total_size >> 16) as u8);
+            output.push((total_size >> 8) as u8);
+            output.push(total_size as u8);
+            // Width (u16 BE)
+            output.extend_from_slice(&self.width.to_be_bytes());
+            // Height (u16 BE)
+            output.extend_from_slice(&self.height.to_be_bytes());
+        }
         // RLE data
         output.extend(&self.rle_data);
         output

@@ -236,39 +236,46 @@ fn parse_pds_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
 
 /// Parse ODS (Object Definition Segment) payload.
 fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
-    if data.len() < 8 {
+    if data.len() < 4 {
         return Err(DecodeError::TruncatedPayload);
     }
 
     let object_id = read_be16(data, 0).ok_or(DecodeError::TruncatedPayload)?;
     let version = data[2];
-    // byte 3: last_in_sequence flag
-    let width = read_be16(data, 4).ok_or(DecodeError::TruncatedPayload)?;
-    let height = read_be16(data, 6).ok_or(DecodeError::TruncatedPayload)?;
+    let flags = data[3];
+    let first_in_sequence = flags & 0x80 != 0;
+    let last_in_sequence = flags & 0x40 != 0;
 
-    // RLE data starts at offset 8, with a 4-byte length prefix
-    if data.len() < 12 {
-        return Ok(ParsedPayload::ObjectDefinition {
+    if first_in_sequence {
+        // First segment: has total_size(3) + width(2) + height(2) + rle_data
+        if data.len() < 11 {
+            return Err(DecodeError::TruncatedPayload);
+        }
+        let total_size = ((data[4] as usize) << 16) | ((data[5] as usize) << 8) | (data[6] as usize);
+        let width = read_be16(data, 7).ok_or(DecodeError::TruncatedPayload)?;
+        let height = read_be16(data, 9).ok_or(DecodeError::TruncatedPayload)?;
+        let rle_start = 11;
+        let rle_data = data[rle_start..].to_vec();
+
+        Ok(ParsedPayload::ObjectDefinition {
             object_id,
             version,
             width,
             height,
-            data: data[4..].to_vec(),
-        });
+            data: rle_data,
+        })
+    } else {
+        // Continuation segment: only RLE data follows (no size, no width/height)
+        // width/height are inherited from the first segment (not in this payload)
+        let rle_data = data[4..].to_vec();
+        Ok(ParsedPayload::ObjectDefinition {
+            object_id,
+            version,
+            width: 0,
+            height: 0,
+            data: rle_data,
+        })
     }
-
-    let rle_len = read_be32(data, 8).ok_or(DecodeError::TruncatedPayload)? as usize;
-    let rle_start = 12;
-    let rle_end = (rle_start + rle_len).min(data.len());
-    let rle_data = data[rle_start..rle_end].to_vec();
-
-    Ok(ParsedPayload::ObjectDefinition {
-        object_id,
-        version,
-        width,
-        height,
-        data: rle_data,
-    })
 }
 
 /// Parse PCS (Presentation Composition Segment) payload.
@@ -487,15 +494,27 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_ods_payload_too_short_for_dimensions() {
-        let data: &[u8] = &[
-            0x50, 0x47, 0x47, 0x47, 0x47, 0x47, 0xf9, 0x47, 0xaa, 0xab, 0x15, 0x00, 0x05, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x7d, 0x50, 0x14, 0x47, 0x02, 0x24, 0x50, 0x0a,
+fn test_decode_ods_payload_too_short_for_dimensions() {
+        // Test a first-in-sequence ODS with payload less than 11 bytes needed for headers
+        let bytes = vec![
+            0x50, 0x47,                                     // PG magic
+            0x00, 0x00, 0x00, 0x00,                         // PTS=0
+            0x00, 0x00, 0x00, 0x00,                         // DTS=0
+            0x15,                                           // ODS segment type
+            0x00, 0x06,                                     // payload_size=6 (too short!)
+            0x00, 0x01,                                     // object_id=1
+            0x00,                                           // version=0
+            0x80,                                           // flags=first_in_sequence
+            0x00, 0x00,                                     // partial total_size (only 2/3 bytes)
         ];
-        let result = decode_sup(data);
+        // ODS payload is 6 bytes but first_in_sequence needs at least 11
+        // (3 total_size + 2 width + 2 height = 7 bytes, plus 4 header = 11)
+        // So we have 6 bytes of payload but 11 needed → TruncatedPayload
+        let result = decode_sup(&bytes);
         assert!(
             matches!(result, Err(DecodeError::TruncatedPayload)),
-            "ODS payload shorter than width/height fields must return TruncatedPayload, not panic. Got: {result:?}"
+            "First-in-sequence ODS too short for dimensions must return TruncatedPayload, got: {:?}",
+            result
         );
     }
 
