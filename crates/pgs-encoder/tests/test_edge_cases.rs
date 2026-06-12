@@ -363,11 +363,12 @@ fn test_multiple_frames_object_id_increments() {
 
     for i in 0..3u64 {
         let segments = enc.encode_frame(&frame, i * 1000, 1000);
-        // ODS segment (index 3 in display set) should have object_id == i
-        if let pgs_encoder::types::SegmentPayload::Ods(ref ods) = segments[3].payload {
-            assert_eq!(ods.object_id, i as u16, "Frame {} object_id", i);
-        } else {
-            panic!("4th segment should be ODS");
+        // Find ODS segment by type (index varies when PDS is absent)
+        let ods = segments.iter().find(|s| {
+            matches!(s.payload, pgs_encoder::types::SegmentPayload::Ods(_))
+        }).expect("Should have an ODS segment");
+        if let pgs_encoder::types::SegmentPayload::Ods(ref ods_data) = ods.payload {
+            assert_eq!(ods_data.object_id, i as u16, "Frame {} object_id", i);
         }
     }
 }

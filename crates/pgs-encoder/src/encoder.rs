@@ -94,7 +94,7 @@ impl PgsEncoder {
             payload: SegmentPayload::End,
         });
 
-        self.composition_number = self.composition_number.wrapping_add(1);
+                self.composition_number = self.composition_number.wrapping_add(1);
         self.object_id = self.object_id.wrapping_add(1);
         self.object_version = self.object_version.wrapping_add(1);
         self.frame_count += 1;
@@ -293,6 +293,12 @@ impl PgsEncoder {
             }),
         });
 
+        // Clamp window dimensions to display bounds
+        let win_x = obj_x.min(self.display_width.saturating_sub(1));
+        let win_y = obj_y.min(self.display_height.saturating_sub(1));
+        let win_w = (frame.width as u16).min(self.display_width.saturating_sub(win_x));
+        let win_h = (frame.height as u16).min(self.display_height.saturating_sub(win_y));
+
         segments.push(Segment {
             segment_type: SegmentType::Wds,
             pts,
@@ -301,24 +307,28 @@ impl PgsEncoder {
                 num_windows: 1,
                 windows: vec![WindowDef {
                     window_id: self.window_id,
-                    x: obj_x,
-                    y: obj_y,
-                    width: frame.width as u16,
-                    height: frame.height as u16,
+                    x: win_x,
+                    y: win_y,
+                    width: win_w,
+                    height: win_h,
                 }],
             }),
         });
 
-        segments.push(Segment {
-            segment_type: SegmentType::Pds,
-            pts,
-            dts,
-            payload: SegmentPayload::Pds(PdsPayload {
-                palette_id: self.palette_id,
-                version: self.frame_count as u8,
-                entries: palette_entries.to_vec(),
-            }),
-        });
+        // Only emit PDS when palette actually changed since last frame
+        // (avoids confusing players with redundant palette definitions)
+        if palette_changed {
+            segments.push(Segment {
+                segment_type: SegmentType::Pds,
+                pts,
+                dts,
+                payload: SegmentPayload::Pds(PdsPayload {
+                    palette_id: self.palette_id,
+                    version: self.frame_count as u8,
+                    entries: palette_entries.to_vec(),
+                }),
+            });
+        }
 
         let chunks = chunk_rle_data(rle, MAX_ODS_CHUNK);
         for (i, chunk) in chunks.iter().enumerate() {
@@ -434,16 +444,18 @@ impl PgsEncoder {
             }),
         });
 
-        segments.push(Segment {
-            segment_type: SegmentType::Pds,
-            pts,
-            dts,
-            payload: SegmentPayload::Pds(PdsPayload {
-                palette_id: self.palette_id,
-                version: self.frame_count as u8,
-                entries: palette_entries.to_vec(),
-            }),
-        });
+        if palette_changed {
+            segments.push(Segment {
+                segment_type: SegmentType::Pds,
+                pts,
+                dts,
+                payload: SegmentPayload::Pds(PdsPayload {
+                    palette_id: self.palette_id,
+                    version: self.frame_count as u8,
+                    entries: palette_entries.to_vec(),
+                }),
+            });
+        }
 
         let rle_top = rle_encode(
             &frame.indices[..(frame.width * split_row) as usize],
