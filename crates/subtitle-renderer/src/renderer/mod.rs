@@ -528,6 +528,12 @@ impl Renderer {
             let (_ax, ay) = alignment_to_pos(ctx.alignment);
             ctx.x = ctx.margin_l;
             ctx.y = ctx.margin_v + ay * (self.config.height as f32 - ctx.margin_v * 2.0);
+            // For top-aligned text (alignment 7,8,9), shift baseline down by
+            // font_size so the glyph (which extends upward in screen coords)
+            // stays within the frame.
+            if ay == 0.0 {
+                ctx.y += ctx.font_size;
+            }
         }
 
         ctx
