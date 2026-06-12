@@ -857,7 +857,9 @@ impl Renderer {
                 );
                 let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
                 shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
-                effects::composite_over(layer.data_mut(), shadow_pixmap.data(), lw, lh);
+                // Shadow goes BEHIND text: composite layer on top of shadow
+                effects::composite_over(shadow_pixmap.data_mut(), layer.data(), lw, lh);
+                layer.data_mut().copy_from_slice(shadow_pixmap.data());
                 self.pixmap_pool.lock().put(shadow_pixmap);
             }
 
@@ -1146,7 +1148,9 @@ impl Renderer {
             );
             let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_layer);
-            effects::composite_over(layer.data_mut(), shadow_pixmap.data(), lw, lh);
+            // Shadow goes BEHIND text: composite layer on top of shadow
+            effects::composite_over(shadow_pixmap.data_mut(), layer.data(), lw, lh);
+            layer.data_mut().copy_from_slice(shadow_pixmap.data());
             self.pixmap_pool.lock().put(shadow_pixmap);
         }
 
@@ -1523,7 +1527,9 @@ impl Renderer {
             );
             let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
-            effects::composite_over(bg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
+            // Shadow goes BEHIND bg_layer
+            effects::composite_over(shadow_pixmap.data_mut(), bg_layer.data(), lw, lh);
+            bg_layer.data_mut().copy_from_slice(shadow_pixmap.data());
             self.pixmap_pool.lock().put(shadow_pixmap);
         }
         if ctx.shadow_depth > 0.0 {
@@ -1547,7 +1553,9 @@ impl Renderer {
             );
             let mut shadow_pixmap = self.pixmap_pool.lock().get(lw, lh).unwrap();
             shadow_pixmap.data_mut().copy_from_slice(&shadow_data);
-            effects::composite_over(fg_layer.data_mut(), shadow_pixmap.data(), lw, lh);
+            // Shadow goes BEHIND fg_layer
+            effects::composite_over(shadow_pixmap.data_mut(), fg_layer.data(), lw, lh);
+            fg_layer.data_mut().copy_from_slice(shadow_pixmap.data());
             self.pixmap_pool.lock().put(shadow_pixmap);
         }
 

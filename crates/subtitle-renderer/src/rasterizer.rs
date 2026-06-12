@@ -23,7 +23,7 @@
 use crate::context::RenderContext;
 use crate::font::FontManager;
 use crate::shaper::ShapedGlyph;
-use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Transform};
 
 /// Adapter that converts ttf-parser glyph outline commands into tiny-skia path
 /// commands, applying font-unit-to-pixel scaling and screen-space translation.
@@ -223,24 +223,6 @@ pub(crate) fn apply_anisotropic_outline(
         outline_width
     };
 
-    // Fast path: uniform outline → standard stroke.
-    if (ox - outline_width).abs() <= f32::EPSILON && (oy - outline_width).abs() <= f32::EPSILON {
-        let stroke = Stroke {
-            width: outline_width * 2.0,
-            ..Default::default()
-        };
-        let mut paint = Paint::default();
-        paint.set_color_rgba8(
-            outline_color[0],
-            outline_color[1],
-            outline_color[2],
-            outline_color[3],
-        );
-        paint.anti_alias = true;
-        pixmap.stroke_path(path, &paint, &stroke, Transform::identity(), None);
-        return;
-    }
-
     // ── Build the fill alpha mask ──────────────────────────────────────
     let mut mask = if let Some(p) = Pixmap::new(w as u32, h as u32) {
         p
@@ -280,14 +262,16 @@ pub(crate) fn apply_anisotropic_outline(
                 let dst_a = f32::from(pix_data[di + 3]) / 255.0;
                 let res_a = out_frac + dst_a * (1.0 - out_frac);
                 debug_assert!(res_a > 0.0);
+                // pix_data[di..+2] is already premultiplied by tiny-skia; do NOT
+                // multiply by dst_a again (that would double-count the alpha).
                 pix_data[di] = ((f32::from(outline_color[0]) * out_frac
-                    + f32::from(pix_data[di]) * dst_a * (1.0 - out_frac))
+                    + f32::from(pix_data[di]) * (1.0 - out_frac))
                     / res_a) as u8;
                 pix_data[di + 1] = ((f32::from(outline_color[1]) * out_frac
-                    + f32::from(pix_data[di + 1]) * dst_a * (1.0 - out_frac))
+                    + f32::from(pix_data[di + 1]) * (1.0 - out_frac))
                     / res_a) as u8;
                 pix_data[di + 2] = ((f32::from(outline_color[2]) * out_frac
-                    + f32::from(pix_data[di + 2]) * dst_a * (1.0 - out_frac))
+                    + f32::from(pix_data[di + 2]) * (1.0 - out_frac))
                     / res_a) as u8;
                 pix_data[di + 3] = (res_a * 255.0) as u8;
             }
