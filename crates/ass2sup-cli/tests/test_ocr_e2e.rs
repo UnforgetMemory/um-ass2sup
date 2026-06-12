@@ -317,8 +317,11 @@ fn test_ocr_roundtrip() {
     // Fixture list: (filename, description, minimum similarity threshold)
     let fixtures = [
         ("simple.ass", "ASCII English", 0.60),
+        ("ocr_fr.ass", "French", 0.60),
         ("ocr_zhcn.ass", "Chinese Simplified", 0.50),
         ("ocr_zhtw.ass", "Chinese Traditional", 0.50),
+        ("ocr_ja.ass", "Japanese", 0.50),
+        ("ocr_ko.ass", "Korean", 0.50),
         ("ocr_mixed_cn_en.ass", "Mixed CN/EN", 0.50),
         ("ocr_effects.ass", "Effects ASS", 0.40),
         ("island_disappeared.ass", "Chinese Styled", 0.50),
