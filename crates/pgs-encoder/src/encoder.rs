@@ -329,6 +329,7 @@ impl PgsEncoder {
                 payload: SegmentPayload::Ods(OdsPayload {
                     object_id: self.object_id,
                     object_version: self.object_version,
+                    first_in_sequence: i == 0,
                     last_in_sequence: i == chunks.len() - 1,
                     width: frame.width as u16,
                     height: frame.height as u16,
@@ -471,6 +472,7 @@ impl PgsEncoder {
                     payload: SegmentPayload::Ods(OdsPayload {
                         object_id: *obj_id,
                         object_version: self.object_version,
+                        first_in_sequence: i == 0,
                         last_in_sequence: i == chunks.len() - 1,
                         width: frame.width as u16,
                         height: if obj_idx == 0 {

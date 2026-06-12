@@ -127,6 +127,7 @@ pub struct PdsPayload {
 pub struct OdsPayload {
     pub object_id: u16,
     pub object_version: u8,
+    pub first_in_sequence: bool,
     pub last_in_sequence: bool,
     pub width: u16,
     pub height: u16,
@@ -327,7 +328,15 @@ impl OdsPayload {
         // Object version
         output.push(self.object_version);
         // Last in sequence flag (1 bit) + reserved (7 bits)
-        output.push(if self.last_in_sequence { 0x80 } else { 0x00 });
+        // PGS spec: bit 7 = first_in_sequence, bit 0 = last_in_sequence
+        let mut flags = 0u8;
+        if self.first_in_sequence {
+            flags |= 0x80;
+        }
+        if self.last_in_sequence {
+            flags |= 0x01;
+        }
+        output.push(flags);
         // Width (u16 BE)
         output.extend_from_slice(&self.width.to_be_bytes());
         // Height (u16 BE)

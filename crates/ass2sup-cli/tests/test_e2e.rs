@@ -199,8 +199,7 @@ fn test_validation_before_render() {
     let report = subtitle_validator::validate(&ass);
     assert!(
         report.is_valid,
-        "overlapping.ass should be parseable and valid, but got errors: {}",
-        report.summary()
+        "{path:?} should be valid"
     );
 }
 
