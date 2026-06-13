@@ -251,7 +251,7 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
         if data.len() < 11 {
             return Err(DecodeError::TruncatedPayload);
         }
-        let total_size = ((data[4] as usize) << 16) | ((data[5] as usize) << 8) | (data[6] as usize);
+        let _total_size = ((data[4] as usize) << 16) | ((data[5] as usize) << 8) | (data[6] as usize);
         let width = read_be16(data, 7).ok_or(DecodeError::TruncatedPayload)?;
         let height = read_be16(data, 9).ok_or(DecodeError::TruncatedPayload)?;
         let rle_start = 11;
