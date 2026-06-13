@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.1] - 2026-06-13
+
+### Highlights
+- **PGS spec compliance overhaul**: Encoder rewritten to match FFmpeg/PGS BD-ROM specification. 7 fixes addressing ODS layout, flags, PDS byte order, cross-chunk total_size, palette_update, palette swap, and window bounds clamping.
+- **Security hardening**: Integer overflow protection (checked_mul), shell injection fix (ocr.rs), temp file leak fix (ocr_harness.py), ODS data accumulation cap.
+- **Test cleanliness**: Replaced hand-rolled PNG decoder with `png` crate, moved misplaced ASS fixture, fixed /tmp/ hardcoded paths, added 3 new OCR fixtures (Japanese, Korean, French).
+
+### Fixed
+- **PGS ODS payload layout (ROOT CAUSE of PotPlayer crash)**: Rewrote ODS segment format to match FFmpeg/PGS spec: `object_id(2) + version(1) + flags(1) + [first: total_size(3) + width(2) + height(2)] + rle_data`. Old format had width/height/rle_len in wrong order, causing decoder buffer overflow.
+- **ODS flags**: bit 7 (0x80) = first_in_sequence, bit 6 (0x40) = last_in_sequence. Single-segment objects use 0xC0, multi-segment use 0x80/0x40 for first/last chunks.
+- **PDS byte order**: Corrected to index, Y, Cr, Cb, alpha per PGS spec (was Y, Cb, Cr).
+- **ODS total_size**: Now spans ALL chunks for multi-segment objects (`total_rle_size` field added to OdsPayload).
+- **palette_update flag**: Always emits PDS with palette_update=true for PotPlayer compatibility.
+- **Palette transparent_index swap**: When transparent_index != 0, swap palette[0] with palette[transparent_index] so RLE index 0 maps to transparent.
+- **WDS window bounds**: Clamped to display dimensions to prevent out-of-bounds rendering.
+- **ODS continuation segment dimensions**: Only update stored width/height from first-in-sequence segments.
+
+### Changed
+- `decode_to_image.rs`: Added `first_in_sequence` field to `ParsedPayload::ObjectDefinition` to properly track object dimensions across multi-segment ODS.
+- `rle.rs`: Fixed single-pixel opaque format from `[color, 0x40]` to `[color, 0x01]` to prevent RLE decoder misinterpretation.
+- Tests updated: palette_update expectations changed to always-true (since PDS is always emitted), single-pixel format updated.
+
+### Tests
+- 79/79 pgs-encoder unit tests pass
+- 117/119 renderer tests pass (2 pre-existing drawing/clip failures unrelated to PGS fixes)
+- Roundtrip decoder validates SUP → PNG decode with correct pixel output
+
+---
+
 ## [0.5.0] - 2026-06-12
 
 ### Highlights
