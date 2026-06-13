@@ -327,6 +327,7 @@ impl PgsEncoder {
         });
 
         let chunks = chunk_rle_data(rle, MAX_ODS_CHUNK);
+        let total_rle_size = rle.len();
         for (i, chunk) in chunks.iter().enumerate() {
             segments.push(Segment {
                 segment_type: SegmentType::Ods,
@@ -340,6 +341,7 @@ impl PgsEncoder {
                     width: frame.width as u16,
                     height: frame.height as u16,
                     rle_data: chunk.clone(),
+                    total_rle_size,
                 }),
             });
         }
@@ -470,6 +472,7 @@ impl PgsEncoder {
                 .enumerate()
         {
             let chunks = chunk_rle_data(obj_rle, MAX_ODS_CHUNK);
+            let total_obj_rle = obj_rle.len();
             for (i, chunk) in chunks.iter().enumerate() {
                 segments.push(Segment {
                     segment_type: SegmentType::Ods,
@@ -487,6 +490,7 @@ impl PgsEncoder {
                             bottom_height
                         },
                         rle_data: chunk.clone(),
+                        total_rle_size: total_obj_rle,
                     }),
                 });
             }

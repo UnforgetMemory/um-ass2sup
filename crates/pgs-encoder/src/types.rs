@@ -132,6 +132,9 @@ pub struct OdsPayload {
     pub width: u16,
     pub height: u16,
     pub rle_data: Vec<u8>,
+    /// Total RLE data size across ALL chunks (not just this chunk).
+    /// Used in the first-in-sequence segment's total_size field.
+    pub total_rle_size: usize,
 }
 
 /// Segment payload variants
@@ -336,10 +339,11 @@ impl OdsPayload {
             flags |= 0x40;
         }
         output.push(flags);
-        // First segment carries total object size (3 BE, includes width+height+data)
-        // followed by width+height. Continuation segments have only RLE data.
+        // First segment carries the TOTAL object size (across all chunks) + width + height.
+        // total_size for all chunks (3 bytes BE) = 4 + sum of all chunks' rle_data lengths.
+        // Continuation segments have no geometry (decoder gets it from the first segment).
         if self.first_in_sequence {
-            let total_size = (4 + self.rle_data.len()) as u32; // width(2) + height(2) + data
+            let total_size = (4 + self.total_rle_size) as u32;
             output.push((total_size >> 16) as u8);
             output.push((total_size >> 8) as u8);
             output.push(total_size as u8);
@@ -348,7 +352,7 @@ impl OdsPayload {
             // Height (u16 BE)
             output.extend_from_slice(&self.height.to_be_bytes());
         }
-        // RLE data
+        // RLE data (this particular chunk's portion)
         output.extend(&self.rle_data);
         output
     }
