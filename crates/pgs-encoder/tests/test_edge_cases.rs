@@ -116,11 +116,11 @@ fn test_rle_alternating_colors_minimum_compression() {
 
     let encoded = rle_encode(&indices, width, height, 0);
 
-    // Each non-transparent pixel of length 1 = 1 byte (just the color)
+    // Each non-transparent pixel of length 1 = 2 bytes [color, 0x40]
     assert_eq!(
         encoded.len(),
-        10,
-        "Alternating colors should produce 1 byte per pixel"
+        20,
+        "Alternating colors should produce 2 bytes per pixel"
     );
 }
 
@@ -688,7 +688,7 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
     // had its own `palette_update` expression at the second call site of the
     // 0.3.2 fix. The 1500x800 alternating-index frame below forces the
     // multi-window path: 1,200,000 alternating pixels → RLE ~1.14 MiB
-    // (alternating 1-pixel opaque runs are 1 byte each, plus a 2-byte row
+    // (alternating 1-pixel opaque runs are 2 bytes each, plus a 2-byte row
     // separator per row), well over the 1 MiB threshold; height 800 > 100.
     // The `ods_ids.len() == 2` check below confirms the multi-window path
     // was actually taken.

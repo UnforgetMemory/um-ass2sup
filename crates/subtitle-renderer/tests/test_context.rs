@@ -425,9 +425,11 @@ fn test_build_context_alignment_sets_position() {
         (ctx.x - ctx.margin_l).abs() < 0.01,
         "alignment 7 should be left-aligned"
     );
+    // alignment 7 is top-aligned: y = margin_v + font_size (baseline shift
+    // to keep upward-extending glyphs within frame)
     assert!(
-        (ctx.y - ctx.margin_v).abs() < 0.01,
-        "alignment 7 should be top-aligned"
+        (ctx.y - (ctx.margin_v + ctx.font_size)).abs() < 0.01,
+        "alignment 7 should be top-aligned with font_size baseline shift"
     );
 }
 
