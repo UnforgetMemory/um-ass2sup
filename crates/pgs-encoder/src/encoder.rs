@@ -132,7 +132,20 @@ impl PgsEncoder {
         // opaque runs with collision-range colors as transparent runs.
         let (remapped_indices, remapped_palette) = remap_collision_range(frame);
 
-        let palette_entries = build_palette(&remapped_palette);
+        let mut palette_entries = build_palette(&remapped_palette);
+
+        // Swap palette entries 0 and transparent_index to match the RLE encoder's
+        // index swap. The RLE encoder swaps transparent_index ↔ 0 in the pixel data
+        // (so RLE uses index 0 for transparent runs), but the palette was not
+        // swapped. Without this, palette[0] would contain an opaque color while the
+        // RLE data uses index 0 to mean transparent, causing PotPlayer to render
+        // opaque black over the entire frame → AccessViolation crash.
+        let ti = frame.transparent_index;
+        if ti != 0 && (ti as usize) < palette_entries.len() {
+            let tmp = palette_entries[ti as usize];
+            palette_entries[ti as usize] = palette_entries[0];
+            palette_entries[0] = tmp;
+        }
         let palette_hash = hash_palette(&palette_entries);
 
         let rle = rle_encode(
