@@ -62,7 +62,7 @@ fn test_encode_single_pixel_frame() {
     let frame = make_single_color_frame(1, 1, Rgba::new(255, 0, 0, 255));
 
     let segments = enc.encode_frame(&frame, 0, 1000);
-    assert_eq!(segments.len(), 5, "Should have PCS+WDS+PDS+ODS+END");
+    assert_eq!(segments.len(), 8, "Should have PCS+WDS+PDS+ODS+END+palette_clear(PCS+PDS)+END");
 
     let sup_data = enc.encode_frame_to_bytes(&frame, 1000, 1000);
     assert!(sup_data.len() >= 13);
@@ -405,12 +405,15 @@ fn test_sup_multiple_segments_structure() {
     let frame = make_single_color_frame(2, 2, Rgba::new(255, 255, 255, 255));
     let segments = enc.encode_frame(&frame, 1000, 2000);
 
-    // Expected segment types in order: PCS, WDS, PDS, ODS, END
+    // Expected segment types in order: PCS, WDS, PDS, ODS, END, palette_clear(PCS, PDS), END
     let expected_types = [
         SegmentType::Pcs,
         SegmentType::Wds,
         SegmentType::Pds,
         SegmentType::Ods,
+        SegmentType::End,
+        SegmentType::Pcs,
+        SegmentType::Pds,
         SegmentType::End,
     ];
 
@@ -654,7 +657,8 @@ fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
     sup.extend(enc.encode_frame_to_bytes(&frame, 1000, 1000));
 
     let sets = pgs_encoder::decode_sup(&sup).expect("decode_sup must succeed");
-    assert_eq!(sets.len(), 2, "two display sets expected");
+    // Each frame produces: display PCS set + palette_clear PCS set = 2 per frame
+    assert_eq!(sets.len(), 4, "4 display sets expected (2 per frame)");
 
     let mut pcs_updates = Vec::new();
     for ds in &sets {
@@ -671,7 +675,7 @@ fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
     // All display PCS frames have palette_update=true
     assert_eq!(
         pcs_updates,
-        vec![true, true],
+        vec![true, true, true, true],
         "all display frames should have palette_update=true"
     );
 }

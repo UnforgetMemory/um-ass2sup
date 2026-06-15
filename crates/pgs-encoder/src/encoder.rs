@@ -1,6 +1,7 @@
 use crate::color::build_palette;
 use crate::rle::{chunk_rle_data, rle_encode};
 use crate::types::*;
+pub use crate::types::frame_rate_code;
 use color_quantizer::QuantizedFrame;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -87,9 +88,17 @@ impl PgsEncoder {
 
         segments.extend(self.build_display_set(frame, pts, dts));
 
-        // PGS has no explicit "end time" for subtitles — they persist until replaced.
-        // Empty display sets (num_objects=0) crash PotPlayer, so we cannot use them.
-        // Subtitle stays visible until the next display set replaces it.
+        // Display set 1 END — subtitle is now visible
+        segments.push(Segment {
+            segment_type: SegmentType::End,
+            pts,
+            dts,
+            payload: SegmentPayload::End,
+        });
+
+        // Display set 2: palette update to transparent at end time
+        // This is a SEPARATE display set so it doesn't interfere with the first.
+        segments.extend(self.build_palette_clear_display_set(pts_end, pts_end));
 
         segments.push(Segment {
             segment_type: SegmentType::End,
@@ -99,10 +108,6 @@ impl PgsEncoder {
         });
 
                 self.composition_number = self.composition_number.wrapping_add(1);
-        // Object ID: keep at 0 for BDSup2Sub compatibility within each display set.
-        // BDSup2Sub uses object_id as an index into imageObjectList per display set.
-        // Each display set is independent, so object_id=0 is correct for all frames.
-        // self.object_id = self.object_id.wrapping_add(1);
         self.object_version = self.object_version.wrapping_add(1);
         self.frame_count += 1;
 
@@ -153,9 +158,6 @@ impl PgsEncoder {
         );
         let rle_hash = hash_bytes(&rle);
 
-        let palette_changed = self.prev_palette_hash != Some(palette_hash);
-        let object_changed = self.prev_object_rle_hash != Some(rle_hash);
-
         // PGS spec: first display set uses EpochStart, subsequent use NormalCase.
         // EpochStart clears the screen and starts a new epoch; NormalCase continues it.
         // PotPlayer requires EpochStart on every frame to properly process ODS data.
@@ -179,7 +181,6 @@ impl PgsEncoder {
                 &palette_entries,
                 &rle,
                 composition_state,
-                palette_changed,
                 palette_update,
             )
         } else {
@@ -190,14 +191,13 @@ impl PgsEncoder {
                 &palette_entries,
                 &rle,
                 composition_state,
-                palette_changed,
                 palette_update,
             )
         };
 
         let total_size: usize = segments.iter().map(|s| s.to_bytes().len()).sum();
         let result = if total_size > MAX_DECODE_BUFFER * 3 / 4 {
-            self.build_epoch_split_display_set(frame, pts, dts, composition_state, palette_changed, palette_update)
+            self.build_epoch_split_display_set(frame, pts, dts, composition_state, palette_update)
         } else {
             segments
         };
@@ -212,7 +212,6 @@ impl PgsEncoder {
         pts: u64,
         dts: u64,
         composition_state: CompositionState,
-        palette_changed: bool,
         palette_update: bool,
     ) -> Vec<Segment> {
         let palette_entries = build_palette(&frame.palette, self.display_height);
@@ -257,7 +256,6 @@ impl PgsEncoder {
                 &palette_entries,
                 &band_rle,
                 band_state,
-                palette_changed,
                 palette_update,
             );
             all_segments.extend(band_segments);
@@ -266,11 +264,12 @@ impl PgsEncoder {
         all_segments
     }
 
-    /// Build a display set with zero objects to clear the subtitle from screen.
+    /// Build a display set that makes the subtitle invisible via palette update.
     ///
-    /// PGS has no explicit "end time" — a subtitle persists until replaced.
-    /// An empty PCS with `num_objects=0` tells the player to clear the display.
-    fn build_clear_display_set(
+    /// Sends PCS(nobj=1, palette_update=true) + PDS(all transparent).
+    /// The player reloads the palette for the existing object, making it invisible.
+    /// This avoids num_objects=0 which crashes PotPlayer.
+    fn build_palette_clear_display_set(
         &self,
         pts: u64,
         dts: u64,
@@ -280,19 +279,55 @@ impl PgsEncoder {
             height: self.display_height,
             frame_rate: self.frame_rate,
             composition_number: self.composition_number.wrapping_add(1),
-            composition_state: CompositionState::EpochStart,
-            palette_update: false,
+            composition_state: CompositionState::NormalCase,
+            palette_update: true,
             palette_id: self.palette_id,
-            num_objects: 0,
-            compositions: vec![],
+            num_objects: 1,
+            compositions: vec![ObjectComposition {
+                object_id: self.object_id,
+                window_id: self.window_id,
+                cropped: false,
+                forced: false,
+                x: 0,
+                y: 0,
+                crop_x: 0,
+                crop_y: 0,
+                crop_w: 0,
+                crop_h: 0,
+            }],
         };
 
-        vec![Segment {
-            segment_type: SegmentType::Pcs,
-            pts,
-            dts,
-            payload: SegmentPayload::Pcs(pcs),
-        }]
+        // All-transparent palette: every entry has alpha=0
+        let transparent_entries: Vec<PaletteEntry> = (0..=255u8)
+            .map(|i| PaletteEntry {
+                index: i,
+                y: 0,
+                cb: 128,
+                cr: 128,
+                alpha: 0,
+            })
+            .collect();
+
+        let pds = PdsPayload {
+            palette_id: self.palette_id,
+            version: self.frame_count as u8,
+            entries: transparent_entries,
+        };
+
+        vec![
+            Segment {
+                segment_type: SegmentType::Pcs,
+                pts,
+                dts,
+                payload: SegmentPayload::Pcs(pcs),
+            },
+            Segment {
+                segment_type: SegmentType::Pds,
+                pts,
+                dts,
+                payload: SegmentPayload::Pds(pds),
+            },
+        ]
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -304,7 +339,6 @@ impl PgsEncoder {
         palette_entries: &[PaletteEntry],
         rle: &[u8],
         composition_state: CompositionState,
-        palette_changed: bool,
         palette_update: bool,
     ) -> Vec<Segment> {
         let mut segments = Vec::new();
@@ -406,7 +440,6 @@ impl PgsEncoder {
         palette_entries: &[PaletteEntry],
         _rle: &[u8],
         composition_state: CompositionState,
-        palette_changed: bool,
         palette_update: bool,
     ) -> Vec<Segment> {
         let split_row = self.find_split_row(
@@ -616,35 +649,6 @@ pub fn timecode_to_ms(timecode: &str) -> Option<u64> {
     Some(h * 3600000 + m * 60000 + s * 1000 + cs * 10)
 }
 
-/// Map a numeric FPS value to the PGS frame rate code byte.
-///
-/// PGS supports a discrete set of frame rates via a single code byte:
-///
-/// | Code  | FPS   |
-/// |-------|-------|
-/// | 0x10  | 24p   |
-/// | 0x20  | 25p   |
-/// | 0x40  | 30p   |
-/// | 0x50  | 50p   |
-/// | 0x70  | 60p   |
-///
-/// Values above 60 default to 24p (0x10).
-pub fn frame_rate_code(fps: f64) -> u8 {
-    if fps <= 24.0 {
-        0x10
-    } else if fps <= 25.0 {
-        0x20
-    } else if fps <= 30.0 {
-        0x40
-    } else if fps <= 50.0 {
-        0x50
-    } else if fps <= 60.0 {
-        0x70
-    } else {
-        0x10
-    }
-}
-
 /// Check if an FPS value requires NTSC-aware PTS calculation.
 ///
 /// NTSC frame rates (23.976, 29.97, 59.94) use the exact formula
@@ -680,55 +684,6 @@ fn hash_bytes(data: &[u8]) -> u64 {
     hasher.finish()
 }
 
-/// Remap indices in the collision range (0x40-0x7F) to safe values (0x80+).
-///
-/// The PGS RLE format uses transparent long-run headers `[0x40|len_hi, len_lo]`.
-/// When an opaque color happens to be in 0x40-0x7F and the next byte has bit 7
-/// set, the decoder's ambiguous-case handler tries transparent interpretation first,
-/// misinterpreting opaque runs as transparent runs.
-///
-/// This function remaps any used collision-range index to an unused slot in 0x80-0xBF,
-/// updating both the index array and the palette to match.
-fn remap_collision_range(frame: &QuantizedFrame) -> (Vec<u8>, Vec<color_quantizer::Rgba>) {
-    let mut indices = frame.indices.clone();
-    let mut palette = frame.palette.clone();
-    while palette.len() < 256 {
-        palette.push(color_quantizer::Rgba::new(0, 0, 0, 0));
-    }
-
-    // Find which indices are actually used
-    let mut used = [false; 256];
-    for &idx in &indices {
-        used[idx as usize] = true;
-    }
-
-    let mut remap = [0u8; 256];
-    for (i, item) in remap.iter_mut().enumerate() {
-        *item = i as u8;
-    }
-
-    let mut next_target: u8 = 0x80;
-    for i in 0x40..0x80u8 {
-        let i_usize = i as usize;
-        if used[i_usize] && i != frame.transparent_index && i != 0 {
-            while next_target < 0xC0 && used[next_target as usize] {
-                next_target += 1;
-            }
-            if next_target < 0xC0 {
-                remap[i_usize] = next_target;
-                used[next_target as usize] = true;
-                next_target += 1;
-            }
-        }
-    }
-
-    for idx in indices.iter_mut() {
-        *idx = remap[*idx as usize];
-    }
-
-    (indices, palette)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -759,13 +714,11 @@ mod tests {
         let mut enc = PgsEncoder::new(1920, 1080, 24.0);
         let frame = make_test_frame();
         let segments = enc.encode_frame(&frame, 1000, 2000);
-        // PCS + WDS + PDS + ODS + END = 5 segments
-        assert_eq!(segments.len(), 5);
+        // PCS + WDS + PDS + ODS + END + palette_clear(PCS+PDS) + END = 8 segments
+        assert_eq!(segments.len(), 8);
         assert_eq!(segments[0].segment_type, SegmentType::Pcs);
-        assert_eq!(segments[1].segment_type, SegmentType::Wds);
-        assert_eq!(segments[2].segment_type, SegmentType::Pds);
-        assert_eq!(segments[3].segment_type, SegmentType::Ods);
-        assert_eq!(segments[4].segment_type, SegmentType::End);
+        assert_eq!(segments[4].segment_type, SegmentType::End); // display END
+        assert_eq!(segments[7].segment_type, SegmentType::End); // palette clear END
     }
 
     #[test]
@@ -774,7 +727,7 @@ mod tests {
         let frame = make_test_frame();
         let segments = enc.encode_frame(&frame, 1000, 2000);
         assert_eq!(segments[0].pts, 90000); // PCS at 1s
-        assert_eq!(segments[4].pts, 270000); // END at 3s
+        assert_eq!(segments[7].pts, 270000); // palette clear END at 3s
     }
 
     #[test]

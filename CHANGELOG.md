@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-06-15
+
+### Highlights
+- **PotPlayer compatibility**: Complete rewrite of PGS encoder output to be playable in PotPlayer. The SUP output now renders CJK subtitles correctly with proper timing, palette, and font rendering.
+- **FFmpeg-compatible RLE**: Encoder/decoder rewritten to use FFmpeg's PGS RLE format (`0x00` prefix for opaque/transparent runs), replacing the incompatible `[color][0x40|len]` format that caused garbled rendering.
+- **Palette clear via palette update**: Subtitles end at their specified time using PCS(palette_update=true) + PDS(all-transparent), avoiding PotPlayer crashes from empty display sets (num_objects=0).
+- **CJK font fallback**: Added glyph coverage check (`font_has_cjk_glyphs`) to prevent tofu (□) when fontdb fuzzy-matching returns Latin-only fonts for CJK family names.
+
+### Fixed
+- **PGS PCS format**: Switched from packed (palette_update|palette_id in 1 byte) to separate bytes (palette_update at offset 8, palette_id at offset 9), matching reference Blu-ray SUP format. The packed format caused PotPlayer to read num_objects=0, resulting in no subtitle display.
+- **Transparent color at palette index 0**: Quantizer now places transparent entry at index 0 (prepend instead of append), eliminating the need for palette index swap in the encoder. Aligns with PGS convention.
+- **RLE encoder**: Complete rewrite to FFmpeg-compatible format. Opaque runs now use `0x00 [0x80|len] [color]` instead of `[color][0x40|len]`. Single pixels are just the color byte. This fixes garbled rendering in PotPlayer.
+- **Tight-bbox crop**: ODS dimensions now use actual subtitle pixel bounds (via `crop_to_tight_bbox`) instead of the full 1920×1080 canvas. Reduces file size ~33%.
+- **BT.709 color space**: Encoder now uses BT.709 for HD content (height > 576 lines), matching FFmpeg behavior. Previously used BT.601 for all content.
+- **Subtitle timing**: Each subtitle display set now includes a palette-clear display set (PCS with palette_update=true + all-transparent PDS) at the end time, making subtitles disappear at their specified end time instead of persisting until the next subtitle.
+- **Decoder PCS_HEADER_SIZE**: Updated from 10 to 11 to match the separate-byte PCS format.
+- **Decoder cropped flag**: Now skips 8 extra crop bytes when the cropped flag is set in object composition.
+- **Decoder last_in_sequence**: Now parsed from ODS flags bit 6.
+- **verify_roundtrip**: Now skips ODS check for palette-update-only display sets (palette_update=true without ODS is valid).
+
+### Changed
+- **CompositionState**: Always EpochStart (0x80) for all display sets. Previously used NormalCase for non-first frames.
+- **palette_update**: Always true (0x80) for display PCS. PotPlayer requires this flag to load the PDS palette.
+- **fontdb font matching**: `query_with_fallback_inner` now checks CJK glyph coverage after `query_with_score` returns a font. If the matched font lacks CJK glyphs (e.g., DejaVu Sans for "Microsoft YaHei"), it falls through to CJK fallback list.
+- **build_palette**: Now accepts `display_height` parameter to choose BT.601 (≤576) or BT.709 (>576).
+
+### Removed
+- Dead code: `remap_collision_range` function (unused after RLE format change)
+- Dead code: Duplicate `swap` function in `rle.rs` (uses `crate::color::swap`)
+- Dead code: Duplicate `frame_rate_code` function in `encoder.rs` (uses `crate::types::frame_rate_code`)
+- Dead parameter: `palette_changed` from `build_single_window_display_set`, `build_multi_window_display_set`, `build_epoch_split_display_set`
+- Dead variable: `object_changed` in `build_display_set`
+
+### Tests
+- Updated segment count assertions from 5 to 8 (palette-clear adds PCS+PDS)
+- Updated RLE encode/decode tests for FFmpeg-compatible format
+- Updated pcs_palette_updates helper to filter display PCS by objects
+- verify_roundtrip: skips ODS check for palette-update-only display sets
+- 120/120 tests pass (79 lib + 40 integration + 4 doc)
+
+### Security
+- No critical/high issues found in audit
+- `checked_mul` prevents integer overflow in RLE dimension calculations
+- CLI enforces 100MB input limit
+
+---
+
 ## [0.5.1] - 2026-06-13
 
 ### Highlights

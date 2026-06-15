@@ -17,10 +17,18 @@ crates/*/fuzz/Cargo.lock
 # ── Test framework artifacts ───────────────────────────────────────
 # proptest crash/regression storage
 **/proptest-regressions/
+# proptest regression files (individual)
+**/*.proptest-regressions
 # cargo-fuzz crash inputs / corpus deltas
 **/fuzz/artifacts/
 # (also covered by target/ above, kept for clarity)
 **/fuzz/target/
+
+# ── Dev scripts (temp validation, not distribution) ──────────────────
+scripts/*.py
+
+# ── Generated validation reports ───────────────────────────────────
+docs/sup-validation-report.md
 
 # ── Coverage reports (regenerable) ────────────────────────────────
 coverage/

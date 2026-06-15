@@ -396,9 +396,17 @@ pub fn verify_roundtrip(original: &[u8]) -> Result<(), String> {
 
     // Structural verification: check consistency of composition
     for (i, ds) in display_sets.iter().enumerate() {
+        // Check if this is a palette-update-only display set (no ODS expected)
+        let is_palette_update_only = ds.segments.iter().any(|s| {
+            matches!(&s.payload, ParsedPayload::PresentationComposition { palette_update, .. } if *palette_update)
+        });
+
         for seg in &ds.segments {
             if let ParsedPayload::PresentationComposition { objects, .. } = &seg.payload {
                 for obj in objects {
+                    if is_palette_update_only {
+                        continue; // palette_update=true display sets skip ODS
+                    }
                     // Verify ODS exists for this object_id
                     let ods_exists = ds.segments.iter().any(|s| {
                         matches!(&s.payload, ParsedPayload::ObjectDefinition { object_id, .. } if *object_id == obj.object_id)

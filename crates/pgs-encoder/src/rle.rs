@@ -87,17 +87,6 @@ fn encode_opaque_run(output: &mut Vec<u8>, color: u8, length: usize) {
     }
 }
 
-/// Swap two palette indices.
-fn swap(val: u8, pivot: u8) -> u8 {
-    if val == 0 {
-        pivot
-    } else if val == pivot {
-        0
-    } else {
-        val
-    }
-}
-
 /// Decode PGS RLE data in FFmpeg-compatible format.
 ///
 /// Format:
@@ -184,7 +173,7 @@ pub fn rle_decode(
 
     if transparent_index != 0 {
         for px in output.iter_mut() {
-            *px = swap(*px, transparent_index);
+            *px = crate::color::swap(*px, transparent_index);
         }
     }
 
