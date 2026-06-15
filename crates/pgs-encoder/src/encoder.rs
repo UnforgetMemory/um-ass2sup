@@ -87,10 +87,9 @@ impl PgsEncoder {
 
         segments.extend(self.build_display_set(frame, pts, dts));
 
-        // NOTE: We do NOT emit an empty display set (num_objects=0) to clear subtitles.
-        // Some players (including PotPlayer) crash on empty display sets.
-        // PGS standard behavior: subtitle stays visible until the next display set
-        // replaces it. This means subtitles "extend" until the next event starts.
+        // PGS has no explicit "end time" for subtitles — they persist until replaced.
+        // Empty display sets (num_objects=0) crash PotPlayer, so we cannot use them.
+        // Subtitle stays visible until the next display set replaces it.
 
         segments.push(Segment {
             segment_type: SegmentType::End,
@@ -281,7 +280,7 @@ impl PgsEncoder {
             height: self.display_height,
             frame_rate: self.frame_rate,
             composition_number: self.composition_number.wrapping_add(1),
-            composition_state: CompositionState::NormalCase,
+            composition_state: CompositionState::EpochStart,
             palette_update: false,
             palette_id: self.palette_id,
             num_objects: 0,
