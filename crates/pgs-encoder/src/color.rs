@@ -74,6 +74,12 @@ pub fn palette_to_rgba(entries: &[PaletteEntry]) -> Vec<[u8; 4]> {
 }
 
 pub fn rgba_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
+    rgba_to_ycbcr_bt601(r, g, b)
+}
+
+/// Convert RGBA to YCbCr using BT.601 coefficients (SD content, height ≤ 576).
+#[inline]
+fn rgba_to_ycbcr_bt601(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
     let r = f64::from(r);
     let g = f64::from(g);
     let b = f64::from(b);
@@ -85,6 +91,26 @@ pub fn rgba_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
         .round()
         .clamp(0.0, 255.0) as u8;
     let cr = (0.500 * r - 0.419 * g - 0.081 * b + 128.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+
+    (y, cb, cr)
+}
+
+/// Convert RGBA to YCbCr using BT.709 coefficients (HD content, height > 576).
+#[inline]
+fn rgba_to_ycbcr_bt709(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
+    let r = f64::from(r);
+    let g = f64::from(g);
+    let b = f64::from(b);
+
+    let y = (0.2126 * r + 0.7152 * g + 0.0722 * b)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    let cb = (-0.1146 * r - 0.3854 * g + 0.500 * b + 128.0)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    let cr = (0.500 * r - 0.4542 * g - 0.0458 * b + 128.0)
         .round()
         .clamp(0.0, 255.0) as u8;
 
@@ -111,12 +137,22 @@ pub fn swap(val: u8, pivot: u8) -> u8 {
     }
 }
 
-pub fn build_palette(palette: &[Rgba]) -> Vec<PaletteEntry> {
+/// Build a PGS palette from RGBA pixels, using BT.709 for HD (height > 576) or BT.601 for SD.
+///
+/// Per BD-ROM convention, HD content (> 576 lines) uses BT.709 color space;
+/// SD content (≤ 576 lines) uses BT.601. Players determine the color space
+/// from the video height, so our encoder must match.
+pub fn build_palette(palette: &[Rgba], display_height: u16) -> Vec<PaletteEntry> {
+    let use_bt709 = display_height > 576;
     palette
         .iter()
         .enumerate()
         .map(|(i, rgba)| {
-            let (y, cb, cr) = rgba_to_ycbcr(rgba.r, rgba.g, rgba.b);
+            let (y, cb, cr) = if use_bt709 {
+                rgba_to_ycbcr_bt709(rgba.r, rgba.g, rgba.b)
+            } else {
+                rgba_to_ycbcr_bt601(rgba.r, rgba.g, rgba.b)
+            };
             PaletteEntry {
                 index: i as u8,
                 y,
@@ -317,7 +353,7 @@ mod tests {
     #[test]
     fn test_build_palette() {
         let palette = vec![Rgba::new(0, 0, 0, 0), Rgba::new(255, 255, 255, 255)];
-        let entries = build_palette(&palette);
+        let entries = build_palette(&palette, 1080);
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].index, 0);
         assert_eq!(entries[0].alpha, 0);

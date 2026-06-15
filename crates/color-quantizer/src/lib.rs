@@ -138,8 +138,8 @@ impl Quantizer {
 
         let has_transparent = pixels.iter().any(|p| p.a == 0);
         let transparent_index = if has_transparent {
-            palette.push(Rgba::new(0, 0, 0, 0));
-            (palette.len() - 1) as u8
+            palette.insert(0, Rgba::new(0, 0, 0, 0));
+            0
         } else if palette.is_empty() {
             palette.push(Rgba::new(0, 0, 0, 0));
             0
@@ -154,16 +154,33 @@ impl Quantizer {
                     if p.a == 0 {
                         idx.push(transparent_index);
                     } else {
-                        idx.push(median_cut::find_nearest_index(p, &palette));
+                        // Bump by 1 because we inserted transparent at index 0
+                        let mut i = median_cut::find_nearest_index(p, &palette) as u16 + 1;
+                        if i > 255 { i = 255; }
+                        idx.push(i as u8);
                     }
                 }
                 idx
             }
             DitherMethod::FloydSteinberg => {
-                dithering::floyd_steinberg_dither(rgba, width, height, &palette, transparent_index)
+                let mut idx = dithering::floyd_steinberg_dither(rgba, width, height, &palette, transparent_index);
+                // Bump opaque indices by 1
+                for x in &mut idx {
+                    if *x != 0 {
+                        *x = (*x as u16 + 1).min(255) as u8;
+                    }
+                }
+                idx
             }
             DitherMethod::Ordered => {
-                dithering::ordered_dither(rgba, width, height, &palette, transparent_index)
+                let mut idx = dithering::ordered_dither(rgba, width, height, &palette, transparent_index);
+                // Bump opaque indices by 1
+                for x in &mut idx {
+                    if *x != 0 {
+                        *x = (*x as u16 + 1).min(255) as u8;
+                    }
+                }
+                idx
             }
         };
 

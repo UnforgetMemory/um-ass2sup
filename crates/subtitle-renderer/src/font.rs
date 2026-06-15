@@ -186,7 +186,16 @@ impl FontManager {
     ) -> Option<fontdb::ID> {
         // 1. Try exact-ish match via scoring against all loaded faces.
         if let Some(id) = self.query_with_score(family, bold, italic) {
-            return Some(id);
+            // Verify the matched font actually has CJK glyphs.
+            // fontdb's fuzzy matching can return a Latin-only font (e.g. DejaVu Sans)
+            // for a CJK family name like "Microsoft YaHei", because no exact match exists
+            // and all non-matching fonts tie at score=200. The first one in iteration
+            // order wins — often a Latin font. This produces tofu (□) for Chinese text.
+            if !self.font_has_cjk_glyphs(id) {
+                // Matched font lacks CJK — skip to CJK fallback list below.
+            } else {
+                return Some(id);
+            }
         }
 
         // 2. Hardcoded fallback font names — CJK-capable families first
@@ -251,6 +260,23 @@ impl FontManager {
                 .insert(id, Arc::clone(&arc));
             arc
         })
+    }
+
+    /// Check if a font contains CJK (Chinese/Japanese/Korean) glyphs.
+    ///
+    /// Tests a sample CJK character (U+4E2D "中"). If the font maps it to
+    /// a real glyph (not the .notdef glyph), it is considered CJK-capable.
+    fn font_has_cjk_glyphs(&self, id: fontdb::ID) -> bool {
+        self.db.with_face_data(id, |data, _index| {
+            if let Ok(face) = ttf_parser::Face::parse(data, 0) {
+                // Check "中" (U+4E2D) — the most common CJK test character
+                face.glyph_index('\u{4E2D}')
+                    .map_or(false, |g| g.0 != 0)
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false)
     }
 
     pub fn font_count(&self) -> usize {

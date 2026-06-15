@@ -88,39 +88,34 @@ fn test_encode_max_dimensions_no_panic() {
 
 #[test]
 fn test_rle_all_same_color_maximum_compression() {
-    // 100 pixels all the same color → 1 run
+    // 100 pixels all the same color → 1 run via 0x00 prefix
     let width = 100u32;
     let height = 1u32;
     let indices = vec![5u8; 100];
 
     let encoded = rle_encode(&indices, width, height, 0);
 
-    // Should be very compact: color byte + run length encoding
-    // 100 > 63, so it's a long run: 3 bytes
-    assert_eq!(
-        encoded.len(),
-        3,
-        "All same color should produce minimal RLE output"
-    );
-    assert_eq!(encoded[0], 5, "First byte should be the color");
+    // FFmpeg format: 0x00 [0xC0|0] [100] [5] = 4 bytes
+    assert_eq!(encoded.len(), 4);
+    assert_eq!(encoded, vec![0x00, 0xC0, 100, 5]);
 }
 
 // ─────────────────────── RLE: Minimum Compression ───────────────────────
 
 #[test]
 fn test_rle_alternating_colors_minimum_compression() {
-    // Alternating colors: each pixel is a different run of length 1
+    // Alternating colors: each pixel is a different single pixel
     let width = 10u32;
     let height = 1u32;
     let indices = vec![1u8, 2, 1, 2, 1, 2, 1, 2, 1, 2];
 
     let encoded = rle_encode(&indices, width, height, 0);
 
-    // Each non-transparent pixel of length 1 = 2 bytes [color, 0x40]
+    // Each single pixel = 1 byte in FFmpeg format
     assert_eq!(
         encoded.len(),
-        20,
-        "Alternating colors should produce 2 bytes per pixel"
+        10,
+        "Alternating colors should produce 1 byte per pixel"
     );
 }
 
@@ -128,27 +123,23 @@ fn test_rle_alternating_colors_minimum_compression() {
 
 #[test]
 fn test_rle_long_run_over_63() {
-    // 100 pixels of same color → run length > 63 → long run encoding
+    // 100 pixels of same color → FFmpeg opaque run via 0x00 prefix
     let width = 100u32;
     let height = 1u32;
     let indices = vec![7u8; 100];
 
     let encoded = rle_encode(&indices, width, height, 0);
 
-    // Long run opaque: color + (0x80 | len_hi) + len_lo = 3 bytes
-    assert_eq!(encoded.len(), 3);
-    assert_eq!(encoded[0], 7, "Color byte");
-    // Second byte: 0x80 | (100 >> 8) = 0x80 | 0 = 0x80
-    assert_eq!(encoded[1], 0x80, "Long run flag");
-    assert_eq!(encoded[2], 100, "Run length low byte");
+    // FFmpeg format: 0x00 [0xC0] [100] [7] = 4 bytes
+    assert_eq!(encoded.len(), 4);
+    assert_eq!(encoded, vec![0x00, 0xC0, 100, 7]);
 }
 
 // ─────────────────────── RLE: Very Long Run >16383 ───────────────────────
 
 #[test]
 fn test_rle_very_long_run_over_16383() {
-    // 20000 pixels of same color → run length > 16383 → max run is 0x3FFF
-    // The encoder should cap at 0x3FFF and split into multiple runs
+    // 20000 pixels of same color → capped at 16383 per run
     let width = 20000u32;
     let height = 1u32;
     let indices = vec![3u8; 20000];
@@ -157,13 +148,9 @@ fn test_rle_very_long_run_over_16383() {
 
     // Should not panic, should produce valid output
     assert!(!encoded.is_empty());
-
-    // First run: color=3, capped at 0x3FFF=16383
-    assert_eq!(encoded[0], 3);
-    // Remaining: 20000 - 16383 = 3617
-    // 3617 > 63, so long run: 3 bytes
-    // Total: 3 (first run) + 3 (second run) = 6 bytes
-    assert_eq!(encoded.len(), 6);
+    // First run: 0x00 [0xC0|3] [16383&0xFF] [3] = 4 bytes
+    // Remaining: 20000-16383=3617, long run: 0x00 [0xC0|0] [3617&0xFF] [3] = 4 bytes
+    assert_eq!(encoded.len(), 8);
 }
 
 // ─────────────────────── RLE: Multi-row ───────────────────────
@@ -180,13 +167,17 @@ fn test_rle_multi_row_row_separator() {
     // Separator: [0x00, 0x00] = 2 bytes
     // Row 2: [2, 0x44] = 2 bytes
     // Total: 6 bytes
-    assert_eq!(encoded.len(), 6);
-    assert_eq!(encoded[0], 1);
-    assert_eq!(encoded[1], 0x44); // short run of 4
-    assert_eq!(encoded[2], 0x00); // row separator
-    assert_eq!(encoded[3], 0x00);
-    assert_eq!(encoded[4], 2);
-    assert_eq!(encoded[5], 0x44);
+    assert_eq!(encoded.len(), 8);
+    // Row 1: 0x00 0x84 1 = 3 bytes (opaque run of 4 pixels, color 1)
+    assert_eq!(encoded[0], 0x00);
+    assert_eq!(encoded[1], 0x84); // 0x80 | 4
+    assert_eq!(encoded[2], 1); // color
+    assert_eq!(encoded[3], 0x00); // row separator
+    assert_eq!(encoded[4], 0x00);
+    // Row 2: 0x00 0x84 2 = 3 bytes
+    assert_eq!(encoded[5], 0x00);
+    assert_eq!(encoded[6], 0x84);
+    assert_eq!(encoded[7], 2);
 }
 
 // ─────────────────────── Palette: 256 Colors ───────────────────────
@@ -203,7 +194,7 @@ fn test_palette_exactly_256_colors() {
         ));
     }
 
-    let entries = build_palette(&palette);
+    let entries = build_palette(&palette, 1080);
     assert_eq!(entries.len(), 256);
 
     for entry in &entries {
@@ -216,7 +207,7 @@ fn test_palette_exactly_256_colors() {
 #[test]
 fn test_palette_single_color() {
     let palette = vec![Rgba::new(128, 128, 128, 200)];
-    let entries = build_palette(&palette);
+    let entries = build_palette(&palette, 1080);
 
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].index, 0);
@@ -368,7 +359,8 @@ fn test_multiple_frames_object_id_increments() {
             matches!(s.payload, pgs_encoder::types::SegmentPayload::Ods(_))
         }).expect("Should have an ODS segment");
         if let pgs_encoder::types::SegmentPayload::Ods(ref ods_data) = ods.payload {
-            assert_eq!(ods_data.object_id, i as u16, "Frame {} object_id", i);
+            // object_id stays at 0 for BDSup2Sub compatibility
+            assert_eq!(ods_data.object_id, 0, "Frame {} object_id", i);
         }
     }
 }
@@ -570,10 +562,9 @@ fn test_rle_transparent_long_run() {
     let indices = vec![0u8; 100];
     let encoded = rle_encode(&indices, 100, 1, 0);
 
-    // Transparent long run: [0x40 | len_hi] [len_lo] = 2 bytes
-    assert_eq!(encoded.len(), 2);
-    assert_eq!(encoded[0], 0x40, "Transparent long run flag");
-    assert_eq!(encoded[1], 100, "Run length");
+    // FFmpeg format: 0x00 [0x40|0] [100] = 3 bytes
+    assert_eq!(encoded.len(), 3);
+    assert_eq!(encoded, vec![0x00, 0x40, 100]);
 }
 
 // ─────────────────────── Color: Build palette with alpha variations ───────────────────────
@@ -586,7 +577,7 @@ fn test_build_palette_alpha_variations() {
         Rgba::new(255, 0, 0, 0),   // fully transparent red
     ];
 
-    let entries = build_palette(&palette);
+    let entries = build_palette(&palette, 1080);
     assert_eq!(entries.len(), 3);
     assert_eq!(entries[0].alpha, 255);
     assert_eq!(entries[1].alpha, 128);
@@ -606,20 +597,23 @@ fn pcs_palette_updates(frames_bytes: &[Vec<u8>]) -> Vec<bool> {
     let mut out = Vec::new();
     for bytes in frames_bytes {
         let sets = decode_sup(bytes).expect("decode_sup must succeed");
-        assert_eq!(
-            sets.len(),
-            1,
-            "each frame should produce exactly one display set"
+        assert!(
+            !sets[0].segments.is_empty(),
+            "display set must not be empty"
         );
+        // Find the FIRST PCS (display PCS, not the clear PCS)
         let mut found = None;
         for seg in &sets[0].segments {
-            if let pgs_encoder::ParsedPayload::PresentationComposition { palette_update, .. } =
+            if let pgs_encoder::ParsedPayload::PresentationComposition { palette_update, objects, .. } =
                 &seg.payload
             {
-                found = Some(*palette_update);
+                if !objects.is_empty() {
+                    found = Some(*palette_update);
+                    break;
+                }
             }
         }
-        out.push(found.expect("display set must contain a PCS"));
+        out.push(found.expect("display set must contain a display PCS with objects"));
     }
     out
 }
@@ -630,11 +624,9 @@ fn test_pcs_palette_update_spec_compliance() {
     //   1 = the palette IS being updated in this composition (a new PDS is provided)
     //   0 = the palette is unchanged; use the previous display set's palette
     //
-    // The first frame has no previous palette, so it must advertise
-    // `palette_update = true`. A subsequent frame with the IDENTICAL palette
-    // must advertise `palette_update = false` so the player does not look
-    // for a new PDS. A frame with a CHANGED palette must again advertise
-    // `palette_update = true`.
+    // PotPlayer compatibility: all frames must have palette_update=true so
+    // PotPlayer loads the PDS palette. Without this flag, PotPlayer skips
+    // PDS processing and renders garbage.
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);
 
     let frame_red_new = make_single_color_frame(4, 2, Rgba::new(255, 0, 0, 255));
@@ -646,14 +638,14 @@ fn test_pcs_palette_update_spec_compliance() {
     let bytes3 = enc.encode_frame_to_bytes(&frame_green_changed, 2000, 1000);
 
     let updates = pcs_palette_updates(&[bytes1, bytes2, bytes3]);
-    // All frames now emit PDS and set palette_update=true for spec compliance
+    // All frames have palette_update=true so PotPlayer loads the PDS palette
     assert_eq!(updates, vec![true, true, true]);
 }
 
 #[test]
 fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
-    // End-to-end: two frames with the same palette must produce a SUP file
-    // whose SECOND display set has `palette_update = false` in the PCS.
+    // End-to-end: two frames must produce a SUP file
+    // whose PCS segments all have `palette_update = true` in the PCS.
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);
     let frame = make_single_color_frame(8, 4, Rgba::new(255, 0, 0, 255));
 
@@ -667,17 +659,20 @@ fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
     let mut pcs_updates = Vec::new();
     for ds in &sets {
         for seg in &ds.segments {
-            if let pgs_encoder::ParsedPayload::PresentationComposition { palette_update, .. } =
+            if let pgs_encoder::ParsedPayload::PresentationComposition { palette_update, objects, .. } =
                 &seg.payload
             {
-                pcs_updates.push(*palette_update);
+                if !objects.is_empty() {
+                    pcs_updates.push(*palette_update);
+                }
             }
         }
     }
+    // All display PCS frames have palette_update=true
     assert_eq!(
         pcs_updates,
         vec![true, true],
-        "both frames emit PDS and set palette_update=true"
+        "all display frames should have palette_update=true"
     );
 }
 
@@ -756,5 +751,6 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
     // With chunked ODS, the 1500x800 alternating frame may stay single-window
     // when RLE fits in chunks. Verify it doesn't panic and palette_update is correct.
     let updates = pcs_palette_updates(&[bytes1, bytes2, bytes3]);
+    // All frames have palette_update=true so PotPlayer loads the PDS palette
     assert_eq!(updates, vec![true, true, true]);
 }

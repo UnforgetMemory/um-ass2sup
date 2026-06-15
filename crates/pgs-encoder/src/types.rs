@@ -28,15 +28,21 @@ impl SegmentType {
 }
 
 /// Composition state for PCS
+///
+/// Values per PGS spec (ISO 14496-6) / BDSup2Sub convention:
+/// - 0x00: Normal case (doesn't have to be complete)
+/// - 0x40: Acquisition point
+/// - 0x80: Epoch start (clears the screen, new composition)
+/// - 0xC0: Epoch continue
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CompositionState {
-    /// New epoch starts
-    EpochStart = 0x00,
-    /// Acquisition point
+    /// Normal case — frame continues current epoch
+    NormalCase = 0x00,
+    /// Acquisition point — player may resync here
     AcquirePoint = 0x40,
-    /// Normal case
-    NormalCase = 0x80,
+    /// Epoch start — new epoch, clears screen
+    EpochStart = 0x80,
 }
 
 /// Object composition entry in PCS
@@ -252,9 +258,11 @@ impl PcsPayload {
         output.extend_from_slice(&self.composition_number.to_be_bytes());
         // Composition state
         output.push(self.composition_state as u8);
-        // Palette update flag (1 bit) + palette_id (7 bits)
-        let palette_byte = if self.palette_update { 0x80 } else { 0x00 } | (self.palette_id & 0x7F);
-        output.push(palette_byte);
+        // Palette update flag — separate byte (offset 8), per PGS BD-ROM spec.
+        // PotPlayer/FFmpeg reads this as a standalone byte and skips it.
+        output.push(if self.palette_update { 0x80 } else { 0x00 });
+        // Palette ID — separate byte (offset 9)
+        output.push(self.palette_id & 0x7F);
         // Number of objects
         output.push(self.num_objects);
         // Object compositions

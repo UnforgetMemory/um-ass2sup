@@ -87,6 +87,11 @@ impl PgsEncoder {
 
         segments.extend(self.build_display_set(frame, pts, dts));
 
+        // NOTE: We do NOT emit an empty display set (num_objects=0) to clear subtitles.
+        // Some players (including PotPlayer) crash on empty display sets.
+        // PGS standard behavior: subtitle stays visible until the next display set
+        // replaces it. This means subtitles "extend" until the next event starts.
+
         segments.push(Segment {
             segment_type: SegmentType::End,
             pts: pts_end,
@@ -95,7 +100,10 @@ impl PgsEncoder {
         });
 
                 self.composition_number = self.composition_number.wrapping_add(1);
-        self.object_id = self.object_id.wrapping_add(1);
+        // Object ID: keep at 0 for BDSup2Sub compatibility within each display set.
+        // BDSup2Sub uses object_id as an index into imageObjectList per display set.
+        // Each display set is independent, so object_id=0 is correct for all frames.
+        // self.object_id = self.object_id.wrapping_add(1);
         self.object_version = self.object_version.wrapping_add(1);
         self.frame_count += 1;
 
@@ -126,30 +134,20 @@ impl PgsEncoder {
         pts: u64,
         dts: u64,
     ) -> Vec<Segment> {
-        // Remap collision-range indices (0x40-0x7F) to safe values (0x80-0xBF)
-        // to avoid ambiguity with transparent long-run headers in the RLE format.
-        // The decoder's transparent-first disambiguation would otherwise misinterpret
-        // opaque runs with collision-range colors as transparent runs.
-        let (remapped_indices, remapped_palette) = remap_collision_range(frame);
+        // The new RLE encoder uses FFmpeg-compatible format where non-zero bytes
+        let mut palette_entries = build_palette(&frame.palette, self.display_height);
 
-        let mut palette_entries = build_palette(&remapped_palette);
-
-        // Swap palette entries 0 and transparent_index to match the RLE encoder's
-        // index swap. The RLE encoder swaps transparent_index ↔ 0 in the pixel data
-        // (so RLE uses index 0 for transparent runs), but the palette was not
-        // swapped. Without this, palette[0] would contain an opaque color while the
-        // RLE data uses index 0 to mean transparent, causing PotPlayer to render
-        // opaque black over the entire frame → AccessViolation crash.
+        // Transparent color is at palette index 0 (from quantizer fix).
+        // The RLE encoder uses index 0 for transparent pixels.
+        // Swap palette entries if needed to ensure index 0 = transparent color.
         let ti = frame.transparent_index;
         if ti != 0 && (ti as usize) < palette_entries.len() {
-            let tmp = palette_entries[ti as usize];
-            palette_entries[ti as usize] = palette_entries[0];
-            palette_entries[0] = tmp;
+            palette_entries.swap(0, ti as usize);
         }
         let palette_hash = hash_palette(&palette_entries);
 
         let rle = rle_encode(
-            &remapped_indices,
+            &frame.indices,
             frame.width,
             frame.height,
             frame.transparent_index,
@@ -159,13 +157,16 @@ impl PgsEncoder {
         let palette_changed = self.prev_palette_hash != Some(palette_hash);
         let object_changed = self.prev_object_rle_hash != Some(rle_hash);
 
-        let composition_state = if self.frame_count == 0 {
-            CompositionState::EpochStart
-        } else if palette_changed || object_changed {
-            CompositionState::AcquirePoint
-        } else {
-            CompositionState::NormalCase
-        };
+        // PGS spec: first display set uses EpochStart, subsequent use NormalCase.
+        // EpochStart clears the screen and starts a new epoch; NormalCase continues it.
+        // PotPlayer requires EpochStart on every frame to properly process ODS data.
+        let composition_state = CompositionState::EpochStart;
+
+        // palette_update=true: tells the player that the PDS palette is present.
+        // PotPlayer requires this flag to load the PDS palette. Without it,
+        // PotPlayer skips PDS processing and renders garbage or crashes.
+        // BDSup2Sub ignores this flag for ODS processing.
+        let palette_update = true;
 
         let rle_size_est = 13 + 4 + rle.len();
         let use_multi_window = rle_size_est > MAX_DECODE_BUFFER / 2 && frame.height > 100;
@@ -180,6 +181,7 @@ impl PgsEncoder {
                 &rle,
                 composition_state,
                 palette_changed,
+                palette_update,
             )
         } else {
             self.build_single_window_display_set(
@@ -190,12 +192,13 @@ impl PgsEncoder {
                 &rle,
                 composition_state,
                 palette_changed,
+                palette_update,
             )
         };
 
         let total_size: usize = segments.iter().map(|s| s.to_bytes().len()).sum();
         let result = if total_size > MAX_DECODE_BUFFER * 3 / 4 {
-            self.build_epoch_split_display_set(frame, pts, dts, composition_state, palette_changed)
+            self.build_epoch_split_display_set(frame, pts, dts, composition_state, palette_changed, palette_update)
         } else {
             segments
         };
@@ -211,8 +214,9 @@ impl PgsEncoder {
         dts: u64,
         composition_state: CompositionState,
         palette_changed: bool,
+        palette_update: bool,
     ) -> Vec<Segment> {
-        let palette_entries = build_palette(&frame.palette);
+        let palette_entries = build_palette(&frame.palette, self.display_height);
         let band_height = (frame.height / 3).max(64);
         let mut all_segments = Vec::new();
 
@@ -255,11 +259,41 @@ impl PgsEncoder {
                 &band_rle,
                 band_state,
                 palette_changed,
+                palette_update,
             );
             all_segments.extend(band_segments);
         }
 
         all_segments
+    }
+
+    /// Build a display set with zero objects to clear the subtitle from screen.
+    ///
+    /// PGS has no explicit "end time" — a subtitle persists until replaced.
+    /// An empty PCS with `num_objects=0` tells the player to clear the display.
+    fn build_clear_display_set(
+        &self,
+        pts: u64,
+        dts: u64,
+    ) -> Vec<Segment> {
+        let pcs = PcsPayload {
+            width: self.display_width,
+            height: self.display_height,
+            frame_rate: self.frame_rate,
+            composition_number: self.composition_number.wrapping_add(1),
+            composition_state: CompositionState::NormalCase,
+            palette_update: false,
+            palette_id: self.palette_id,
+            num_objects: 0,
+            compositions: vec![],
+        };
+
+        vec![Segment {
+            segment_type: SegmentType::Pcs,
+            pts,
+            dts,
+            payload: SegmentPayload::Pcs(pcs),
+        }]
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -272,6 +306,7 @@ impl PgsEncoder {
         rle: &[u8],
         composition_state: CompositionState,
         palette_changed: bool,
+        palette_update: bool,
     ) -> Vec<Segment> {
         let mut segments = Vec::new();
 
@@ -288,7 +323,7 @@ impl PgsEncoder {
                 frame_rate: self.frame_rate,
                 composition_number: self.composition_number,
                 composition_state,
-                palette_update: true,
+                palette_update,
                 palette_id: self.palette_id,
                 num_objects: 1,
                 compositions: vec![ObjectComposition {
@@ -373,6 +408,7 @@ impl PgsEncoder {
         _rle: &[u8],
         composition_state: CompositionState,
         palette_changed: bool,
+        palette_update: bool,
     ) -> Vec<Segment> {
         let split_row = self.find_split_row(
             &frame.indices,
@@ -398,7 +434,7 @@ impl PgsEncoder {
                 frame_rate: self.frame_rate,
                 composition_number: self.composition_number,
                 composition_state,
-                palette_update: true,
+                palette_update,
                 palette_id: self.palette_id,
                 num_objects: 2,
                 compositions: vec![
@@ -738,8 +774,8 @@ mod tests {
         let mut enc = PgsEncoder::new(1920, 1080, 24.0);
         let frame = make_test_frame();
         let segments = enc.encode_frame(&frame, 1000, 2000);
-        assert_eq!(segments[0].pts, 90000);
-        assert_eq!(segments[4].pts, 270000);
+        assert_eq!(segments[0].pts, 90000); // PCS at 1s
+        assert_eq!(segments[4].pts, 270000); // END at 3s
     }
 
     #[test]
@@ -748,10 +784,11 @@ mod tests {
         let frame = make_test_frame();
         enc.encode_frame(&frame, 0, 1000);
         assert_eq!(enc.composition_number, 1);
-        assert_eq!(enc.object_id, 1);
+        // object_id stays at 0 for BDSup2Sub compatibility
+        assert_eq!(enc.object_id, 0);
         enc.encode_frame(&frame, 1000, 1000);
         assert_eq!(enc.composition_number, 2);
-        assert_eq!(enc.object_id, 2);
+        assert_eq!(enc.object_id, 0);
     }
 
     #[test]

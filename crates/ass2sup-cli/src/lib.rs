@@ -259,6 +259,51 @@ pub fn parse_resolution(s: &str) -> Result<Resolution, String> {
     Ok(Resolution { width, height })
 }
 
+/// Crop a rendered subtitle bitmap to its tight bounding box of non-transparent pixels.
+///
+/// Returns the cropped RGBA bitmap and its (x, y) offset on the original canvas.
+/// PGS/BD-ROM requires the ODS object bitmap to contain only the actual subtitle
+/// pixels (with the WDS/PCS position fields placing it on the video frame).
+/// Using the full 1920x1080 canvas as the ODS bitmap makes every pixel part of
+/// the "subtitle" — PotPlayer then renders the full video area as the subtitle
+/// region, producing the vertical-line / white-block artifacts we observed.
+///
+/// Returns `None` if the bitmap is entirely transparent (skip the frame).
+pub fn crop_to_tight_bbox(bitmap: &[u8], width: u32, height: u32) -> Option<(Vec<u8>, u32, u32, u32, u32)> {
+    if bitmap.len() != (width as usize) * (height as usize) * 4 {
+        return None;
+    }
+    let mut min_x = u32::MAX;
+    let mut min_y = u32::MAX;
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    let mut any = false;
+    for y in 0..height {
+        for x in 0..width {
+            let off = ((y * width + x) * 4) as usize;
+            if bitmap[off + 3] > 0 {
+                any = true;
+                if x < min_x { min_x = x; }
+                if y < min_y { min_y = y; }
+                if x > max_x { max_x = x; }
+                if y > max_y { max_y = y; }
+            }
+        }
+    }
+    if !any {
+        return None;
+    }
+    let w = max_x - min_x + 1;
+    let h = max_y - min_y + 1;
+    let mut out = Vec::with_capacity((w as usize) * (h as usize) * 4);
+    for y in min_y..=max_y {
+        let row_start = ((y * width + min_x) * 4) as usize;
+        let row_end = row_start + (w as usize) * 4;
+        out.extend_from_slice(&bitmap[row_start..row_end]);
+    }
+    Some((out, min_x, min_y, w, h))
+}
+
 /// Initialises the global `tracing` subscriber with the appropriate level filter.
 ///
 /// Level selection:
@@ -661,9 +706,14 @@ pub fn convert_file(
             frame_data
                 .par_iter()
                 .map(|(_event, frame_opt, _pts, _dur)| {
-                    frame_opt
-                        .as_ref()
-                        .map(|frame| quantizer.quantize(&frame.bitmap, frame.width, frame.height))
+                    frame_opt.as_ref().and_then(|frame| {
+                        let (bmp, _x, _y, w, h) = crop_to_tight_bbox(
+                            &frame.bitmap,
+                            frame.width,
+                            frame.height,
+                        )?;
+                        Some(quantizer.quantize(&bmp, w, h))
+                    })
                 })
                 .collect()
         } else {
@@ -671,23 +721,28 @@ pub fn convert_file(
             frame_data
                 .iter()
                 .map(|(_event, frame_opt, _pts, _dur)| {
-                    frame_opt.as_ref().map(|frame| {
+                    frame_opt.as_ref().and_then(|frame| {
+                        let (bmp, _x, _y, w, h) = crop_to_tight_bbox(
+                            &frame.bitmap,
+                            frame.width,
+                            frame.height,
+                        )?;
                         if use_palette_reuse {
                             let prev = prev_palette.as_deref();
                             let q = quantize_with_palette(
-                                &frame.bitmap,
-                                frame.width,
-                                frame.height,
+                                &bmp,
+                                w,
+                                h,
                                 prev,
                                 args.max_colors,
                                 dither_method,
                             );
                             prev_palette = Some(q.palette.clone());
-                            q
+                            Some(q)
                         } else {
-                            let q = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
+                            let q = quantizer.quantize(&bmp, w, h);
                             prev_palette = Some(q.palette.clone());
-                            q
+                            Some(q)
                         }
                     })
                 })

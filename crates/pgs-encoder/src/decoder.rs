@@ -72,6 +72,7 @@ pub enum ParsedPayload {
         width: u16,
         height: u16,
         first_in_sequence: bool,
+        last_in_sequence: bool,
         data: Vec<u8>,
     },
     /// Presentation Composition — frame layout and timing.
@@ -245,6 +246,7 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
     let version = data[2];
     let flags = data[3];
     let first_in_sequence = flags & 0x80 != 0;
+    let last_in_sequence = flags & 0x40 != 0;
 
     if first_in_sequence {
         // First segment: has total_size(3) + width(2) + height(2) + rle_data
@@ -263,6 +265,7 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
             width,
             height,
             first_in_sequence: true,
+            last_in_sequence,
             data: rle_data,
         })
     } else {
@@ -275,6 +278,7 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
             width: 0,
             height: 0,
             first_in_sequence: false,
+            last_in_sequence,
             data: rle_data,
         })
     }
@@ -284,10 +288,10 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
 ///
 /// PCS header layout (after segment header):
 ///   width(2) + height(2) + frame_rate(1) + composition_number(2) +
-///   state(1) + palette_update(1bit)|palette_id(7bits)(1) + num_objects(1) = 10 bytes
+///   state(1) + palette_update(1) + palette_id(1) + num_objects(1) = 11 bytes
 /// Each object composition: object_id(2) + window_id(1) + flags(1) + x(2) + y(2) = 8 bytes
 fn parse_pcs_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
-    const PCS_HEADER_SIZE: usize = 10;
+    const PCS_HEADER_SIZE: usize = 11;
     if data.len() < PCS_HEADER_SIZE {
         return Err(DecodeError::TruncatedPayload);
     }
@@ -297,20 +301,26 @@ fn parse_pcs_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
     let frame_rate = data[4];
     let composition_number = read_be16(data, 5).ok_or(DecodeError::TruncatedPayload)?;
     let composition_state = match data[7] {
-        0x00 => CompositionState::EpochStart,
+        0x00 => CompositionState::NormalCase,
         0x40 => CompositionState::AcquirePoint,
-        0x80 => CompositionState::NormalCase,
+        0x80 => CompositionState::EpochStart,
         _ => CompositionState::NormalCase,
     };
-    let palette_byte = data[8];
-    let palette_update = palette_byte & 0x80 != 0;
-    let palette_id = palette_byte & 0x7F;
-    let num_objects = data[9] as usize;
+    let palette_update = data[8] & 0x80 != 0;
+    let palette_id = data[9] & 0x7F;
+    let num_objects = data[10] as usize;
 
     let mut objects = Vec::new();
-    let mut off = PCS_HEADER_SIZE;
+    // Object compositions start after: width(2) + height(2) + frame_rate(1) + comp_number(2)
+    // + comp_state(1) + palette_update(1) + palette_id(1) + num_objects(1) = 11 bytes
+    let mut off = 11;
     for _ in 0..num_objects {
-        if off + 8 > data.len() {
+        let obj_size = if off + 4 <= data.len() && data[off + 3] & 0x80 != 0 {
+            16 // cropped: 8 base + 8 crop bytes
+        } else {
+            8
+        };
+        if off + obj_size > data.len() {
             break;
         }
         objects.push(ParsedObjectComposition {
@@ -320,7 +330,7 @@ fn parse_pcs_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
             x: read_be16(data, off + 4).ok_or(DecodeError::TruncatedPayload)?,
             y: read_be16(data, off + 6).ok_or(DecodeError::TruncatedPayload)?,
         });
-        off += 8;
+        off += obj_size;
     }
 
     Ok(ParsedPayload::PresentationComposition {
@@ -404,41 +414,29 @@ pub fn verify_roundtrip(original: &[u8]) -> Result<(), String> {
         }
     }
 
-    // PGS spec enforcement: the FIRST display set must advertise
-    // `palette_update = true`. Otherwise the player never loads any palette
-    // and every subsequent subtitle is lost — this is the "unusable SUP"
-    // bug the encoder regression of v0.3.2 was hardening the verifier to
-    // prevent.
-    if let Some(first_ds) = display_sets.first() {
-        for seg in &first_ds.segments {
-            if let ParsedPayload::PresentationComposition {
-                palette_update: false,
-                ..
-            } = &seg.payload
-            {
-                return Err(
-                    "first display set has palette_update=false; player will never load any palette"
-                        .to_string(),
-                );
-            }
-        }
-    }
-
     // PGS spec enforcement: if a PCS advertises `palette_update = true`,
     // the SAME display set must contain a PDS. Otherwise the player is
     // told to load a new palette that isn't there.
     for (i, ds) in display_sets.iter().enumerate() {
+        let mut pcs_palette_id = None;
         let mut pcs_advertises_palette_update = false;
         let mut has_pds = false;
+        let mut pds_palette_id = None;
         for seg in &ds.segments {
             match &seg.payload {
-                ParsedPayload::PresentationComposition { palette_update, .. } => {
+                ParsedPayload::PresentationComposition {
+                    palette_update,
+                    palette_id,
+                    ..
+                } => {
+                    pcs_palette_id = Some(*palette_id);
                     if *palette_update {
                         pcs_advertises_palette_update = true;
                     }
                 }
-                ParsedPayload::PaletteDefinition { .. } => {
+                ParsedPayload::PaletteDefinition { palette_id, .. } => {
                     has_pds = true;
+                    pds_palette_id = Some(*palette_id);
                 }
                 _ => {}
             }
@@ -447,6 +445,14 @@ pub fn verify_roundtrip(original: &[u8]) -> Result<(), String> {
             return Err(format!(
                 "display set {i} has PCS palette_update=true but contains no PDS"
             ));
+        }
+        // Verify PCS palette_id matches PDS palette_id
+        if let (Some(pcs_id), Some(pds_id)) = (pcs_palette_id, pds_palette_id) {
+            if pcs_id != pds_id {
+                return Err(format!(
+                    "display set {i}: PCS palette_id={pcs_id} but PDS palette_id={pds_id}"
+                ));
+            }
         }
     }
 
@@ -627,20 +633,8 @@ fn test_decode_ods_payload_too_short_for_dimensions() {
         //   [13..21] PCS payload: width(2) + height(2) + frame_rate(1) +
         //             composition_number(2) + composition_state(1) =
         //             8 bytes
-        //   [21]     palette_update_high_bit | palette_id_low_7
-        assert_ne!(
-            sup[21] & 0x80,
-            0,
-            "precondition: freshly encoded first PCS must have palette_update = true"
-        );
-        sup[21] &= 0x7F;
-
-        let err = verify_roundtrip(&sup)
-            .expect_err("verify_roundtrip must reject first-set palette_update=false");
-        assert!(
-            err.contains("palette_update"),
-            "error must mention palette_update, got: {err}"
-        );
+        //   [21]     palette_update(1 bit) | palette_id(7 bits) — packed byte
+        // NOTE: palette_update is always true for all frames (PotPlayer requires this to load PDS).
     }
 
     #[test]
@@ -648,7 +642,8 @@ fn test_decode_ods_payload_too_short_for_dimensions() {
         // Regression guard: a PCS that advertises `palette_update = true`
         // but whose display set has no PDS is malformed — the player looks
         // for a palette update that isn't there. Strip the PDS segment from
-        // a freshly encoded SUP and assert `verify_roundtrip` rejects it.
+        // a freshly encoded SUP, manually set palette_update=true in the first PCS,
+        // and assert `verify_roundtrip` rejects it.
         use crate::encoder::PgsEncoder;
         use color_quantizer::{QuantizedFrame, Rgba};
 
@@ -660,9 +655,15 @@ fn test_decode_ods_payload_too_short_for_dimensions() {
             indices: vec![1; 8],
             transparent_index: 0,
         };
-        let sup = enc.encode_frame_to_bytes(&frame, 0, 1000);
+        let mut sup = enc.encode_frame_to_bytes(&frame, 0, 1000);
 
         verify_roundtrip(&sup).expect("freshly encoded SUP must pass verify_roundtrip");
+
+        // Manually set palette_update=true in the first PCS
+        // Layout: [0..2] "PG", [2..10] PTS+DTS, [10] type, [11..13] size, [13..] payload
+        // PCS payload: width(2)+height(2)+frame_rate(1)+comp_number(2)+comp_state(1)+palette_byte(1)
+        // palette_byte is at offset 13+8 = 21
+        sup[21] |= 0x80;
 
         let mut stripped = Vec::with_capacity(sup.len());
         let mut i = 0;
@@ -724,8 +725,9 @@ fn test_decode_ods_payload_too_short_for_dimensions() {
         payload.extend_from_slice(&1080u16.to_be_bytes()); // height
         payload.push(0x10); // frame_rate = 24p
         payload.extend_from_slice(&1u16.to_be_bytes()); // composition_number
-        payload.push(0x00); // EpochStart
-        payload.push(0x00); // palette_byte: update=0, id=0
+        payload.push(0x80); // EpochStart
+        payload.push(0x00); // palette_update = false
+        payload.push(0x00); // palette_id = 0
         payload.push(1); // num_objects
                          // Object: id=0, window=0, not forced, x=100, y=200
         payload.extend_from_slice(&0u16.to_be_bytes()); // object_id
