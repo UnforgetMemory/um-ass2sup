@@ -68,9 +68,12 @@ pub struct Args {
     #[arg(short = 'd', long)]
     pub output_dir: Option<PathBuf>,
 
-    /// Display resolution (WIDTHxHEIGHT)
-    #[arg(short, long, default_value = "1920x1080")]
-    pub resolution: String,
+    /// Display resolution (WIDTHxHEIGHT).
+    ///
+    /// If not specified, uses PlayResX/PlayResY from [Script Info] section.
+    /// Falls back to 1920x1080 if Script Info resolution is missing or zero.
+    #[arg(short, long)]
+    pub resolution: Option<String>,
 
     /// Frames per second
     #[arg(short, long, default_value = "23.976")]
@@ -259,6 +262,34 @@ pub fn parse_resolution(s: &str) -> Result<Resolution, String> {
     Ok(Resolution { width, height })
 }
 
+/// Resolves the effective output resolution from CLI args and ASS script info.
+///
+/// If the user specified an explicit `-r` resolution it is parsed and returned.
+/// Otherwise the `PlayResX`/`PlayResY` from `[Script Info]` is used, falling back
+/// to 1920x1080 when those values are missing, zero, or unreasonably large.
+fn resolve_resolution(args: &Args, ass: &AssFile) -> Result<Resolution, String> {
+    if let Some(ref res_str) = args.resolution {
+        parse_resolution(res_str)
+    } else {
+        let (w, h) = ass.resolution();
+        if w > 0 && h > 0 && w <= 7680 && h <= 4320 {
+            Ok(Resolution {
+                width: w,
+                height: h,
+            })
+        } else {
+            info!(
+                "Script Info resolution invalid or missing ({}x{}), falling back to 1920x1080",
+                w, h
+            );
+            Ok(Resolution {
+                width: 1920,
+                height: 1080,
+            })
+        }
+    }
+}
+
 /// Crop a rendered subtitle bitmap to its tight bounding box of non-transparent pixels.
 ///
 /// Returns the cropped RGBA bitmap and its (x, y) offset on the original canvas.
@@ -269,7 +300,11 @@ pub fn parse_resolution(s: &str) -> Result<Resolution, String> {
 /// region, producing the vertical-line / white-block artifacts we observed.
 ///
 /// Returns `None` if the bitmap is entirely transparent (skip the frame).
-pub fn crop_to_tight_bbox(bitmap: &[u8], width: u32, height: u32) -> Option<(Vec<u8>, u32, u32, u32, u32)> {
+pub fn crop_to_tight_bbox(
+    bitmap: &[u8],
+    width: u32,
+    height: u32,
+) -> Option<(Vec<u8>, u32, u32, u32, u32)> {
     if bitmap.len() != (width as usize) * (height as usize) * 4 {
         return None;
     }
@@ -283,10 +318,18 @@ pub fn crop_to_tight_bbox(bitmap: &[u8], width: u32, height: u32) -> Option<(Vec
             let off = ((y * width + x) * 4) as usize;
             if bitmap[off + 3] > 0 {
                 any = true;
-                if x < min_x { min_x = x; }
-                if y < min_y { min_y = y; }
-                if x > max_x { max_x = x; }
-                if y > max_y { max_y = y; }
+                if x < min_x {
+                    min_x = x;
+                }
+                if y < min_y {
+                    min_y = y;
+                }
+                if x > max_x {
+                    max_x = x;
+                }
+                if y > max_y {
+                    max_y = y;
+                }
             }
         }
     }
@@ -530,12 +573,7 @@ fn check_ass_fonts(
 /// Handles format detection, validation (when enabled), render, quantize, and
 /// encode in a single pass. Returns [`ConversionStats`] describing what was
 /// processed, or an error string on failure.
-pub fn convert_file(
-    input: &Path,
-    output: &Path,
-    args: &Args,
-    res: &Resolution,
-) -> Result<ConversionStats, String> {
+pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<ConversionStats, String> {
     info!("Processing: {}", input.display());
 
     let content =
@@ -614,6 +652,9 @@ pub fn convert_file(
         });
     }
 
+    let res = resolve_resolution(args, &ass)?;
+    info!("Output resolution: {}x{}", res.width, res.height);
+
     let render_config = RenderConfig {
         width: res.width,
         height: res.height,
@@ -632,7 +673,7 @@ pub fn convert_file(
         let _id = renderer.font_manager_mut().load_font_data(font_data);
     }
 
-    let font_map = parse_font_map(&args.font_map).map_err(|e| e)?;
+    let font_map = parse_font_map(&args.font_map)?;
     check_ass_fonts(
         &ass,
         renderer.font_manager(),
@@ -701,53 +742,43 @@ pub fn convert_file(
 
     let mut all_segments = Vec::new();
 
-    let quantized_frames: Vec<Option<color_quantizer::QuantizedFrame>> =
-        if !use_palette_reuse && args.parallel_frames && frame_data.len() > 1 {
-            frame_data
-                .par_iter()
-                .map(|(_event, frame_opt, _pts, _dur)| {
-                    frame_opt.as_ref().and_then(|frame| {
-                        let (bmp, _x, _y, w, h) = crop_to_tight_bbox(
-                            &frame.bitmap,
-                            frame.width,
-                            frame.height,
-                        )?;
-                        Some(quantizer.quantize(&bmp, w, h))
-                    })
+    let quantized_frames: Vec<Option<color_quantizer::QuantizedFrame>> = if !use_palette_reuse
+        && args.parallel_frames
+        && frame_data.len() > 1
+    {
+        frame_data
+            .par_iter()
+            .map(|(_event, frame_opt, _pts, _dur)| {
+                frame_opt.as_ref().and_then(|frame| {
+                    let (bmp, _x, _y, w, h) =
+                        crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
+                    Some(quantizer.quantize(&bmp, w, h))
                 })
-                .collect()
-        } else {
-            let mut prev_palette: Option<Vec<Rgba>> = None;
-            frame_data
-                .iter()
-                .map(|(_event, frame_opt, _pts, _dur)| {
-                    frame_opt.as_ref().and_then(|frame| {
-                        let (bmp, _x, _y, w, h) = crop_to_tight_bbox(
-                            &frame.bitmap,
-                            frame.width,
-                            frame.height,
-                        )?;
-                        if use_palette_reuse {
-                            let prev = prev_palette.as_deref();
-                            let q = quantize_with_palette(
-                                &bmp,
-                                w,
-                                h,
-                                prev,
-                                args.max_colors,
-                                dither_method,
-                            );
-                            prev_palette = Some(q.palette.clone());
-                            Some(q)
-                        } else {
-                            let q = quantizer.quantize(&bmp, w, h);
-                            prev_palette = Some(q.palette.clone());
-                            Some(q)
-                        }
-                    })
+            })
+            .collect()
+    } else {
+        let mut prev_palette: Option<Vec<Rgba>> = None;
+        frame_data
+            .iter()
+            .map(|(_event, frame_opt, _pts, _dur)| {
+                frame_opt.as_ref().and_then(|frame| {
+                    let (bmp, _x, _y, w, h) =
+                        crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
+                    if use_palette_reuse {
+                        let prev = prev_palette.as_deref();
+                        let q =
+                            quantize_with_palette(&bmp, w, h, prev, args.max_colors, dither_method);
+                        prev_palette = Some(q.palette.clone());
+                        Some(q)
+                    } else {
+                        let q = quantizer.quantize(&bmp, w, h);
+                        prev_palette = Some(q.palette.clone());
+                        Some(q)
+                    }
                 })
-                .collect()
-        };
+            })
+            .collect()
+    };
 
     for ((_event, _frame_opt, pts_ms, duration_ms), q_opt) in
         frame_data.iter().zip(quantized_frames.iter())
@@ -795,7 +826,6 @@ pub fn convert_to_bdn(
     input: &Path,
     output_dir: &Path,
     args: &Args,
-    res: &Resolution,
 ) -> Result<ConversionStats, String> {
     info!("Processing for BDN: {}", input.display());
 
@@ -819,6 +849,9 @@ pub fn convert_to_bdn(
 
     std::fs::create_dir_all(output_dir).map_err(|e| format!("Failed to create output dir: {e}"))?;
 
+    let res = resolve_resolution(args, &ass)?;
+    info!("Output resolution: {}x{}", res.width, res.height);
+
     let render_config = RenderConfig {
         width: res.width,
         height: res.height,
@@ -835,7 +868,7 @@ pub fn convert_to_bdn(
         let _id = renderer.font_manager_mut().load_font_data(font_data);
     }
 
-    let font_map = parse_font_map(&args.font_map).map_err(|e| e)?;
+    let font_map = parse_font_map(&args.font_map)?;
     check_ass_fonts(
         &ass,
         renderer.font_manager(),
@@ -952,11 +985,6 @@ pub fn run(args: Args) -> Result<(), CliError> {
 
     let use_color = should_use_color(&args.color);
 
-    let res = parse_resolution(&args.resolution).map_err(|e| CliError::InvalidResolution {
-        input: args.resolution.clone(),
-        message: e,
-    })?;
-
     let inputs = collect_input_files(&args);
 
     if inputs.is_empty() {
@@ -1025,7 +1053,7 @@ pub fn run(args: Args) -> Result<(), CliError> {
             } else {
                 PathBuf::from(stem)
             };
-            convert_to_bdn(input, &output_dir, &args, &res).map_err(CliError::Conversion)?;
+            convert_to_bdn(input, &output_dir, &args).map_err(CliError::Conversion)?;
             info!("{} → {}/", input.display(), output_dir.display());
         }
         return Ok(());
@@ -1035,10 +1063,7 @@ pub fn run(args: Args) -> Result<(), CliError> {
         "ass2sup v{} - ASS/SRT to SUP/PGS converter",
         env!("CARGO_PKG_VERSION")
     );
-    info!(
-        "Resolution: {}x{}, FPS: {}",
-        res.width, res.height, args.fps
-    );
+    info!("FPS: {}", args.fps);
 
     if inputs.len() == 1 {
         let input = &inputs[0];
@@ -1048,7 +1073,7 @@ pub fn run(args: Args) -> Result<(), CliError> {
             out
         });
 
-        match convert_file(input, &output, &args, &res) {
+        match convert_file(input, &output, &args) {
             Ok(stats) => {
                 info!(
                     "{} Converted {} events ({} frames) → {} ({} bytes)",
@@ -1096,7 +1121,7 @@ pub fn run(args: Args) -> Result<(), CliError> {
                 let mut output = output_dir.clone();
                 output.push(input.file_stem().unwrap_or_default());
                 output.set_extension("sup");
-                (i, convert_file(input, &output, &args, &res))
+                (i, convert_file(input, &output, &args))
             })
             .collect()
     } else {
@@ -1117,7 +1142,7 @@ pub fn run(args: Args) -> Result<(), CliError> {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
                 pb.set_message(filename.clone());
-                let result = convert_file(input, &output, &args, &res);
+                let result = convert_file(input, &output, &args);
                 pb.inc(1);
                 (i, result)
             })

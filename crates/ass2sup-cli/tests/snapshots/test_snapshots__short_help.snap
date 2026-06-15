@@ -15,7 +15,7 @@ Options:
       --max-files <MAX_FILES>        Limit number of files processed when using --glob
   -o, --output <OUTPUT>              Output SUP file path (single file mode)
   -d, --output-dir <OUTPUT_DIR>      Output directory (batch mode)
-  -r, --resolution <RESOLUTION>      Display resolution (WIDTHxHEIGHT) [default: 1920x1080]
+  -r, --resolution <RESOLUTION>      Display resolution (WIDTHxHEIGHT)
   -f, --fps <FPS>                    Frames per second [default: 23.976]
       --validate                     Run validation before conversion
       --overlap-warn                 Enable overlap warning detection
@@ -37,5 +37,5 @@ Options:
       --to-bdn                       Convert to BDN XML + PNG format (Blu-ray authoring)
       --no-check-fonts               Skip font availability check (fonts missing from the system will silently fall back to a substitute, potentially producing blank subtitle output)
       --font-map <STYLE:FALLBACKS>   Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
-  -h, --help                         Print help
+  -h, --help                         Print help (see more with '--help')
   -V, --version                      Print version

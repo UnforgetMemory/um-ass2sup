@@ -7,35 +7,112 @@ CLI tool for converting ASS/SRT subtitles to SUP/PGS format
 Usage: ass2sup [OPTIONS] [INPUT]...
 
 Arguments:
-  [INPUT]...  Input subtitle file(s) (ASS/SSA/SRT)
+  [INPUT]...
+          Input subtitle file(s) (ASS/SSA/SRT)
 
 Options:
-      --glob <GLOB>                  Glob pattern for input files (alternative to positional args)
-      --recursive                    Traverse subdirectories when using --glob
-      --max-files <MAX_FILES>        Limit number of files processed when using --glob
-  -o, --output <OUTPUT>              Output SUP file path (single file mode)
-  -d, --output-dir <OUTPUT_DIR>      Output directory (batch mode)
-  -r, --resolution <RESOLUTION>      Display resolution (WIDTHxHEIGHT) [default: 1920x1080]
-  -f, --fps <FPS>                    Frames per second [default: 23.976]
-      --validate                     Run validation before conversion
-      --overlap-warn                 Enable overlap warning detection
-      --overlap-mode <OVERLAP_MODE>  Overlap detection mode (strict/lenient) [default: lenient]
-      --quantizer <QUANTIZER>        Quantizer algorithm (median-cut) [default: median-cut]
-      --max-colors <MAX_COLORS>      Maximum colors in palette (1-255) [default: 255]
-      --dither <DITHER>              Dithering method (none/floyd-steinberg/ordered) [default: floyd-steinberg]
-      --font <FONT>                  Default font name for SRT input [default: Arial]
-      --font-size <FONT_SIZE>        Default font size for SRT input [default: 48.0]
-  -v, --verbose                      Enable verbose logging
-  -p, --parallel                     Process files in parallel (batch mode)
-      --force                        Force conversion even if validation fails
-      --dry-run                      Dry run: parse and validate only, don't write output
-      --parallel-frames              Render frames in parallel using rayon (single-file mode)
-      --quiet                        Suppress progress bar
-      --check                        Parse and validate only, don't convert (exit 0 if OK, 1 if errors)
-      --color <COLOR>                Color output mode (auto/always/never) [default: auto] [possible values: auto, always, never]
-      --to-srt                       Convert to SRT format instead of SUP/PGS
-      --to-bdn                       Convert to BDN XML + PNG format (Blu-ray authoring)
-      --no-check-fonts               Skip font availability check (fonts missing from the system will silently fall back to a substitute, potentially producing blank subtitle output)
-      --font-map <STYLE:FALLBACKS>   Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
-  -h, --help                         Print help
-  -V, --version                      Print version
+      --glob <GLOB>
+          Glob pattern for input files (alternative to positional args)
+
+      --recursive
+          Traverse subdirectories when using --glob
+
+      --max-files <MAX_FILES>
+          Limit number of files processed when using --glob
+
+  -o, --output <OUTPUT>
+          Output SUP file path (single file mode)
+
+  -d, --output-dir <OUTPUT_DIR>
+          Output directory (batch mode)
+
+  -r, --resolution <RESOLUTION>
+          Display resolution (WIDTHxHEIGHT).
+          
+          If not specified, uses PlayResX/PlayResY from [Script Info] section. Falls back to 1920x1080 if Script Info resolution is missing or zero.
+
+  -f, --fps <FPS>
+          Frames per second
+          
+          [default: 23.976]
+
+      --validate
+          Run validation before conversion
+
+      --overlap-warn
+          Enable overlap warning detection
+
+      --overlap-mode <OVERLAP_MODE>
+          Overlap detection mode (strict/lenient)
+          
+          [default: lenient]
+
+      --quantizer <QUANTIZER>
+          Quantizer algorithm (median-cut)
+          
+          [default: median-cut]
+
+      --max-colors <MAX_COLORS>
+          Maximum colors in palette (1-255)
+          
+          [default: 255]
+
+      --dither <DITHER>
+          Dithering method (none/floyd-steinberg/ordered)
+          
+          [default: floyd-steinberg]
+
+      --font <FONT>
+          Default font name for SRT input
+          
+          [default: Arial]
+
+      --font-size <FONT_SIZE>
+          Default font size for SRT input
+          
+          [default: 48.0]
+
+  -v, --verbose
+          Enable verbose logging
+
+  -p, --parallel
+          Process files in parallel (batch mode)
+
+      --force
+          Force conversion even if validation fails
+
+      --dry-run
+          Dry run: parse and validate only, don't write output
+
+      --parallel-frames
+          Render frames in parallel using rayon (single-file mode)
+
+      --quiet
+          Suppress progress bar
+
+      --check
+          Parse and validate only, don't convert (exit 0 if OK, 1 if errors)
+
+      --color <COLOR>
+          Color output mode (auto/always/never)
+          
+          [default: auto]
+          [possible values: auto, always, never]
+
+      --to-srt
+          Convert to SRT format instead of SUP/PGS
+
+      --to-bdn
+          Convert to BDN XML + PNG format (Blu-ray authoring)
+
+      --no-check-fonts
+          Skip font availability check (fonts missing from the system will silently fall back to a substitute, potentially producing blank subtitle output)
+
+      --font-map <STYLE:FALLBACKS>
+          Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
