@@ -202,9 +202,12 @@ impl AssFile {
             if line.is_empty() || line.starts_with(';') || line.starts_with('!') {
                 continue;
             }
-            if line.starts_with('[') && line.ends_with(']') {
-                current_section = line[1..line.len() - 1].to_string();
-                continue;
+            if line.starts_with('[') {
+                // Find the closing bracket, then ignore any trailing content (comments, spaces, etc.)
+                if let Some(end) = line.find(']') {
+                    current_section = line[1..end].to_string().trim().to_string();
+                    continue;
+                }
             }
             match current_section.as_str() {
                 "Script Info" => ass.parse_script_info(line)?,
@@ -233,9 +236,12 @@ impl AssFile {
             if line.is_empty() || line.starts_with(';') || line.starts_with('!') {
                 continue;
             }
-            if line.starts_with('[') && line.ends_with(']') {
-                current_section = line[1..line.len() - 1].to_string();
-                continue;
+            if line.starts_with('[') {
+                // Find the closing bracket, then ignore any trailing content (comments, spaces, etc.)
+                if let Some(end) = line.find(']') {
+                    current_section = line[1..end].to_string().trim().to_string();
+                    continue;
+                }
             }
             match current_section.as_str() {
                 "Script Info" => {
