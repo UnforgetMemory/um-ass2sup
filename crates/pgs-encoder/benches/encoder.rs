@@ -31,6 +31,8 @@ fn make_test_frame(width: u32, height: u32, color_count: usize) -> QuantizedFram
         transparent_index: (palette.len() - 1) as u8,
         palette,
         indices,
+        x: 0,
+        y: 0,
     }
 }
 

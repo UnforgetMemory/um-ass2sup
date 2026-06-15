@@ -38,6 +38,8 @@ fn test_quantized_frame_palette_size() {
         palette: vec![Rgba::new(0, 0, 0, 0), Rgba::new(255, 255, 255, 255)],
         indices: vec![0, 1, 0, 1],
         transparent_index: 0,
+        x: 0,
+        y: 0,
     };
     assert_eq!(frame.palette_size(), 2);
 }

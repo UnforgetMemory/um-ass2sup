@@ -27,6 +27,8 @@ fn make_frame(
         palette,
         indices,
         transparent_index,
+        x: 0,
+        y: 0,
     }
 }
 
@@ -62,7 +64,11 @@ fn test_encode_single_pixel_frame() {
     let frame = make_single_color_frame(1, 1, Rgba::new(255, 0, 0, 255));
 
     let segments = enc.encode_frame(&frame, 0, 1000);
-    assert_eq!(segments.len(), 8, "Should have PCS+WDS+PDS+ODS+END+palette_clear(PCS+PDS)+END");
+    assert_eq!(
+        segments.len(),
+        8,
+        "Should have PCS+WDS+PDS+ODS+END+palette_clear(PCS+PDS)+END"
+    );
 
     let sup_data = enc.encode_frame_to_bytes(&frame, 1000, 1000);
     assert!(sup_data.len() >= 13);
@@ -355,9 +361,10 @@ fn test_multiple_frames_object_id_increments() {
     for i in 0..3u64 {
         let segments = enc.encode_frame(&frame, i * 1000, 1000);
         // Find ODS segment by type (index varies when PDS is absent)
-        let ods = segments.iter().find(|s| {
-            matches!(s.payload, pgs_encoder::types::SegmentPayload::Ods(_))
-        }).expect("Should have an ODS segment");
+        let ods = segments
+            .iter()
+            .find(|s| matches!(s.payload, pgs_encoder::types::SegmentPayload::Ods(_)))
+            .expect("Should have an ODS segment");
         if let pgs_encoder::types::SegmentPayload::Ods(ref ods_data) = ods.payload {
             // object_id stays at 0 for BDSup2Sub compatibility
             assert_eq!(ods_data.object_id, 0, "Frame {} object_id", i);
@@ -607,8 +614,11 @@ fn pcs_palette_updates(frames_bytes: &[Vec<u8>]) -> Vec<bool> {
         // Find the FIRST PCS (display PCS, not the clear PCS)
         let mut found = None;
         for seg in &sets[0].segments {
-            if let pgs_encoder::ParsedPayload::PresentationComposition { palette_update, objects, .. } =
-                &seg.payload
+            if let pgs_encoder::ParsedPayload::PresentationComposition {
+                palette_update,
+                objects,
+                ..
+            } = &seg.payload
             {
                 if !objects.is_empty() {
                     found = Some(*palette_update);
@@ -663,8 +673,11 @@ fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
     let mut pcs_updates = Vec::new();
     for ds in &sets {
         for seg in &ds.segments {
-            if let pgs_encoder::ParsedPayload::PresentationComposition { palette_update, objects, .. } =
-                &seg.payload
+            if let pgs_encoder::ParsedPayload::PresentationComposition {
+                palette_update,
+                objects,
+                ..
+            } = &seg.payload
             {
                 if !objects.is_empty() {
                     pcs_updates.push(*palette_update);
@@ -717,6 +730,8 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         palette: palette_red.clone(),
         indices: indices.clone(),
         transparent_index: 0,
+        x: 0,
+        y: 0,
     };
     let frame_red_unchanged = QuantizedFrame {
         width: w,
@@ -724,6 +739,8 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         palette: palette_red,
         indices: indices.clone(),
         transparent_index: 0,
+        x: 0,
+        y: 0,
     };
     let frame_green_changed = QuantizedFrame {
         width: w,
@@ -731,6 +748,8 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         palette: palette_green,
         indices,
         transparent_index: 0,
+        x: 0,
+        y: 0,
     };
 
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);

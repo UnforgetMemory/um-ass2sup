@@ -25,6 +25,8 @@ fn arb_quantized_frame() -> impl Strategy<Value = QuantizedFrame> {
                 palette,
                 indices,
                 transparent_index,
+                x: 0,
+                y: 0,
             },
         )
 }

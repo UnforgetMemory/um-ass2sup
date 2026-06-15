@@ -628,6 +628,8 @@ fn test_decode_ods_payload_too_short_for_dimensions() {
             palette: vec![Rgba::new(0, 0, 0, 0), Rgba::new(255, 0, 0, 255)],
             indices: vec![1; 8],
             transparent_index: 0,
+            x: 0,
+            y: 0,
         };
         let mut sup = enc.encode_frame_to_bytes(&frame, 0, 1000);
 
@@ -662,6 +664,8 @@ fn test_decode_ods_payload_too_short_for_dimensions() {
             palette: vec![Rgba::new(0, 0, 0, 0), Rgba::new(255, 0, 0, 255)],
             indices: vec![1; 8],
             transparent_index: 0,
+            x: 0,
+            y: 0,
         };
         let mut sup = enc.encode_frame_to_bytes(&frame, 0, 1000);
 

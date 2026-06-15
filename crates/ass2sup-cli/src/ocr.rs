@@ -35,7 +35,8 @@ pub fn run_ocr(png_path: &Path) -> Result<OcrResult, OcrError> {
     }
     cmd.arg(png_path);
 
-    let output = cmd.output()
+    let output = cmd
+        .output()
         .map_err(|e| OcrError::NotFound(e.to_string()))?;
 
     if !output.status.success() {

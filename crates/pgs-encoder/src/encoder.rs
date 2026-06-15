@@ -1,7 +1,7 @@
 use crate::color::build_palette;
 use crate::rle::{chunk_rle_data, rle_encode};
-use crate::types::*;
 pub use crate::types::frame_rate_code;
+use crate::types::*;
 use color_quantizer::QuantizedFrame;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -107,7 +107,7 @@ impl PgsEncoder {
             payload: SegmentPayload::End,
         });
 
-                self.composition_number = self.composition_number.wrapping_add(1);
+        self.composition_number = self.composition_number.wrapping_add(1);
         self.object_version = self.object_version.wrapping_add(1);
         self.frame_count += 1;
 
@@ -235,6 +235,8 @@ impl PgsEncoder {
                 palette: frame.palette.clone(),
                 indices: band_indices.to_vec(),
                 transparent_index: frame.transparent_index,
+                x: 0,
+                y: 0,
             };
 
             let band_rle = rle_encode(
@@ -269,11 +271,7 @@ impl PgsEncoder {
     /// Sends PCS(nobj=1, palette_update=true) + PDS(all transparent).
     /// The player reloads the palette for the existing object, making it invisible.
     /// This avoids num_objects=0 which crashes PotPlayer.
-    fn build_palette_clear_display_set(
-        &self,
-        pts: u64,
-        dts: u64,
-    ) -> Vec<Segment> {
+    fn build_palette_clear_display_set(&self, pts: u64, dts: u64) -> Vec<Segment> {
         let pcs = PcsPayload {
             width: self.display_width,
             height: self.display_height,
@@ -343,8 +341,8 @@ impl PgsEncoder {
     ) -> Vec<Segment> {
         let mut segments = Vec::new();
 
-        let obj_x = ((i32::from(self.display_width) - frame.width as i32) / 2).max(0) as u16;
-        let obj_y = (i32::from(self.display_height) - frame.height as i32 - 20).max(0) as u16;
+        let obj_x = frame.x;
+        let obj_y = frame.y;
 
         segments.push(Segment {
             segment_type: SegmentType::Pcs,
@@ -698,6 +696,8 @@ mod tests {
             ],
             indices: vec![1, 1, 1, 1, 0, 0, 0, 0],
             transparent_index: 0,
+            x: 0,
+            y: 0,
         }
     }
 

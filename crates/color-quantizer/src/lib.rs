@@ -111,6 +111,8 @@ impl Quantizer {
                 palette: Vec::new(),
                 indices: vec![0u8; (width * height) as usize],
                 transparent_index: 0,
+                x: 0,
+                y: 0,
             };
         }
 
@@ -156,14 +158,22 @@ impl Quantizer {
                     } else {
                         // Bump by 1 because we inserted transparent at index 0
                         let mut i = median_cut::find_nearest_index(p, &palette) as u16 + 1;
-                        if i > 255 { i = 255; }
+                        if i > 255 {
+                            i = 255;
+                        }
                         idx.push(i as u8);
                     }
                 }
                 idx
             }
             DitherMethod::FloydSteinberg => {
-                let mut idx = dithering::floyd_steinberg_dither(rgba, width, height, &palette, transparent_index);
+                let mut idx = dithering::floyd_steinberg_dither(
+                    rgba,
+                    width,
+                    height,
+                    &palette,
+                    transparent_index,
+                );
                 // Bump opaque indices by 1
                 for x in &mut idx {
                     if *x != 0 {
@@ -173,7 +183,8 @@ impl Quantizer {
                 idx
             }
             DitherMethod::Ordered => {
-                let mut idx = dithering::ordered_dither(rgba, width, height, &palette, transparent_index);
+                let mut idx =
+                    dithering::ordered_dither(rgba, width, height, &palette, transparent_index);
                 // Bump opaque indices by 1
                 for x in &mut idx {
                     if *x != 0 {
@@ -190,6 +201,8 @@ impl Quantizer {
             palette,
             indices,
             transparent_index,
+            x: 0,
+            y: 0,
         }
     }
 }
@@ -237,6 +250,8 @@ pub fn quantize_with_palette(
             palette: Vec::new(),
             indices: vec![0u8; (width * height) as usize],
             transparent_index: 0,
+            x: 0,
+            y: 0,
         };
     }
 
@@ -294,6 +309,8 @@ pub fn quantize_with_palette(
                     palette: final_palette,
                     indices: remapped_indices,
                     transparent_index,
+                    x: 0,
+                    y: 0,
                 };
             }
         }

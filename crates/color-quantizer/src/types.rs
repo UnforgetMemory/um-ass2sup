@@ -67,6 +67,10 @@ pub struct QuantizedFrame {
     pub indices: Vec<u8>,
     /// Index within `palette` representing full transparency.
     pub transparent_index: u8,
+    /// Horizontal position on the display (pixels from left edge).
+    pub x: u16,
+    /// Vertical position on the display (pixels from top edge).
+    pub y: u16,
 }
 
 impl QuantizedFrame {

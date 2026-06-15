@@ -750,9 +750,12 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
             .par_iter()
             .map(|(_event, frame_opt, _pts, _dur)| {
                 frame_opt.as_ref().and_then(|frame| {
-                    let (bmp, _x, _y, w, h) =
+                    let (bmp, x, y, w, h) =
                         crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
-                    Some(quantizer.quantize(&bmp, w, h))
+                    let mut q = quantizer.quantize(&bmp, w, h);
+                    q.x = x as u16;
+                    q.y = y as u16;
+                    Some(q)
                 })
             })
             .collect()
@@ -762,16 +765,20 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
             .iter()
             .map(|(_event, frame_opt, _pts, _dur)| {
                 frame_opt.as_ref().and_then(|frame| {
-                    let (bmp, _x, _y, w, h) =
+                    let (bmp, x, y, w, h) =
                         crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
                     if use_palette_reuse {
                         let prev = prev_palette.as_deref();
-                        let q =
+                        let mut q =
                             quantize_with_palette(&bmp, w, h, prev, args.max_colors, dither_method);
+                        q.x = x as u16;
+                        q.y = y as u16;
                         prev_palette = Some(q.palette.clone());
                         Some(q)
                     } else {
-                        let q = quantizer.quantize(&bmp, w, h);
+                        let mut q = quantizer.quantize(&bmp, w, h);
+                        q.x = x as u16;
+                        q.y = y as u16;
                         prev_palette = Some(q.palette.clone());
                         Some(q)
                     }

@@ -52,6 +52,8 @@ fn make_sparse_glyph_frame() -> QuantizedFrame {
         palette,
         indices,
         transparent_index: 0,
+        x: 0,
+        y: 0,
     }
 }
 
@@ -74,6 +76,8 @@ fn make_bottom_row_frame() -> QuantizedFrame {
         palette,
         indices,
         transparent_index: 0,
+        x: 0,
+        y: 0,
     }
 }
 
@@ -96,6 +100,8 @@ fn make_bottom_row_plus1_frame() -> QuantizedFrame {
         palette,
         indices,
         transparent_index: 0,
+        x: 0,
+        y: 0,
     }
 }
 
