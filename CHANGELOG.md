@@ -7,7 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.6.0] - 2026-06-15
+## [0.5.1] - 2026-06-16
+
+### Highlights
+- **ASS escape sequence handling**: `\N` and `\n` are now converted to actual newlines during ASS parsing, enabling multi-line subtitle rendering. Previously rendered as literal text "\\N" in the output.
+- **PotPlayer crash fix**: Fixed `0xC0000005` access violation in PotPlayer when rendering multi-line subtitles. Root cause: RLE index corruption when transparent palette entry is not at index 0.
+- **ASS tag coverage**: Added missing `\c` color shorthand alias and `\clip(@)`/`\iclip(@)` drawing-path clip syntax.
+
+### Fixed
+- **`\N`/`\n`/`\h` escape sequences**: Converted at parser level in `ass-parser/src/event.rs`. `\N` and `\n` become actual newlines; `\h` is available via `convert_ass_escapes` API. (Fixes subtitles displaying literal "\\N" text.)
+- **PotPlayer crash (0xC0000005)**: In `pgs-encoder`, when `transparent_index != 0`, palette entry swap (for PGS index-0 convention) now ALSO swaps index values in the pixel data (`frame.indices`). Previously only palette entries were swapped, causing the RLE encoder to misinterpret index-0 pixels as non-transparent and emit raw `0x00` bytes, corrupting the RLE stream.
+- **`\t(tag, t1, 0, accel)` animation**: When `t2=0` (animate until end of event), the animation now progresses over the event duration instead of snapping instantly to the end state.
+- **Karaoke `\fad`/`\fade` effects**: Alpha multiplier is now applied to karaoke foreground/background layers before compositing, making fade effects work with karaoke events.
+- **ScrollUp/ScrollDown boundaries**: `top_offset` (ScrollUp) and `bottom_offset` (ScrollDown) now properly clamp the scroll region, preventing text from scrolling beyond the intended boundaries.
+- **`\c` color shorthand**: Added `("c", "primary")` to the color prefix array in `override_tag.rs`, enabling `\c&HBBGGRR&` as an alias for `\1c&HBBGGRR&`.
+- **`\clip(@)`/`\iclip(@)` syntax**: Added `ClipDrawingCurrent` and `ClipInverseDrawingCurrent` enum variants, enabling `\clip(@)` to reference the current drawing path as a clip mask.
+- **Animations with `t2=0`**: Progress now correctly interpolates from `anim_start` to `event_end_ms` instead of always returning 1.0 when `t2=0`.
+
+### Added
+- **`convert_ass_escapes`**: Public utility function in `subtitle-renderer` for processing ASS escape sequences. Includes 7 unit tests covering `\N`, `\n`, `\h`, edge cases, and integration with `strip_override_blocks`.
+- **Scroll/Effect boundary tests**: 2 new tests verifying ScrollUp `top_offset` and ScrollDown `bottom_offset` clamping behavior.
+- **Karaoke fade tests**: 2 new tests verifying `\fad` alpha multiplier is applied during karaoke rendering.
+
+### Changed
+- **ASS parsing**: `\N` and `\n` escape sequences are now converted to actual newlines at the parser level (`ass-parser/src/event.rs`), before renderer processing. This ensures consistent behavior across all rendering paths.
+- **RLE transparent index**: `build_display_set` now passes `transparent_index=0` to the RLE encoder after palette swap, and remaps the pixel index data (0 ↔ ti) to match. This ensures the RLE encoder always detects transparent pixels correctly regardless of the original quantizer's transparent index placement.
 
 ### Highlights
 - **PotPlayer compatibility**: Complete rewrite of PGS encoder output to be playable in PotPlayer. The SUP output now renders CJK subtitles correctly with proper timing, palette, and font rendering.
