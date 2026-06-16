@@ -267,16 +267,16 @@ impl FontManager {
     /// Tests a sample CJK character (U+4E2D "中"). If the font maps it to
     /// a real glyph (not the .notdef glyph), it is considered CJK-capable.
     fn font_has_cjk_glyphs(&self, id: fontdb::ID) -> bool {
-        self.db.with_face_data(id, |data, _index| {
-            if let Ok(face) = ttf_parser::Face::parse(data, 0) {
-                // Check "中" (U+4E2D) — the most common CJK test character
-                face.glyph_index('\u{4E2D}')
-                    .map_or(false, |g| g.0 != 0)
-            } else {
-                false
-            }
-        })
-        .unwrap_or(false)
+        self.db
+            .with_face_data(id, |data, _index| {
+                if let Ok(face) = ttf_parser::Face::parse(data, 0) {
+                    // Check "中" (U+4E2D) — the most common CJK test character
+                    face.glyph_index('\u{4E2D}').is_some_and(|g| g.0 != 0)
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false)
     }
 
     pub fn font_count(&self) -> usize {

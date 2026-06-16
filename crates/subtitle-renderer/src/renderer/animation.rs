@@ -87,19 +87,15 @@ pub(super) fn apply_transform_tag(
     let anim_end = if t2 > 0 {
         event_start_ms + t2
     } else {
-        u64::MAX
+        _event_end_ms
     };
 
     if timestamp_ms < anim_start || timestamp_ms > anim_end {
         return;
     }
 
-    let progress = if anim_end == u64::MAX {
-        1.0
-    } else {
-        let t = (timestamp_ms - anim_start) as f32 / (anim_end - anim_start).max(1) as f32;
-        t.clamp(0.0, 1.0)
-    };
+    let t = (timestamp_ms - anim_start) as f32 / (anim_end - anim_start).max(1) as f32;
+    let progress = t.clamp(0.0, 1.0);
 
     let p = if ctx.animation_skip {
         1.0
@@ -784,5 +780,55 @@ mod tests {
     #[test]
     fn test_lerp_u8_t_one() {
         assert_eq!(lerp_u8(100, 200, 1.0), 200);
+    }
+
+    // ── t2=0 (animate until event end) ──────────────────────────
+
+    #[test]
+    fn test_transform_t2_zero_at_midpoint() {
+        let mut ctx = RenderContext {
+            font_size: 20.0,
+            ..Default::default()
+        };
+        apply_transform_tag(&mut ctx, "\\fs40", 0, 0, 1.0, 500, 0, 1000, 1.0, 1.0);
+        assert!(
+            ctx.font_size > 29.0 && ctx.font_size < 31.0,
+            "expected ~30, got {}",
+            ctx.font_size
+        );
+    }
+
+    #[test]
+    fn test_transform_t2_zero_at_event_end() {
+        let mut ctx = RenderContext {
+            font_size: 20.0,
+            ..Default::default()
+        };
+        apply_transform_tag(&mut ctx, "\\fs40", 0, 0, 1.0, 1000, 0, 1000, 1.0, 1.0);
+        assert!(
+            (ctx.font_size - 40.0).abs() < 1.0,
+            "expected ~40, got {}",
+            ctx.font_size
+        );
+    }
+
+    #[test]
+    fn test_transform_t2_zero_before_start() {
+        let mut ctx = RenderContext {
+            font_size: 20.0,
+            ..Default::default()
+        };
+        apply_transform_tag(&mut ctx, "\\fs40", 500, 0, 1.0, 200, 0, 1000, 1.0, 1.0);
+        assert_eq!(ctx.font_size, 20.0);
+    }
+
+    #[test]
+    fn test_transform_t2_zero_after_event_end() {
+        let mut ctx = RenderContext {
+            font_size: 20.0,
+            ..Default::default()
+        };
+        apply_transform_tag(&mut ctx, "\\fs40", 0, 0, 1.0, 1500, 0, 1000, 1.0, 1.0);
+        assert_eq!(ctx.font_size, 20.0);
     }
 }

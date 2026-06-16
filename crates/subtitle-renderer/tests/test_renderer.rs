@@ -1315,9 +1315,9 @@ fn test_scroll_up_effect_changes_y_position() {
         karaoke_segments: vec![],
         raw_override_block: String::new(),
     });
-    // t=100: y = height - bottom_offset - y_offset = 1080 - 50 - 10 = 1020
+    // t=100: y_offset = 100/10 = 10, y = max(1080 - 50 - 10, 10) = max(1020, 10) = 1020
     let early = renderer.render_ass(&ass, 100).unwrap();
-    // t=2000: y = 1080 - 50 - 200 = 830
+    // t=2000: y_offset = 2000/10 = 200, y = max(1080 - 50 - 200, 10) = max(830, 10) = 830
     let late = renderer.render_ass(&ass, 2000).unwrap();
     assert!(
         early.bitmap.iter().any(|&b| b != 0),
@@ -1357,9 +1357,9 @@ fn test_scroll_down_effect_changes_y_position() {
         karaoke_segments: vec![],
         raw_override_block: String::new(),
     });
-    // t=100: y = top_offset + y_offset = 200 + 10 = 210
+    // t=100: y_offset = 100/10 = 10, y = min(200 + 10, 1080 - 50) = min(210, 1030) = 210
     let early = renderer.render_ass(&ass, 100).unwrap();
-    // t=2000: y = 200 + 200 = 400
+    // t=2000: y_offset = 2000/10 = 200, y = min(200 + 200, 1080 - 50) = min(400, 1030) = 400
     let late = renderer.render_ass(&ass, 2000).unwrap();
     assert!(
         early.bitmap.iter().any(|&b| b != 0),
@@ -1372,6 +1372,116 @@ fn test_scroll_down_effect_changes_y_position() {
     assert_ne!(
         early.bitmap, late.bitmap,
         "ScrollDown should shift text vertically"
+    );
+}
+
+#[test]
+fn test_scroll_up_top_offset_limits_scroll() {
+    let renderer = Renderer::new(RenderConfig::default());
+    let mut ass = AssFile::new();
+    ass.styles.push(ass_parser::Style {
+        name: "Default".to_string(),
+        font_name: "DejaVu Sans".to_string(),
+        ..ass_parser::Style::default()
+    });
+    ass.events.push(Event {
+        event_type: EventType::Dialogue,
+        layer: 0,
+        start: Timestamp::from_ms(0),
+        end: Timestamp::from_ms(50000),
+        style_name: "Default".to_string(),
+        name: String::new(),
+        margin_l: 0,
+        margin_r: 0,
+        margin_v: 0,
+        effect: Effect::ScrollUp {
+            delay_per_row: 1,
+            top_offset: 500.0,
+            bottom_offset: 50.0,
+        },
+        text: "ScrollUp Clamp".to_string(),
+        override_tags: vec![],
+        karaoke_segments: vec![],
+        raw_override_block: String::new(),
+    });
+    // t=500: y_offset = 500/1 = 500, y = max(1080 - 50 - 500, 500) = max(530, 500) = 530
+    let mid = renderer.render_ass(&ass, 500).unwrap();
+    // t=5000: y_offset = 5000/1 = 5000, y = max(1080 - 50 - 5000, 500) = max(-3970, 500) = 500
+    let clamped = renderer.render_ass(&ass, 5000).unwrap();
+    // t=25000: y_offset = 25000/1 = 25000, still clamped to y=500
+    let still_clamped = renderer.render_ass(&ass, 25000).unwrap();
+    assert!(
+        mid.bitmap.iter().any(|&b| b != 0),
+        "ScrollUp mid should have content"
+    );
+    assert!(
+        clamped.bitmap.iter().any(|&b| b != 0),
+        "ScrollUp clamped should have content"
+    );
+    assert!(
+        still_clamped.bitmap.iter().any(|&b| b != 0),
+        "ScrollUp still_clamped should have content"
+    );
+    assert_ne!(
+        mid.bitmap, clamped.bitmap,
+        "ScrollUp mid and clamped should differ (still scrolling toward limit)"
+    );
+    assert_eq!(
+        clamped.bitmap, still_clamped.bitmap,
+        "ScrollUp should be identical once clamped at top_offset=500"
+    );
+}
+
+#[test]
+fn test_scroll_down_bottom_offset_limits_scroll() {
+    let renderer = Renderer::new(RenderConfig::default());
+    let mut ass = AssFile::new();
+    ass.styles.push(ass_parser::Style {
+        name: "Default".to_string(),
+        font_name: "DejaVu Sans".to_string(),
+        ..ass_parser::Style::default()
+    });
+    ass.events.push(Event {
+        event_type: EventType::Dialogue,
+        layer: 0,
+        start: Timestamp::from_ms(0),
+        end: Timestamp::from_ms(50000),
+        style_name: "Default".to_string(),
+        name: String::new(),
+        margin_l: 0,
+        margin_r: 0,
+        margin_v: 0,
+        effect: Effect::ScrollDown {
+            delay_per_row: 1,
+            top_offset: 200.0,
+            bottom_offset: 600.0,
+        },
+        text: "ScrollDown Clamp".to_string(),
+        override_tags: vec![],
+        karaoke_segments: vec![],
+        raw_override_block: String::new(),
+    });
+    // t=500: y_offset = 500/1 = 500, y = min(200 + 500, 1080 - 600) = min(700, 480) = 480
+    let mid = renderer.render_ass(&ass, 500).unwrap();
+    // t=5000: y_offset = 5000/1 = 5000, y = min(200 + 5000, 480) = min(5200, 480) = 480
+    let clamped = renderer.render_ass(&ass, 5000).unwrap();
+    // t=25000: still clamped to y=480
+    let still_clamped = renderer.render_ass(&ass, 25000).unwrap();
+    assert!(
+        mid.bitmap.iter().any(|&b| b != 0),
+        "ScrollDown mid should have content"
+    );
+    assert!(
+        clamped.bitmap.iter().any(|&b| b != 0),
+        "ScrollDown clamped should have content"
+    );
+    assert!(
+        still_clamped.bitmap.iter().any(|&b| b != 0),
+        "ScrollDown still_clamped should have content"
+    );
+    assert_eq!(
+        clamped.bitmap, still_clamped.bitmap,
+        "ScrollDown should be identical once clamped at bottom_offset=600 (max_y=480)"
     );
 }
 
@@ -3396,5 +3506,79 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,EmptyTest
     assert!(
         loaded.is_empty(),
         "load_embedded_fonts should return empty vec for empty filename"
+    );
+}
+
+#[test]
+fn test_karaoke_fad_alpha_applied() {
+    // Karaoke with \fad at t=500 (mid-fade-in) should have reduced alpha.
+    // \fad(1000,1000): fade-in 0..1000ms → at t=500, alpha_multiplier ~0.5
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\fad(1000,1000)\k100}Test"#;
+
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 500).unwrap();
+
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert!(
+        non_zero > 0,
+        "Karaoke with \\fad at t=500 should have visible content"
+    );
+
+    let max_alpha = frame
+        .bitmap
+        .iter()
+        .skip(3)
+        .step_by(4)
+        .max()
+        .copied()
+        .unwrap_or(0);
+    assert!(
+        max_alpha < 255,
+        "Karaoke with \\fad at t=500 should have reduced alpha, got max_alpha={max_alpha}"
+    );
+}
+
+#[test]
+fn test_karaoke_no_fade_fully_opaque() {
+    // Regression: karaoke without fade should have fully opaque pixels (alpha=255)
+    let ass = r#"[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\k100}Test"#;
+
+    let parsed = AssFile::parse(ass).unwrap();
+    let renderer = Renderer::new(RenderConfig::default());
+    let frame = renderer.render_ass(&parsed, 2500).unwrap();
+
+    let non_zero = frame.bitmap.iter().filter(|&&b| b > 0).count();
+    assert!(
+        non_zero > 0,
+        "Karaoke without fade should have visible content"
+    );
+
+    let has_opaque = frame.bitmap.iter().skip(3).step_by(4).any(|&a| a == 255);
+    assert!(
+        has_opaque,
+        "Karaoke without fade should have fully opaque (alpha=255) pixels"
     );
 }

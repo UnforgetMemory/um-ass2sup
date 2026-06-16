@@ -553,8 +553,9 @@ impl Renderer {
             Effect::Banner {
                 delay_per_pixel,
                 left_to_right,
-                ..
+                fadeaway_width, // Future enhancement: apply gradient fade at edges
             } if *delay_per_pixel > 0 => {
+                let _ = fadeaway_width; // reserved for fade edge gradient
                 let elapsed = timestamp_ms.saturating_sub(event_start_ms);
                 let x_offset = elapsed as f32 / *delay_per_pixel as f32;
                 if *left_to_right {
@@ -565,21 +566,25 @@ impl Renderer {
             }
             Effect::ScrollUp {
                 delay_per_row,
+                top_offset,
                 bottom_offset,
-                ..
             } if *delay_per_row > 0 => {
                 let elapsed = timestamp_ms.saturating_sub(event_start_ms);
                 let y_offset = elapsed as f32 / *delay_per_row as f32;
-                ctx.y = self.config.height as f32 - *bottom_offset as f32 - y_offset;
+                let min_y = *top_offset as f32;
+                let max_y = self.config.height as f32 - *bottom_offset as f32;
+                ctx.y = (max_y - y_offset).max(min_y);
             }
             Effect::ScrollDown {
                 delay_per_row,
                 top_offset,
-                ..
+                bottom_offset,
             } if *delay_per_row > 0 => {
                 let elapsed = timestamp_ms.saturating_sub(event_start_ms);
                 let y_offset = elapsed as f32 / *delay_per_row as f32;
-                ctx.y = *top_offset as f32 + y_offset;
+                let min_y = *top_offset as f32;
+                let max_y = self.config.height as f32 - *bottom_offset as f32;
+                ctx.y = (min_y + y_offset).min(max_y);
             }
             _ => {}
         }
@@ -969,15 +974,16 @@ impl Renderer {
             && !ctx.clip_enabled
             && ctx.clip_drawing_commands.is_none();
         let sub_bbox = if can_sub {
-            compute_tight_bbox(&shaped_lines, &shaper, font_id, ctx.font_size, &ctx)
-                .map(|(min_x, min_y, max_x, max_y)| {
+            compute_tight_bbox(&shaped_lines, &shaper, font_id, ctx.font_size, &ctx).map(
+                |(min_x, min_y, max_x, max_y)| {
                     // Clamp tight bbox to frame bounds so sub-region stays within frame.
                     let min_x = min_x.max(0.0);
                     let min_y = min_y.max(0.0);
                     let max_x = max_x.min(self.config.width as f32);
                     let max_y = max_y.min(self.config.height as f32);
                     (min_x, min_y, max_x, max_y)
-                })
+                },
+            )
         } else {
             None
         };
@@ -1557,6 +1563,12 @@ impl Renderer {
             effects::composite_over(shadow_pixmap.data_mut(), fg_layer.data(), lw, lh);
             fg_layer.data_mut().copy_from_slice(shadow_pixmap.data());
             self.pixmap_pool.lock().put(shadow_pixmap);
+        }
+
+        // Apply alpha multiplier (fade effects) before compositing.
+        if ctx.alpha_multiplier < 0.999 {
+            apply_alpha_multiplier(bg_layer.data_mut(), ctx.alpha_multiplier);
+            apply_alpha_multiplier(fg_layer.data_mut(), ctx.alpha_multiplier);
         }
 
         // Phase 6: Composite back.

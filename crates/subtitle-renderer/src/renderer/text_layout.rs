@@ -67,6 +67,21 @@ pub fn strip_override_blocks(text: &str) -> String {
     result
 }
 
+/// Converts ASS escape sequences to their actual characters:
+/// - `\N` → newline (soft break, same karaoke block)
+/// - `\n` → newline (hard break)
+/// - `\h` → non-breaking space (U+00A0)
+///
+/// Note: Current implementation converts `\N` and `\n` at the parser level
+/// (`ass-parser/src/event.rs`), so this function is typically not needed
+/// for new code paths. Retained as a public utility for API consumers.
+#[allow(dead_code)]
+pub fn convert_ass_escapes(text: &str) -> String {
+    text.replace("\\N", "\n")
+        .replace("\\n", "\n")
+        .replace("\\h", "\u{00A0}")
+}
+
 pub(super) fn wrap_text(
     text: &str,
     wrap_style: u8,
@@ -330,5 +345,49 @@ mod tests {
     #[test]
     fn test_strip_override_blocks_unmatched_open_strips_rest() {
         assert_eq!(strip_override_blocks("{Hello"), "");
+    }
+
+    // ── convert_ass_escapes ────────────────────────────────────
+
+    #[test]
+    fn test_convert_escapes_backslash_n() {
+        assert_eq!(convert_ass_escapes("A\\NB"), "A\nB");
+    }
+
+    #[test]
+    fn test_convert_escapes_backslash_n_lowercase() {
+        assert_eq!(convert_ass_escapes("A\\nB"), "A\nB");
+    }
+
+    #[test]
+    fn test_convert_escapes_backslash_h() {
+        assert_eq!(convert_ass_escapes("A\\hB"), "A\u{00A0}B");
+    }
+
+    #[test]
+    fn test_convert_escapes_no_escape() {
+        assert_eq!(convert_ass_escapes("Hello"), "Hello");
+    }
+
+    #[test]
+    fn test_convert_escapes_after_strip() {
+        let text = "{\\b1}A\\NB\\ni";
+        let result = strip_override_blocks(text);
+        assert_eq!(convert_ass_escapes(&result), "A\nB\ni");
+    }
+
+    #[test]
+    fn test_convert_escapes_multiple_n() {
+        assert_eq!(
+            convert_ass_escapes("Line1\\NLine2\\NLine3"),
+            "Line1\nLine2\nLine3"
+        );
+    }
+
+    #[test]
+    fn test_convert_escapes_n_replaced_before_n_lowercase() {
+        // \N should not be partially matched by \n replacement
+        assert_eq!(convert_ass_escapes("\\N"), "\n");
+        assert_eq!(convert_ass_escapes("\\n"), "\n");
     }
 }
