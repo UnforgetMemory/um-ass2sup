@@ -114,7 +114,7 @@ impl Event {
         let margin_r: u32 = parts[6].trim().parse().unwrap_or(0);
         let margin_v: u32 = parts[7].trim().parse().unwrap_or(0);
         let effect = parse_effect(parts[8]);
-        let text = parts[9].trim().to_string();
+        let text = parts[9].trim().replace("\\N", "\n").replace("\\n", "\n");
         let (override_tags, karaoke_segments, raw_override_block) = parse_text_with_tags(&text);
         Ok(Self {
             event_type,
