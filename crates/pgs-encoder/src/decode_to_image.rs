@@ -235,7 +235,9 @@ fn composite_objects(
         let obj_total = obj_w
             .checked_mul(obj_h)
             .and_then(|v| v.checked_mul(4))
-            .ok_or_else(|| DecodeImageError::InvalidDimensions(format!("object {obj_w}x{obj_h} overflow")))?;
+            .ok_or_else(|| {
+                DecodeImageError::InvalidDimensions(format!("object {obj_w}x{obj_h} overflow"))
+            })?;
         let mut obj_rgba = vec![0u8; obj_total as usize];
 
         for (i, &idx) in palette_indices.iter().enumerate() {

@@ -253,7 +253,8 @@ fn parse_ods_payload(data: &[u8]) -> Result<ParsedPayload, DecodeError> {
         if data.len() < 11 {
             return Err(DecodeError::TruncatedPayload);
         }
-        let _total_size = ((data[4] as usize) << 16) | ((data[5] as usize) << 8) | (data[6] as usize);
+        let _total_size =
+            ((data[4] as usize) << 16) | ((data[5] as usize) << 8) | (data[6] as usize);
         let width = read_be16(data, 7).ok_or(DecodeError::TruncatedPayload)?;
         let height = read_be16(data, 9).ok_or(DecodeError::TruncatedPayload)?;
         let rle_start = 11;
@@ -510,18 +511,18 @@ mod tests {
     }
 
     #[test]
-fn test_decode_ods_payload_too_short_for_dimensions() {
+    fn test_decode_ods_payload_too_short_for_dimensions() {
         // Test a first-in-sequence ODS with payload less than 11 bytes needed for headers
         let bytes = vec![
-            0x50, 0x47,                                     // PG magic
-            0x00, 0x00, 0x00, 0x00,                         // PTS=0
-            0x00, 0x00, 0x00, 0x00,                         // DTS=0
-            0x15,                                           // ODS segment type
-            0x00, 0x06,                                     // payload_size=6 (too short!)
-            0x00, 0x01,                                     // object_id=1
-            0x00,                                           // version=0
-            0x80,                                           // flags=first_in_sequence
-            0x00, 0x00,                                     // partial total_size (only 2/3 bytes)
+            0x50, 0x47, // PG magic
+            0x00, 0x00, 0x00, 0x00, // PTS=0
+            0x00, 0x00, 0x00, 0x00, // DTS=0
+            0x15, // ODS segment type
+            0x00, 0x06, // payload_size=6 (too short!)
+            0x00, 0x01, // object_id=1
+            0x00, // version=0
+            0x80, // flags=first_in_sequence
+            0x00, 0x00, // partial total_size (only 2/3 bytes)
         ];
         // ODS payload is 6 bytes but first_in_sequence needs at least 11
         // (3 total_size + 2 width + 2 height = 7 bytes, plus 4 header = 11)
@@ -631,7 +632,7 @@ fn test_decode_ods_payload_too_short_for_dimensions() {
             x: 0,
             y: 0,
         };
-        let mut sup = enc.encode_frame_to_bytes(&frame, 0, 1000);
+        let sup = enc.encode_frame_to_bytes(&frame, 0, 1000);
 
         verify_roundtrip(&sup).expect("freshly encoded SUP must pass verify_roundtrip");
 

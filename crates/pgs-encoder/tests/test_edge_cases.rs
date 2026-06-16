@@ -767,7 +767,7 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         })
         .collect();
     assert!(
-        ods_ids.len() >= 1,
+        !ods_ids.is_empty(),
         "expected at least 1 object_id, got {ods_ids:?}"
     );
 

@@ -387,8 +387,7 @@ fn is_png_blank(png_data: &[u8]) -> bool {
         }
         png::ColorType::Rgb => {
             for pixel in bytes.chunks(3) {
-                let brightness =
-                    ((pixel[0] as u16 + pixel[1] as u16 + pixel[2] as u16) / 3) as u8;
+                let brightness = ((pixel[0] as u16 + pixel[1] as u16 + pixel[2] as u16) / 3) as u8;
                 if brightness < threshold {
                     non_blank += 1;
                 }
@@ -404,8 +403,8 @@ fn is_png_blank(png_data: &[u8]) -> bool {
         png::ColorType::Rgba => {
             for pixel in bytes.chunks(4) {
                 if pixel[3] != 0 {
-                    let brightness = ((pixel[0] as u16 + pixel[1] as u16 + pixel[2] as u16) / 3)
-                        as u8;
+                    let brightness =
+                        ((pixel[0] as u16 + pixel[1] as u16 + pixel[2] as u16) / 3) as u8;
                     if brightness < threshold {
                         non_blank += 1;
                     }

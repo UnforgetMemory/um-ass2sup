@@ -197,10 +197,7 @@ fn test_validation_before_render() {
     let content = std::fs::read_to_string(&path).unwrap();
     let ass = AssFile::parse(&content).unwrap();
     let report = subtitle_validator::validate(&ass);
-    assert!(
-        report.is_valid,
-        "{path:?} should be valid"
-    );
+    assert!(report.is_valid, "{path:?} should be valid");
 }
 
 #[test]
