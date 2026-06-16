@@ -119,6 +119,10 @@ pub enum OverrideTag {
     ClipDrawing { scale: f32, commands: String },
     /// `\iclip(scale, drawing_commands)` — inverse vector path clip.
     ClipInverseDrawing { scale: f32, commands: String },
+    /// `\clip(@)` — clip using current drawing path.
+    ClipDrawingCurrent,
+    /// `\iclip(@)` — inverse clip using current drawing path.
+    ClipInverseDrawingCurrent,
     /// `\a[N]` — alignment using legacy SSA numbering (1–11).
     Alignment(u8),
     /// `\an[N]` — alignment using numpad layout (1–9, where 5 = center).
@@ -328,6 +332,10 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
     }
     if s.starts_with("clip(") {
         let inner = s.trim_start_matches("clip(").trim_end_matches(')');
+        // `\clip(@)` — clip using current drawing path
+        if inner.trim() == "@" {
+            return Some(OverrideTag::ClipDrawingCurrent);
+        }
         let nums: Vec<f64> = inner
             .split(',')
             .filter_map(|n| n.trim().parse().ok())
@@ -354,6 +362,10 @@ pub fn parse_override_tag(s: &str) -> Option<OverrideTag> {
     }
     if s.starts_with("iclip(") {
         let inner = s.trim_start_matches("iclip(").trim_end_matches(')');
+        // `\iclip(@)` — inverse clip using current drawing path
+        if inner.trim() == "@" {
+            return Some(OverrideTag::ClipInverseDrawingCurrent);
+        }
         let nums: Vec<f64> = inner
             .split(',')
             .filter_map(|n| n.trim().parse().ok())
