@@ -145,18 +145,34 @@ impl PgsEncoder {
         // The RLE encoder uses index 0 for transparent pixels.
         // Swap palette entries if needed to ensure index 0 = transparent color.
         let ti = frame.transparent_index;
-        if ti != 0 && (ti as usize) < palette_entries.len() {
-            palette_entries.swap(0, ti as usize);
-        }
         let palette_hash = hash_palette(&palette_entries);
-
-        let rle = rle_encode(
-            &frame.indices,
-            frame.width,
-            frame.height,
-            frame.transparent_index,
-        );
-        let rle_hash = hash_bytes(&rle);
+        let (rle, rle_hash) = if ti != 0 && (ti as usize) < palette_entries.len() {
+            palette_entries.swap(0, ti as usize);
+            // Also swap index values in frame.indices: 0 ↔ ti
+            // After palette swap, palette[0]=transparent and palette[ti]=original color 0.
+            // The RLE encoder detects transparent by index value, so index 0 must become ti
+            // and index ti must become 0 to match the swapped palette.
+            let mut swapped_indices = frame.indices.clone();
+            for idx in swapped_indices.iter_mut() {
+                if *idx == 0 {
+                    *idx = ti;
+                } else if *idx == ti {
+                    *idx = 0;
+                }
+            }
+            let rle = rle_encode(&swapped_indices, frame.width, frame.height, 0);
+            let rle_hash = hash_bytes(&rle);
+            (rle, rle_hash)
+        } else {
+            let rle = rle_encode(
+                &frame.indices,
+                frame.width,
+                frame.height,
+                frame.transparent_index,
+            );
+            let rle_hash = hash_bytes(&rle);
+            (rle, rle_hash)
+        };
 
         // PGS spec: first display set uses EpochStart, subsequent use NormalCase.
         // EpochStart clears the screen and starts a new epoch; NormalCase continues it.
