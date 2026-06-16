@@ -201,7 +201,10 @@ impl FontManager {
         // 2. Hardcoded fallback font names — CJK-capable families first
         //    so that Chinese, Japanese, and Korean subtitles render legibly
         //    even when no system CJK font is configured.
-        let fallbacks = [
+        //
+        //    Pass 1: CJK-specific fonts — verify they actually have CJK glyphs.
+        //    Pass 2: Generic fonts (may be Latin-only) — accepted as-is.
+        let cjk_fallbacks = [
             "Noto Sans CJK SC",
             "Noto Sans CJK TC",
             "Noto Sans CJK JP",
@@ -209,13 +212,23 @@ impl FontManager {
             "Source Han Sans CN",
             "IPAGothic",
             "NanumGothic",
+        ];
+        for fb in &cjk_fallbacks {
+            if let Some(id) = self.query(fb, bold, italic) {
+                if self.font_has_cjk_glyphs(id) {
+                    return Some(id);
+                }
+            }
+        }
+
+        let any_fallbacks = [
             "Liberation Sans",
             "DejaVu Sans",
             "Noto Sans",
             "Arial",
             "Helvetica",
         ];
-        for fb in &fallbacks {
+        for fb in &any_fallbacks {
             if let Some(id) = self.query(fb, bold, italic) {
                 return Some(id);
             }

@@ -89,3 +89,6 @@ __pycache__/
 .localref/
 .opencode/
 .output/
+
+# ── Cross-compilation cache (xwin) ─────────────────────────────────
+.xwin-cache/

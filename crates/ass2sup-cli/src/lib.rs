@@ -24,7 +24,7 @@ use rayon::prelude::*;
 use tracing::{error, info, warn};
 use walkdir::WalkDir;
 
-use ass_parser::{AssFile, SubtitleFormat};
+use ass_parser::{AssFile, Event, OverrideTag, SubtitleFormat};
 use bdn_xml::{BdnEvent, BdnXml};
 use color_quantizer::{quantize_with_palette, DitherMethod, Quantizer, Rgba};
 use pgs_encoder::PgsEncoder;
@@ -568,6 +568,84 @@ fn check_ass_fonts(
     }
 }
 
+/// Returns the optimal render timestamp (ms) for an event, adjusted for fade effects.
+///
+/// PGS subtitles are static bitmap frames — they cannot animate alpha.
+/// For events with `\fad(in, out)` where `in > 0`, the subtitle is fully
+/// transparent at `t = start`. This function shifts the render point to
+/// `start + in` so the fade-in has completed and the text is visible.
+///
+/// For `\fade(a1,a2,a3,t1,t2,t3,t4)`, find the earliest timestamp where
+/// the alpha value crosses the VISIBLE_ALPHA threshold (128 on ASS's
+/// inverted 0=opaque..255=transparent scale).
+///
+/// For all other events, returns `start.as_ms()` unchanged.
+pub fn compute_render_pts(event: &Event) -> u64 {
+    const VISIBLE_ALPHA: u8 = 128;
+    let start_ms = event.start.as_ms();
+    let end_ms = event.end.as_ms();
+
+    let mut fade_render_pt: Option<u64> = None;
+
+    for tag in &event.override_tags {
+        match tag {
+            OverrideTag::Fade { duration_in, .. } => {
+                if *duration_in > 0 {
+                    let pt = start_ms.saturating_add(*duration_in);
+                    fade_render_pt = Some(pt.min(end_ms));
+                }
+            }
+            OverrideTag::FadeComplex {
+                alpha_start,
+                alpha_mid,
+                alpha_end,
+                t1,
+                t2,
+                t3,
+                ..
+            } => {
+                // Three segments:
+                //   0..t1:   alpha transitions a1 → a2
+                //   t1..t1+t2: alpha holds at a2
+                //   t1+t2..t1+t2+t3: alpha transitions a2 → a3
+                let a1 = *alpha_start;
+                let a2 = *alpha_mid;
+                if a1 <= VISIBLE_ALPHA {
+                    // Already visible at start
+                    fade_render_pt = Some(start_ms);
+                } else if *t1 > 0 && a2 <= VISIBLE_ALPHA {
+                    // Linear interpolation: find t in [0,t1] where alpha crosses VISIBLE_ALPHA
+                    let t =
+                        ((VISIBLE_ALPHA as f32 - a1 as f32) / (a2 as f32 - a1 as f32)) * *t1 as f32;
+                    if t >= 0.0 {
+                        let pt = start_ms.saturating_add(t as u64);
+                        fade_render_pt = Some(pt.min(end_ms));
+                    }
+                } else if a2 <= VISIBLE_ALPHA {
+                    // Visible during the hold segment at t1
+                    let pt = start_ms.saturating_add(*t1);
+                    fade_render_pt = Some(pt.min(end_ms));
+                } else if *t3 > 0 {
+                    // Check if alpha drops below VISIBLE_ALPHA in segment 3
+                    let a3 = *alpha_end;
+                    if a3 < a2 {
+                        let t = ((VISIBLE_ALPHA as f32 - a2 as f32) / (a3 as f32 - a2 as f32))
+                            * *t3 as f32;
+                        if t >= 0.0 {
+                            let pt = start_ms.saturating_add(*t1 + *t2 + t as u64);
+                            fade_render_pt = Some(pt.min(end_ms));
+                        }
+                    }
+                }
+                // If no segment is visible enough, fall through to default
+            }
+            _ => {}
+        }
+    }
+
+    fade_render_pt.unwrap_or(start_ms)
+}
+
 /// Converts a single subtitle file to the configured output format.
 ///
 /// Handles format detection, validation (when enabled), render, quantize, and
@@ -720,22 +798,24 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
         dialogues
             .par_iter()
             .map(|event| {
-                let pts_ms = event.start.as_ms();
+                let render_pts = compute_render_pts(event);
+                let display_pts = event.start.as_ms();
                 let duration_ms = event.duration_ms();
 
-                let frame = renderer.render_ass(&ass, pts_ms);
-                (event.clone(), frame, pts_ms, duration_ms)
+                let frame = renderer.render_ass(&ass, render_pts);
+                (event.clone(), frame, display_pts, duration_ms)
             })
             .collect()
     } else {
         dialogues
             .iter()
             .map(|event| {
-                let pts_ms = event.start.as_ms();
+                let render_pts = compute_render_pts(event);
+                let display_pts = event.start.as_ms();
                 let duration_ms = event.duration_ms();
 
-                let frame = renderer.render_ass(&ass, pts_ms);
-                (event.clone(), frame, pts_ms, duration_ms)
+                let frame = renderer.render_ass(&ass, render_pts);
+                (event.clone(), frame, display_pts, duration_ms)
             })
             .collect()
     };
@@ -911,11 +991,12 @@ pub fn convert_to_bdn(
     let mut total_png_bytes: usize = 0;
 
     for (i, event) in dialogues.iter().enumerate() {
-        let pts_ms = event.start.as_ms();
+        let render_pts = compute_render_pts(event);
+        let display_pts = event.start.as_ms();
         let duration_ms = event.duration_ms();
-        let out_ms = pts_ms + duration_ms;
+        let out_ms = display_pts + duration_ms;
 
-        let frame_opt = renderer.render_ass(&ass, pts_ms);
+        let frame_opt = renderer.render_ass(&ass, render_pts);
         if let Some(frame) = frame_opt {
             let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
 
@@ -939,7 +1020,7 @@ pub fn convert_to_bdn(
 
             total_png_bytes += quantized.indices.len() + palette.len() * 4;
 
-            let in_tc = bdn_xml::ms_to_timecode(pts_ms, args.fps);
+            let in_tc = bdn_xml::ms_to_timecode(display_pts, args.fps);
             let out_tc = bdn_xml::ms_to_timecode(out_ms, args.fps);
 
             bdn.add_event(BdnEvent {
