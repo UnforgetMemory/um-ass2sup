@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.9] - 2026-06-17 (Sprint 2: Sub-3 Font Engine - foundation)
+
+### Added
+- **`cosmic-text = "0.19"`** added to workspace dependencies (off by default per-crate). Brings in three-platform font discovery (DirectWrite / CoreText / fontconfig) and HarfBuzz v13+ shaping via the `harfrust` + `skrifa` stack.
+- **`subtitle-renderer` cosmic-text cargo feature** (opt-in). When enabled, exposes:
+  - `FallbackChain`: ordered CJK fallback list with per-style overrides and a `strict` flag.
+  - `AssFallback`: cosmic-text-compatible font-fallback adapter that consults the chain.
+  - `FontResolver`: thin wrapper around the configured chain, exposing `resolve_for_style(name) -> &[String]`.
+  - 8 new unit tests covering empty chain, global chain, per-style override, strict flag, and resolver dispatch.
+- **`docs/plans/03-font-engine/task-01-cosmic-text-trait.md`**: migration-path documentation for the v2.0 font-engine work.
+
+### Migration path
+The full migration of the existing `font.rs` (1085 lines, fontdb + rustybuzz + ttf-parser) to cosmic-text is out of scope for this PR. `FontResolver` is the v2.0 entry point; the existing `FontManager` continues to work as the default. The migration is tracked under `docs/superpowers/specs/2026-06-17-Sub-3-font-engine.md`.
+
+### Verification
+- `cargo build -p subtitle-renderer --features cosmic-text` — clean
+- `cargo build -p subtitle-renderer` (default) — clean (no impact)
+- `cargo test -p subtitle-renderer --features cosmic-text font_cosmic` — 8/8 pass
+- `cargo fmt --check` — clean
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+
+---
+
 ## [0.5.8] - 2026-06-17 (Sprint 1.5: Sub-2 OverrideExpr + \t animations)
 
 ### Added
