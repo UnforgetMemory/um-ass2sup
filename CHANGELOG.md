@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.7] - 2026-06-17 (Sprint 1: Sub-2 ASS Parser - partial)
+
+### Added
+- **`ass-parser::types` module**: strong-typed domain types replacing raw `u8`/`u32` in the AST. `StyleName` newtype, `BorderStyle` enum (`OutlineAndShadow` / `OpaqueBox`), `Alignment` enum (numpad 1-9), `Margins` struct, `Encoding` newtype. `StyleName` supports `==` against `&str` and `AsRef<str>`.
+- **`Style::to_ass_string()`** round-trip serialization matching `Style::parse_from_line()`.
+- **`raw_alignment: u8` field on `Style`**: preserves the original source value (1-255) so the subtitle-validator's V008 rule can catch out-of-range alignment values that the typed `Alignment` field silently coerces to `BottomCenter`.
+- **`AssFile::warnings: Vec<ParseWarning>`** field + **`AssFile::parse_with_recovery()`** entry point: single-line errors no longer abort the parse; corrupted inputs yield a usable AST plus a structured warning list (`InvalidField`, `UnknownSection`, `SrtBlockSkipped`).
+- **`AssFile::from_srt()` upgrade path**: convert `SrtFile` to `AssFile` so `ass2sup input.srt -o output.sup` works without a pre-conversion step. Round-trip `SRT → ASS → SRT` preserves all events.
+- **`SrtFile` struct**: native SRT representation with `style`, `start`, `end`, `text` fields.
+- **`libass-compat` test suite**: 122 synthetic `.ass` fixture files vendored under `crates/ass-parser/fixtures/libass/` (~492 KiB total, all under 10 KiB), driven by a single integration test that captures strict + recovery parse results as 122 insta snapshots. Covers basic structures, styles, events, all 36 individual override tags, combined sequences, color formats, karaoke, animation, clip, drawing, positioning, fonts, edge cases, error recovery, and stress tests.
+- **`docs/plans/02-ass-parser/`**: 7 task MDs (task-01..task-07) with deliverables, verification gates, and follow-up notes.
+- **`Effect: Display`** impl.
+- **`insta = "1"`** added as a dev-dependency to `ass-parser` (for libass_compat snapshots).
+
+### Changed
+- **`Style` refactored to use the new types**: `name: StyleName`, `border_style: BorderStyle`, `alignment: Alignment`, `margins: Margins`, `encoding: Encoding`. Field renames: `outline_width` → `outline`, `shadow_depth` → `shadow`. `relative_to` removed (not part of the V4+ 22-field spec).
+- **`Event::style_name: String` → `Event::style: StyleName`** across `ass-parser`, `subtitle-renderer`, `subtitle-validator`, and `ass2sup-cli`.
+- **`subtitle-validator` V008 rule** now checks `style.raw_alignment` (not the coerced `Alignment` enum) so out-of-range values are still caught.
+- **`srt_default_style()`** updated to use the new `Style` types.
+- **Pre-existing fixes en route**:
+  - `to_ass_time()` → `as_ass_time()` in `event.rs`
+  - `StyleName == &str` comparison fix
+  - SRT `style_name` field → `style` field
+
+### Follow-up (Deferred from Sprint 1)
+- **Override tag AST (`OverrideExpr`)**: add `Scalar(f64) | Color(AssColor) | Animated { ... } | Transform(...)` variants and `Animator` trait. Currently blocked on a worker session that returned without writing code. See `docs/plans/02-ass-parser/task-03-override-tags.md` and `task-04-animations.md` for the full plan.
+
+### Tests
+- 17 new lenient-mode tests in `test_lenient.rs`
+- 10 new SRT round-trip / upgrade tests
+- 1 libass-compat integration test with 122 insta snapshots
+- 6 new test files / updates in `crates/ass-parser/tests/`
+- All 128 unit + integration tests pass in `ass-parser`
+- `cargo test --workspace` — 0 failures (ass2sup-cli tests not run in this summary; previously green)
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo fmt --check` — clean
+
+---
+
 ## [0.5.2] - 2026-06-17
 
 ### Changed
