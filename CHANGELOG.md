@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.8] - 2026-06-17 (Sprint 1.5: Sub-2 OverrideExpr + \t animations)
+
+### Added
+- **`ass-parser::override_expr` module**: typed AST on top of the flat `OverrideTag` enum. New types:
+  - `OverrideValue`: Scalar(f64) | Color(AssColor) | Pos{x,y} | Rotation{x,y,z} | Scale{x,y} | Bool(bool) | String(String).
+  - `OverrideExpr`: `Constant(OverrideValue)` for static tags, `Animated { start, end, t1_ms, t2_ms, accel }` for time-bearing tags (Move, Fade, FadeComplex, Transform).
+  - `Animator` trait with `evaluate_at(time_ms) -> OverrideValue`.
+  - `lift_to_expr(tag: &OverrideTag) -> OverrideExpr`: free function that lifts the flat enum into the typed AST.
+  - `ease(t, accel)` and `interpolate()` helpers: ease follows the libass convention (`t.powf(accel)`); interpolate covers every `OverrideValue` variant (linear for numerics, snap at 0.5 for bools/strings, per-channel 8-bit lerp for colours).
+- **\t() animation evaluation**: full libass semantics for `\t(\tag, t1, t2, accel)` — piecewise (before t1 = start, after t2 = end, between = interpolated with `ease(raw, accel)`). Nested `\t()` works because `start` and `end` are themselves `OverrideExpr`.
+- **19 new unit tests** in `override_expr::tests` covering: constant evaluation, animated before/after boundaries, linear midpoint, quadratic ease-in (accel=2), position interpolation, per-channel colour lerp, lift tests for every major OverrideTag variant, ease() identity/quadratic/zero-accel fallthrough.
+- **`docs/plans/02-ass-parser/task-03-override-tags.md` and `task-04-animations.md`**: updated from ⏳ DEFERRED to ✅ COMPLETED.
+
+### Verification
+- `cargo test -p ass-parser` — 147/147 pass
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo fmt --check` — clean
+
+---
+
 ## [0.5.7] - 2026-06-17 (Sprint 1: Sub-2 ASS Parser - partial)
 
 ### Added
