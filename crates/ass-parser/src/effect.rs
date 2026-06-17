@@ -85,6 +85,46 @@ pub enum Effect {
 /// let banner = parse_effect("Banner;8;1;40");
 /// assert_eq!(banner, Effect::Banner { delay_per_pixel: 8, left_to_right: true, fadeaway_width: 40.0 });
 /// ```
+use std::fmt;
+
+impl fmt::Display for Effect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Effect::None => write!(f, "None"),
+            Effect::Karaoke => write!(f, "Karaoke"),
+            Effect::Banner {
+                delay_per_pixel,
+                left_to_right,
+                fadeaway_width,
+            } => write!(
+                f,
+                "Banner;{};{};{}",
+                delay_per_pixel,
+                if *left_to_right { 1 } else { 0 },
+                fadeaway_width,
+            ),
+            Effect::ScrollUp {
+                delay_per_row,
+                top_offset,
+                bottom_offset,
+            } => write!(
+                f,
+                "Scroll up;{};{};{}",
+                delay_per_row, top_offset, bottom_offset
+            ),
+            Effect::ScrollDown {
+                delay_per_row,
+                top_offset,
+                bottom_offset,
+            } => write!(
+                f,
+                "Scroll down;{};{};{}",
+                delay_per_row, top_offset, bottom_offset
+            ),
+        }
+    }
+}
+
 pub fn parse_effect(s: &str) -> Effect {
     let s = s.trim();
     if s.is_empty() {
