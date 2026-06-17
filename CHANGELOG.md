@@ -105,6 +105,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.6] - 2026-06-17 (Sprint 0: Sub-1 Infrastructure)
+
+### Added
+- **`ass2sup::error` module** (`crates/ass2sup-cli/src/error.rs`): unified error type system covering every ass2sup failure mode. Top-level `Error` enum plus 5 sub-enums (`RenderError`, `OutputError`, `ConfigError`, `FontError`, `ColorError`) wrapping per-domain detail. `From<io::Error>` and `From<String>` impls enable progressive migration from existing `Result<_, String>` call sites. All variants have `///` rustdoc; 18 unit tests cover Display formatting, source chain, From conversions, Send/Sync, and Debug. ~210 lines.
+- **`ass2sup::config` module** (`crates/ass2sup-cli/src/config.rs`): TOML-backed configuration system. Top-level `Config` + 5 sub-structs (`Defaults`, `CjkFallback`, `ColorConfig`, `StyleOverride`, `RenderingConfig`) all marked `#[serde(deny_unknown_fields)]` so unknown keys surface as a load error pointing at the offending field. Supports load/save/merge, file-path precedence (CLI `--config` > `./ass2sup.toml` > `~/.config/ass2sup/config.toml`), and CLI override via a thin `MergeArgs` DTO. 11 unit tests cover defaults, serde round-trip, `deny_unknown_fields` rejection, malformed TOML propagation, tempdir save/load, and CLI merge precedence. ~250 lines.
+- **`ass2sup::telemetry` module** (`crates/ass2sup-cli/src/telemetry.rs`): unified `tracing_subscriber` registry. `init(TelemetryConfig)` is idempotent (uses `try_init`); `init_default()` honours `ASS2SUP_LOG` and `ASS2SUP_COLOR` env vars (case-insensitive, unknown values fall back to safe defaults). 9 unit tests cover init idempotency, all level filters, all color choices, env-var parsing, and graceful handling of malformed env values. ~140 lines.
+- **`--config <PATH>` CLI flag**: load a TOML config file. Precedence: `--config` > `./ass2sup.toml` > `~/.config/ass2sup/config.toml`. CLI flags override file values.
+- **`--cjk-fallback <FONT>` CLI flag** (repeatable): build an ordered CJK fallback chain from the command line, overriding the file-loaded chain.
+- **`--log-level <LEVEL>` CLI flag**: explicit log level override (`trace` / `debug` / `info` / `warn` / `error`). Wins over `--verbose` / `--quiet` / `--debug` and the `ASS2SUP_LOG` env var.
+- **`docs/CONFIG.md`**: complete schema documentation for the new config system, including field constraints, CLI integration examples, and error handling semantics.
+- **`toml = "0.8"`** added to `[workspace.dependencies]`. License: MIT/Apache-2.0 (compatible with project allowlist).
+
+### Changed
+- **`setup_logging` now delegates to `telemetry::init`**: both call paths share the same `tracing_subscriber::registry` configuration. Existing `setup_logging(verbose, quiet, debug, color)` signature is preserved (no breaking change); internal implementation routes through the new `telemetry::init` entry point.
+- **`run()` now loads config first**: order of operations is now (1) `Config::load_default`, (2) `setup_logging_with_config` (honours `Config.log_level` + `ASS2SUP_LOG`), (3) collect inputs, (4) process. Config-load errors are reported as `CliError::Conversion`.
+- **Insta snapshots updated**: `--help` and `--short-help` now include the 3 new flags (`--config`, `--cjk-fallback`, `--log-level`). 5 snapshot tests pass.
+
+### Tests
+- 38 new tests across 3 test files (`error_test`, `config_test`, `telemetry_test`); all pass.
+- All existing 440+ tests pass with no regression.
+- 4 manual QA scenarios pass: (a) valid minimal config → graceful `--check` exit 0, (b) invalid TOML → clear parse error with line number, (c) missing config file → defaults applied silently, (d) unknown field → clear rejection with hint.
+- `cargo fmt --check` clean, `cargo clippy --workspace --all-targets -- -D warnings` 0 warnings, `cargo doc --workspace --no-deps` 0 new warnings (2 pre-existing in `subtitle-renderer` unrelated to this change).
+
+### Plan
+- Sprint 0 of the v2.0 refactor (see `docs/plans/01-infrastructure/`). Unblocks Sub-2 through Sub-8.
+- All planned `Error` / `Config` / `telemetry` modules in scope of `docs/plans/01-infrastructure/task-01..03.md` are now implemented with full test coverage.
+- MSRV unchanged (1.85) — `toml = "0.8"` does not raise the floor.
+
+---
+
 ## [0.5.5] - Unreleased
 
 ### Fixed
