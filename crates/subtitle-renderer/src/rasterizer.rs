@@ -105,12 +105,12 @@ impl Rasterizer {
         y: f32,
         ctx: &RenderContext,
     ) {
-        let data = match font_manager.get_font_data(font_id) {
+        let (data, face_index) = match font_manager.get_font_data_with_index(font_id) {
             Some(d) => d,
             None => return,
         };
 
-        let face = match ttf_parser::Face::parse(&data, 0) {
+        let face = match ttf_parser::Face::parse(&data, face_index) {
             Ok(f) => f,
             Err(_) => return,
         };

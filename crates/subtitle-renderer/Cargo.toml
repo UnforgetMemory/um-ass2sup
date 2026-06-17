@@ -16,6 +16,11 @@ tiny-skia.workspace = true
 ass-parser = { path = "../ass-parser" }
 wide.workspace = true
 parking_lot.workspace = true
+fontconfig = { version = "0.11", optional = true, features = ["dlopen"] }
+
+[features]
+default = []
+fontconfig = ["dep:fontconfig"]
 
 [dev-dependencies]
 criterion.workspace = true

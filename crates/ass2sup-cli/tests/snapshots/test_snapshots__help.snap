@@ -105,11 +105,17 @@ Options:
       --to-bdn
           Convert to BDN XML + PNG format (Blu-ray authoring)
 
+      --debug
+          Enable trace-level debug output for pipeline diagnosis
+
       --no-check-fonts
           Skip font availability check (fonts missing from the system will silently fall back to a substitute, potentially producing blank subtitle output)
 
       --font-map <STYLE:FALLBACKS>
           Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
+
+      --font-dir <DIR>
+          Additional directories to scan for font files (TTF/OTF/WOFF2). Use this to add platform-specific font collections (e.g. user-installed fonts on macOS, custom CJK packs) without copying them into the OS font dir. Can be repeated; nested directories are scanned recursively
 
   -h, --help
           Print help (see a summary with '-h')

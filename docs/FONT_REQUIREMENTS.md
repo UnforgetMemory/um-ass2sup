@@ -92,6 +92,39 @@ This sets `config.default_font` (which defaults to `"Arial"` for SRT input). The
 
 This option has no effect on ASS input — ASS files specify their own fonts in `[V4+ Styles]`.
 
+## Fontconfig FFI Integration (Linux)
+
+On Linux, ass2sup can use fontconfig's C library directly via FFI (enabled with `--features fontconfig` at build time). This improves font discovery for fonts installed through system package managers that fontdb's directory scanning might miss.
+
+### How it works
+
+1. **Init-time**: `load_system_fonts()` initializes a fontconfig handle using `dlopen` (runtime loading).
+2. **Query-time**: When fontdb can't resolve a family name, `resolve_via_fontconfig()` calls fontconfig's `list_fonts()` API to check if the font is actually installed. If found, it loads the font file into fontdb and caches the result.
+3. **Fallback**: The fontconfig step runs after fontdb's scoring match but before the hardcoded fallback list (CJK → Liberation Sans → DejaVu Sans → etc.).
+
+### Requirements
+
+- **Runtime**: `libfontconfig` must be installed on the system (use `ldconfig -p | grep fontconfig` to check).
+- **Build**: No build-time dependency needed — `dlopen` loads `libfontconfig` at runtime.
+- **Cross-compilation**: Works with the `dlopen` feature; no libfontconfig-dev headers needed on the build host.
+
+### Enabling
+
+```bash
+cargo build --release --features fontconfig
+```
+
+Or for the CLI:
+
+```bash
+cargo build --release -p ass2sup-cli --features fontconfig
+```
+
+### Platform support
+
+- **Linux**: Full support via fontconfig C library.
+- **macOS/Windows**: Feature is a no-op when disabled; fontdb's built-in DirectWrite/CoreText support already handles these platforms.
+
 ## Debugging Font Resolution with Fontconfig
 
 If CJK characters appear as boxes, these fontconfig commands help diagnose what is happening:

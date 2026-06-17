@@ -1,6 +1,5 @@
-use ass2sup_cli::{parse_resolution, Args, Resolution};
+use ass2sup_cli::{parse_resolution, Args};
 use ass_parser::AssFile;
-use std::path::PathBuf;
 
 /// Helper to make a minimal Args with configurable resolution.
 fn make_args(resolution: Option<String>) -> Args {
@@ -33,6 +32,8 @@ fn make_args(resolution: Option<String>) -> Args {
         to_bdn: false,
         no_check_fonts: true,
         font_map: vec![],
+        debug: false,
+        font_dir: vec![],
     }
 }
 

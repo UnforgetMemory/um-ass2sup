@@ -60,12 +60,12 @@ impl<'a> Shaper<'a> {
         font_id: fontdb::ID,
         font_size: f32,
     ) -> Result<ShapedText, FontError> {
-        let data = self
+        let (data, face_index) = self
             .font_manager
-            .get_font_data(font_id)
+            .get_font_data_with_index(font_id)
             .ok_or_else(|| FontError::NotFound("Font ID not found".into()))?;
 
-        let face = Face::from_slice(&data, 0)
+        let face = Face::from_slice(&data, face_index)
             .ok_or_else(|| FontError::ParseError("Failed to parse font".into()))?;
 
         let scale = font_size / face.units_per_em() as f32;
@@ -112,8 +112,8 @@ impl<'a> Shaper<'a> {
         glyph_id: u32,
         font_size: f32,
     ) -> Option<GlyphBBox> {
-        let data = self.font_manager.get_font_data(font_id)?;
-        let face = ttf_parser::Face::parse(&data, 0).ok()?;
+        let (data, face_index) = self.font_manager.get_font_data_with_index(font_id)?;
+        let face = ttf_parser::Face::parse(&data, face_index).ok()?;
         let scale = font_size / f32::from(face.units_per_em());
         let bbox = face.glyph_bounding_box(ttf_parser::GlyphId(glyph_id as u16))?;
 

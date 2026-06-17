@@ -92,3 +92,4 @@ __pycache__/
 
 # ── Cross-compilation cache (xwin) ─────────────────────────────────
 .xwin-cache/
+output/

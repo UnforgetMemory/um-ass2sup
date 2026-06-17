@@ -34,6 +34,7 @@ fn test_bdn_conversion() {
         .arg("--to-bdn")
         .arg("-d")
         .arg(&out_dir)
+        .arg("--no-check-fonts")
         .arg("--quiet")
         .assert()
         .success();
@@ -93,6 +94,7 @@ fn test_bdn_custom_resolution() {
         .arg("1280x720")
         .arg("-d")
         .arg(&out_dir)
+        .arg("--no-check-fonts")
         .arg("--quiet")
         .assert()
         .success();

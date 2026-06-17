@@ -136,6 +136,9 @@ impl Renderer {
         if fm.font_count() == 0 {
             return Err(RendererError::NoFonts);
         }
+        // Warm up the CJK face scan cache so the first render does not block
+        // all parallel workers with a synchronous `ttf_parser::Face::parse` scan.
+        fm.warmup_cjk_scan();
         Ok(Self {
             config,
             font_manager: fm,
@@ -160,8 +163,13 @@ impl Renderer {
     ///
     /// Returns `None` if the output dimensions are zero.
     pub fn render_ass(&self, ass: &AssFile, timestamp_ms: u64) -> Option<RenderedFrame> {
+        let fn_start = std::time::Instant::now();
         let ts = Timestamp::from_ms(timestamp_ms);
-        let mut pixmap = Pixmap::new(self.config.width, self.config.height)?;
+        let mut pixmap = self
+            .pixmap_pool
+            .lock()
+            .get(self.config.width, self.config.height)
+            .or_else(|| Pixmap::new(self.config.width, self.config.height))?;
 
         let mut events: Vec<&Event> = ass.dialogue_events().collect();
         events.retain(|e| e.is_visible_at(ts));
@@ -173,25 +181,69 @@ impl Renderer {
             .max()
             .unwrap_or(0);
 
+        tracing::trace!(
+            timestamp_ms,
+            visible_events = events.len(),
+            width = self.config.width,
+            height = self.config.height,
+            elapsed_us = fn_start.elapsed().as_micros() as u64,
+            "render_ass: pixmap prepared, events filtered"
+        );
+
         for event in events {
+            let event_start = std::time::Instant::now();
             let style = ass
                 .find_style(&event.style_name)
                 .cloned()
                 .unwrap_or_default();
-            let event_start = event.start.as_ms();
-            let event_end = event.end.as_ms();
-            let ctx = self.build_context(event, &style, ass, timestamp_ms, event_start, event_end);
+            let event_start_ms = event.start.as_ms();
+            let event_end_ms = event.end.as_ms();
+            let ctx = self.build_context(
+                event,
+                &style,
+                ass,
+                timestamp_ms,
+                event_start_ms,
+                event_end_ms,
+            );
 
-            self.render_event(&mut pixmap, event, &ctx, timestamp_ms, event_start);
+            self.render_event(&mut pixmap, event, &ctx, timestamp_ms, event_start_ms);
+
+            let event_elapsed = event_start.elapsed();
+            if event_elapsed.as_millis() > 500 {
+                tracing::warn!(
+                    timestamp_ms,
+                    style = %event.style_name,
+                    text_len = event.text.len(),
+                    elapsed_ms = event_elapsed.as_millis() as u64,
+                    "render_ass: SLOW event (>500ms)"
+                );
+            } else {
+                tracing::trace!(
+                    timestamp_ms,
+                    style = %event.style_name,
+                    text_len = event.text.len(),
+                    elapsed_us = event_elapsed.as_micros() as u64,
+                    "render_ass: event done"
+                );
+            }
         }
 
-        Some(RenderedFrame {
+        let frame = RenderedFrame {
             pts_ms: timestamp_ms,
             duration_ms,
             width: self.config.width,
             height: self.config.height,
             bitmap: pixmap.data().to_vec(),
-        })
+        };
+        self.pixmap_pool.lock().put(pixmap);
+        tracing::trace!(
+            timestamp_ms,
+            total_us = fn_start.elapsed().as_micros() as u64,
+            bitmap_bytes = frame.bitmap.len(),
+            "render_ass: exit"
+        );
+        Some(frame)
     }
 
     /// Renders events with frame caching to avoid redundant work for static subtitles.
@@ -601,18 +653,31 @@ impl Renderer {
             {
                 Some(id) => id,
                 None => {
-                    // Final fallback: use config.default_font if the style's
-                    // font was not found by any level of the fallback chain.
+                    tracing::warn!(
+                        requested = %ctx.font_name,
+                        default = %self.config.default_font,
+                        "style font missed; falling back to --font"
+                    );
                     match self.font_manager.query_with_fallback(
                         &self.config.default_font,
                         ctx.bold,
                         ctx.italic,
                     ) {
                         Some(id) => id,
-                        None => return,
+                        None => {
+                            tracing::error!(
+                                "both style font and --font are unavailable; skipping event"
+                            );
+                            return;
+                        }
                     }
                 }
             };
+        tracing::trace!(
+            font_id = ?font_id,
+            text_len = event.text.len(),
+            "font resolved for event"
+        );
 
         if event.has_karaoke() && !event.karaoke_segments.is_empty() {
             self.render_karaoke(pixmap, event, &ctx, font_id, timestamp_ms, event_start_ms);

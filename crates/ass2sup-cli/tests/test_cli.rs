@@ -28,6 +28,7 @@ fn test_cli_simple_conversion() {
         .arg(simple_fixture())
         .arg("-o")
         .arg(&output)
+        .arg("--no-check-fonts")
         .arg("--quiet")
         .assert()
         .success();
@@ -78,6 +79,7 @@ fn test_cli_validate_flag() {
         .unwrap()
         .arg(simple_fixture())
         .arg("--validate")
+        .arg("--no-check-fonts")
         .arg("-o")
         .arg(&output)
         .arg("--quiet")
@@ -121,6 +123,7 @@ fn test_cli_force_flag() {
         .arg("--force")
         .arg("-o")
         .arg(&output)
+        .arg("--no-check-fonts")
         .arg("--quiet")
         .assert()
         .success();
@@ -144,6 +147,7 @@ fn test_cli_batch_mode() {
         .arg(&input2)
         .arg("-d")
         .arg(&out_dir)
+        .arg("--no-check-fonts")
         .arg("--quiet")
         .assert()
         .success();
@@ -173,6 +177,7 @@ fn test_cli_parallel_flag() {
         .arg("-p")
         .arg("-d")
         .arg(&out_dir)
+        .arg("--no-check-fonts")
         .arg("--quiet")
         .assert()
         .success();

@@ -7,7 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.5.1] - 2026-06-16
+## [0.5.2] - 2026-06-17
+
+### Changed
+- **Dependency upgrades**: fontdb 0.16.2→0.23.0, ttf-parser 0.21→0.25.1, rustybuzz 0.14→0.20.1, tiny-skia 0.11→0.12.0 — 4 core dependencies upgraded across 19 major versions.
+- **FontManager interior mutability**: Wrapped inner state in `parking_lot::Mutex<FontManagerInner>` to enable font loading from read-only render path.
+
+### Added
+- **Fontconfig FFI integration (Linux)**: New `fontconfig` Cargo feature (off by default, `--features fontconfig`) that uses the system fontconfig C library via FFI to discover and load fonts missed by fontdb. Particularly useful for CJK fonts installed through system package managers. Uses `dlopen` to load `libfontconfig` at runtime — no build-time dependency needed.
+- **`resolve_via_fontconfig()`**: On-demand font name resolution that lazily loads fontconfig-discovered fonts into fontdb's database. Results cached to avoid repeated lookups.
+
+### Fixed
+- **Pre-existing test failures**: Fixed `test_clip_inverse_pixels` (region-based check) and `test_drawing_basic_move_line` (closed path for visible fill).
+- **Pre-existing clippy warnings**: Added missing docs to all public items in `ocr.rs` and removed unused imports in test files.
+- **`has_available_font()` Tier 4 removed**: Fontconfig's `find()` API always returns a fallback (never fails), making it unsuitable for font existence checking. Font availability is now verified through fontdb's exact family and substring matching (Tiers 1–3).
+
+### Added
+- **`--debug` execution chain tracing**: `--debug` now produces a full TRACE-level pipeline trace (`ass2sup_cli::*` + `subtitle_renderer::*`). Previously the flag was a no-op apart from enabling source location fields. Trace events cover: file I/O, format detection, font loading, embedded fonts, `check_ass_fonts` per-style decisions, renderer construction, dither / quantizer / PGS encoder setup, per-frame render / quantize / encode / write, and each step of the font fallback cascade (scoring → suffix-strip → fontconfig → hardcoded CJK → cross-platform CJK scan → hardcoded generic → `Family::SansSerif` → any-face).
+- **Cross-platform CJK fallback (`query_cjk_capable_any`)**: New step in the font fallback chain scans `db.faces()` and returns the first face with the CJK test glyph (U+4E2D 中). This works on macOS (Hiragino / PingFang), Windows (Microsoft YaHei / MS Gothic / Malgun Gothic), and Linux (Noto CJK) without hardcoding platform-specific font names. Triggered when both the requested family and the hardcoded Linux-biased CJK list miss.
+- **`--font-dir <DIR>`** (repeatable): Add a directory of TTF / OTF / WOFF2 files to the font database before rendering. Recurses into nested directories via fontdb's `load_fonts_dir`. Useful for containerized deployments and user-installed font packs that aren't on the OS font path.
+- **`setup_logging` rewritten** with `tracing_subscriber::registry` + `EnvFilter` + `fmt::layer` (2026 best-practice pattern): respects `RUST_LOG` for per-module filtering without dropping the CLI default level, honours `--color`, redirects to `stderr`, and uses `try_init` so repeated calls (tests, embedded usage) are safe.
+
+### Tests
+- 9 new fontconfig integration tests: initialization, font availability, nonexistent fonts, alias handling, cache negative, query fallback priority.
+- 3 new `setup_logging` tests: idempotent under `try_init`, accepts all colour modes, accepts all `(verbose, quiet, debug)` combinations.
+- 3 new font fallback tests: cross-platform CJK scan smoke, empty-`FontManager` negative path, hardcoded CJK list with no system fonts.
+- All 440+ tests pass across 8 crates.
+- Clippy zero warnings, fmt zero drift.
+- Insta snapshots updated to include the new `--debug` and `--font-dir` entries.
 
 ### Highlights
 - **ASS escape sequence handling**: `\N` and `\n` are now converted to actual newlines during ASS parsing, enabling multi-line subtitle rendering. Previously rendered as literal text "\\N" in the output.
@@ -77,6 +104,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI enforces 100MB input limit
 
 ---
+
+## [0.5.5] - Unreleased
+
+### Fixed
+- **`--parallel-frames` Windows hang root cause (v0.5.3 + v0.5.4 still hung)**: the real culprit was not the `Vec<RenderedFrame>` memory blowup (v0.5.3 fix) or rayon's cold-start thread pool (v0.5.4 fix), but the **per-render `font_has_cjk_glyphs` call on the scoring-match font**. On the user's 247-font Windows system, parsing the 22+ MB TTF for "MiSans Demibold" in the first event's font fallback took 30+ seconds (likely Windows font cache service contention), during which the watchdog thread was the only thing printing. **Fix**: removed the `font_has_cjk_glyphs` check from the scoring-match path in `query_with_fallback_inner` (Step 1). The scoring result from `query_with_score` is now trusted directly. The dedicated CJK scan at Step 2.5 (already pre-warmed at startup) still catches the case where the user explicitly requests a CJK family that fontdb cannot find at all. Trade-off: if the scoring match happens to be a Latin-only font and the rendered text contains CJK characters, the output will show tofu (□) for those characters — but the render will complete, not hang.
+
+---
+
+## [0.5.4] - Unreleased
+
+### Fixed
+- **`--parallel-frames` first-call deadlock on Windows (v0.5.3 regression)**: v0.5.3 still hung on Windows with 1988-event CJK ASS. The `pipeline merge` + `PixmapPool` changes from v0.5.3 were necessary but not sufficient: rayon's global thread pool is built lazily on the first `par_iter()` call, and on Windows that first call can deadlock when invoked deep inside a parallel render loop after fonts/quantizer have been initialised. **Fix**: explicitly build and warm a dedicated `rayon::ThreadPool` at startup (named workers `ass2sup-worker-N`) and execute a no-op `par_iter()` on every worker. All subsequent `par_iter()` calls in the render loop reuse the already-initialised pool, eliminating the cold-start deadlock.
+- **Progress-bar heartbeat in debug mode**: Without periodic log output, a hang presents as wall-clock silence with no diagnostic signal. **Fix**: when `--debug` is set, spawn a watchdog thread (`ass2sup-watchdog`) that prints `[watchdog <N>s] alive, rss=<X> MiB` to stderr every 5 seconds. Combined with the per-event trace logs and RSS samples, this makes Windows-side hangs visible in the log instead of being silent.
+
+### Added
+- **Full-pipeline precise source-traceable debug logging**: When `--debug` is set, every key stage emits a `tracing::trace!` line tagged with `target:file:line` (already in v0.5.3) plus a new high-resolution uptime timestamp and current process RSS (read from `/proc/self/status` on Linux; 0 on Windows). Coverage:
+  - **CLI entry** (`crates/ass2sup-cli/src/lib.rs:convert_file`): `convert_file entry` → `input file read` → `format detection result` → `ASS file parsed` (styles, events, embedded fonts, rss_mib) → `Renderer constructed` (font_count, rss_mib) → `rayon thread pool pre-warmed` → `encode-loop progress` (every 100 events: event_idx, cumulative_ms, last_event_us, frames_encoded, rss_mib).
+  - **Font loading** (`crates/subtitle-renderer/src/font.rs`): `query_cjk_capable_any: scanning all faces` → `scan complete and cached` now records `elapsed_ms`. A scan taking >1 s emits a `WARN query_cjk_capable_any: SLOW scan` to surface systems with too many fonts.
+  - **Renderer** (`crates/subtitle-renderer/src/renderer/mod.rs:render_ass`): every call emits `entry` (timestamp_ms, visible_events, width, height, elapsed_us), per-event `event done` (style, text_len, elapsed_us) **or** `WARN render_ass: SLOW event (>500ms)` for stalls, and final `exit` (timestamp_ms, total_us, bitmap_bytes).
+  - **Watchdog**: every 5s while `--debug` is set.
+- **`current_rss_bytes()`** helper: reads `/proc/self/status` for `VmRSS` (Linux only; returns 0 on macOS/Windows to keep the binary portable). Used in 6+ trace points to track memory growth.
+- **`tracing_subscriber::fmt::time::uptime()`** timer in `setup_logging` so log lines include a high-resolution elapsed-since-process-start timestamp, making relative timing between log lines trivial.
+- **`rayon::scope` + dedicated `ThreadPool`** warm-up in `run()`: built only when `--parallel-frames` is set; reports `elapsed_ms` and `workers` in the warmup trace.
+
+### Tests
+- `cargo test -p ass2sup-cli --test test_parallel_frames_large`: 3 tests on a 200-event fixture pass in ~60 s (debug) / <2 s (release). The fixture was reduced from 1500 → 200 events after profiling showed debug-binary tests are 28× slower than release; 200 events × 8.3 MB ≈ 1.6 GB is still enough to surface the original OOM but keeps CI runtime reasonable. Tests are serialised by a process-wide `Mutex<()>` to prevent three heavy `ass2sup` subprocesses from OOM-killing each other in parallel.
+- Manual QA on `.localref/[岛·消失的人们][2016][012751][24]_CN.ass` (1121 events, real CJK): 25.0 s serial → 18.8 s parallel, MD5-identical.
+- Manual QA on a synthesised 1988-event CJK file (real CJK lines duplicated, time codes offset): 44.8 s serial → 45.4 s parallel, **MD5 `f4023cf27f758d94226db03afc9e0f94` identical** (45 MB output).
+- All existing tests still pass (440+ across 8 crates). Clippy `-D warnings` clean, `cargo fmt --check` clean.
+
+---
+
+## [0.5.3] - Unreleased
 
 ## [0.5.1] - 2026-06-13
 

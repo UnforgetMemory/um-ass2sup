@@ -55,6 +55,7 @@ fn snapshot_validate_clean() {
         .unwrap()
         .arg(simple_fixture())
         .arg("--validate")
+        .arg("--no-check-fonts")
         .arg("-o")
         .arg(&output_path)
         .arg("--quiet")

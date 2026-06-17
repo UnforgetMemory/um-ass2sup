@@ -21,7 +21,7 @@ use clap::Parser;
 use glob::glob;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 use walkdir::WalkDir;
 
 use ass_parser::{AssFile, Event, OverrideTag, SubtitleFormat};
@@ -31,6 +31,7 @@ use pgs_encoder::PgsEncoder;
 use subtitle_renderer::{FontManager, RenderConfig, Renderer};
 use subtitle_validator::{OverlapConfig, OverlapSeverity, Validator};
 
+/// OCR harness for verifying rendered subtitle images via PaddleOCR.
 pub mod ocr;
 
 /// Maximum input file size in bytes (100 MiB).
@@ -151,6 +152,10 @@ pub struct Args {
     #[arg(long, conflicts_with = "to_srt")]
     pub to_bdn: bool,
 
+    /// Enable trace-level debug output for pipeline diagnosis
+    #[arg(long)]
+    pub debug: bool,
+
     /// Skip font availability check (fonts missing from the system will silently
     /// fall back to a substitute, potentially producing blank subtitle output)
     #[arg(long)]
@@ -160,6 +165,13 @@ pub struct Args {
     /// Can be repeated multiple times.
     #[arg(long, value_name = "STYLE:FALLBACKS")]
     pub font_map: Vec<String>,
+
+    /// Additional directories to scan for font files (TTF/OTF/WOFF2). Use this
+    /// to add platform-specific font collections (e.g. user-installed fonts
+    /// on macOS, custom CJK packs) without copying them into the OS font dir.
+    /// Can be repeated; nested directories are scanned recursively.
+    #[arg(long, value_name = "DIR")]
+    pub font_dir: Vec<PathBuf>,
 }
 
 /// Output display resolution parsed from `WIDTHxHEIGHT` strings.
@@ -350,24 +362,81 @@ pub fn crop_to_tight_bbox(
 /// Initialises the global `tracing` subscriber with the appropriate level filter.
 ///
 /// Level selection:
-/// - `quiet`: `ERROR` only
+/// - `debug`: `TRACE` with targets, files, line numbers
 /// - `verbose`: `DEBUG`
+/// - `quiet`: `ERROR` only
 /// - otherwise: `INFO`
-pub fn setup_logging(verbose: bool, quiet: bool) {
-    let level = if quiet {
-        tracing::level_filters::LevelFilter::ERROR
-    } else if verbose {
-        tracing::level_filters::LevelFilter::DEBUG
-    } else {
-        tracing::level_filters::LevelFilter::INFO
+///
+/// `RUST_LOG` overrides per-module filtering while preserving the CLI default
+/// level as fallback. `color` controls ANSI styling: `"always"` forces it on,
+/// `"never"` forces it off, any other value (typically `"auto"`) defers to
+/// whether stderr is a TTY.
+///
+/// Uses `try_init` so repeated calls (across tests or embedded usage) are
+/// silent no-ops after the first successful init.
+pub fn setup_logging(verbose: bool, quiet: bool, debug: bool, color: &str) {
+    use tracing_subscriber::{
+        filter::{EnvFilter, LevelFilter},
+        fmt,
+        layer::SubscriberExt,
+        util::SubscriberInitExt,
     };
-    tracing_subscriber::fmt()
-        .with_max_level(level)
-        .with_target(false)
+
+    let use_color = match color {
+        "always" => true,
+        "never" => false,
+        _ => std::io::IsTerminal::is_terminal(&std::io::stderr()),
+    };
+
+    let default_level = if debug {
+        LevelFilter::TRACE
+    } else if quiet {
+        LevelFilter::ERROR
+    } else if verbose {
+        LevelFilter::DEBUG
+    } else {
+        LevelFilter::INFO
+    };
+
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(default_level.into())
+        .from_env_lossy();
+
+    let fmt_layer = fmt::layer()
+        .with_ansi(use_color)
+        .with_target(debug)
+        .with_file(debug)
+        .with_line_number(debug)
         .with_thread_ids(false)
-        .with_file(false)
-        .with_line_number(false)
-        .init();
+        .with_timer(tracing_subscriber::fmt::time::uptime())
+        .with_writer(std::io::stderr);
+
+    let _ = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer)
+        .try_init();
+}
+
+/// Returns the current process RSS in bytes.
+///
+/// Linux: parses `/proc/self/status` for `VmRSS`. macOS / Windows: returns 0
+/// (the parser only knows how to read the Linux format). Used in pipeline
+/// trace logs to surface memory growth that may indicate leaks.
+pub fn current_rss_bytes() -> u64 {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(content) = std::fs::read_to_string("/proc/self/status") {
+            for line in content.lines() {
+                if let Some(rest) = line.strip_prefix("VmRSS:") {
+                    let kb = rest.trim().trim_end_matches("kB").trim();
+                    if let Ok(value) = kb.parse::<u64>() {
+                        return value * 1024;
+                    }
+                }
+            }
+        }
+    }
+    0
 }
 
 /// Resolves the user's color preference string into a boolean.
@@ -499,8 +568,14 @@ fn check_ass_fonts(
     no_check: bool,
 ) -> Result<(), String> {
     if no_check {
+        trace!("check_ass_fonts skipped (--no-check-fonts)");
         return Ok(());
     }
+    debug!(
+        styles = ass.styles.len(),
+        global_fallback = %global_fallback,
+        "checking font availability for all ASS styles"
+    );
 
     let mut missing: Vec<String> = Vec::new();
 
@@ -511,19 +586,27 @@ fn check_ass_fonts(
             &style.font_name
         };
 
-        if font_manager
-            .query_with_score(primary, false, false)
-            .is_some()
-        {
+        if font_manager.has_available_font(primary) {
+            trace!(style = %style.name, font = %primary, "style font OK");
             continue;
         }
+        debug!(
+            style = %style.name,
+            font = %primary,
+            "primary style font not available; trying fallbacks"
+        );
 
         // Try per-style fallback chain from --font-map
         if let Some(fallbacks) = font_map.get(&style.name) {
             let all_missing = fallbacks
                 .iter()
-                .all(|fb| font_manager.query_with_score(fb, false, false).is_none());
+                .all(|fb| !font_manager.has_available_font(fb));
             if !all_missing {
+                trace!(
+                    style = %style.name,
+                    fallbacks = ?fallbacks,
+                    "at least one --font-map entry is available"
+                );
                 continue;
             }
         }
@@ -532,10 +615,14 @@ fn check_ass_fonts(
         if global_fallback != primary
             && !global_fallback.is_empty()
             && global_fallback != "Arial"
-            && font_manager
-                .query_with_score(global_fallback, false, false)
-                .is_some()
+            && font_manager.has_available_font(global_fallback)
         {
+            debug!(
+                style = %style.name,
+                primary = %primary,
+                fallback = %global_fallback,
+                "global --font fallback is available; using it"
+            );
             continue;
         }
 
@@ -550,6 +637,7 @@ fn check_ass_fonts(
             let fb_str = fb_chain.join(", ");
             format!("'{}' (fallbacks: {}) not installed", primary, fb_str)
         };
+        warn!(style = %style.name, "{}", desc);
         missing.push(desc);
     }
 
@@ -653,12 +741,24 @@ pub fn compute_render_pts(event: &Event) -> u64 {
 /// processed, or an error string on failure.
 pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<ConversionStats, String> {
     info!("Processing: {}", input.display());
+    trace!(
+        input = %input.display(),
+        output = %output.display(),
+        rss_mib = current_rss_bytes() / 1024 / 1024,
+        "convert_file entry"
+    );
 
     let content =
         std::fs::read_to_string(input).map_err(|e| format!("Failed to read input file: {e}"))?;
+    trace!(
+        bytes = content.len(),
+        rss_mib = current_rss_bytes() / 1024 / 1024,
+        "input file read"
+    );
 
     let format = SubtitleFormat::detect(input).unwrap_or(SubtitleFormat::Ass);
     info!("Detected format: {:?}", format);
+    trace!(?format, "format detection result");
 
     let mut ass = match format {
         SubtitleFormat::Srt => ass_parser::srt::parse_srt(&content)
@@ -670,6 +770,13 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
         "Parsed: {} styles, {} events",
         ass.styles.len(),
         ass.events.len()
+    );
+    debug!(
+        styles = ass.styles.len(),
+        events = ass.events.len(),
+        embedded_fonts = ass.embedded_fonts.len(),
+        rss_mib = current_rss_bytes() / 1024 / 1024,
+        "ASS file parsed"
     );
 
     if args.validate || args.overlap_warn {
@@ -732,6 +839,15 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
 
     let res = resolve_resolution(args, &ass)?;
     info!("Output resolution: {}x{}", res.width, res.height);
+    debug!(
+        width = res.width,
+        height = res.height,
+        fps = args.fps,
+        max_colors = args.max_colors,
+        dither = %args.dither,
+        quantizer = %args.quantizer,
+        "render configuration resolved"
+    );
 
     let render_config = RenderConfig {
         width: res.width,
@@ -743,13 +859,32 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
     };
 
     let mut renderer = Renderer::new(render_config);
+    trace!(
+        font_count = renderer.font_manager().font_count(),
+        rss_mib = current_rss_bytes() / 1024 / 1024,
+        "Renderer constructed"
+    );
+
+    for dir in &args.font_dir {
+        let added = renderer.font_manager_mut().load_fonts_dir(dir);
+        if added > 0 {
+            info!("Loaded {} font face(s) from {}", added, dir.display());
+        } else {
+            warn!("No font files found in --font-dir: {}", dir.display());
+        }
+    }
 
     // Load embedded fonts from ASS [Fonts] section
     let font_data_list =
         ass.load_embedded_fonts(input.parent().unwrap_or(std::path::Path::new(".")));
+    let embedded_count = font_data_list.len();
     for (_font_name, font_data) in font_data_list {
         let _id = renderer.font_manager_mut().load_font_data(font_data);
     }
+    debug!(
+        embedded_count,
+        "loaded ASS embedded fonts into font manager"
+    );
 
     let font_map = parse_font_map(&args.font_map)?;
     check_ass_fonts(
@@ -765,11 +900,23 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
         "ordered" => DitherMethod::Ordered,
         _ => DitherMethod::FloydSteinberg,
     };
+    debug!(?dither_method, "dither method selected");
 
     let use_palette_reuse = args.quantizer == "median-cut";
     let quantizer = Quantizer::new(args.max_colors).with_dither(dither_method);
+    trace!(
+        max_colors = args.max_colors,
+        use_palette_reuse,
+        "quantizer configured"
+    );
 
     let mut pgs_encoder = PgsEncoder::new(res.width as u16, res.height as u16, args.fps);
+    trace!(
+        width = res.width,
+        height = res.height,
+        fps = args.fps,
+        "PGS encoder initialised"
+    );
 
     let dialogues: Vec<_> = ass.dialogue_events().cloned().collect();
     let total = dialogues.len() as u64;
@@ -791,45 +938,21 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
     } else {
         create_progress_bar(total, "Converting")
     };
+    debug!(dialogues = total, "starting render loop");
 
     let mut frames_encoded = 0u64;
-
-    let frame_data: Vec<_> = if args.parallel_frames && dialogues.len() > 1 {
-        dialogues
-            .par_iter()
-            .map(|event| {
-                let render_pts = compute_render_pts(event);
-                let display_pts = event.start.as_ms();
-                let duration_ms = event.duration_ms();
-
-                let frame = renderer.render_ass(&ass, render_pts);
-                (event.clone(), frame, display_pts, duration_ms)
-            })
-            .collect()
-    } else {
-        dialogues
-            .iter()
-            .map(|event| {
-                let render_pts = compute_render_pts(event);
-                let display_pts = event.start.as_ms();
-                let duration_ms = event.duration_ms();
-
-                let frame = renderer.render_ass(&ass, render_pts);
-                (event.clone(), frame, display_pts, duration_ms)
-            })
-            .collect()
-    };
-
     let mut all_segments = Vec::new();
 
-    let quantized_frames: Vec<Option<color_quantizer::QuantizedFrame>> = if !use_palette_reuse
-        && args.parallel_frames
-        && frame_data.len() > 1
-    {
-        frame_data
+    if !use_palette_reuse && args.parallel_frames && dialogues.len() > 1 {
+        // Parallel path: merge render + quantize into single par_iter.
+        // This eliminates the ~16.5GB intermediate Vec<RenderedFrame>
+        // (each RenderedFrame is 8.3 MB for 1080p; only N exist per worker).
+        let quantized: Vec<Option<color_quantizer::QuantizedFrame>> = dialogues
             .par_iter()
-            .map(|(_event, frame_opt, _pts, _dur)| {
-                frame_opt.as_ref().and_then(|frame| {
+            .map(|event| {
+                let render_pts = compute_render_pts(event);
+                let frame = renderer.render_ass(&ass, render_pts);
+                frame.and_then(|frame| {
                     let (bmp, x, y, w, h) =
                         crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
                     let mut q = quantizer.quantize(&bmp, w, h);
@@ -838,47 +961,80 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
                     Some(q)
                 })
             })
-            .collect()
-    } else {
-        let mut prev_palette: Option<Vec<Rgba>> = None;
-        frame_data
-            .iter()
-            .map(|(_event, frame_opt, _pts, _dur)| {
-                frame_opt.as_ref().and_then(|frame| {
-                    let (bmp, x, y, w, h) =
-                        crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
-                    if use_palette_reuse {
-                        let prev = prev_palette.as_deref();
-                        let mut q =
-                            quantize_with_palette(&bmp, w, h, prev, args.max_colors, dither_method);
-                        q.x = x as u16;
-                        q.y = y as u16;
-                        prev_palette = Some(q.palette.clone());
-                        Some(q)
-                    } else {
-                        let mut q = quantizer.quantize(&bmp, w, h);
-                        q.x = x as u16;
-                        q.y = y as u16;
-                        prev_palette = Some(q.palette.clone());
-                        Some(q)
-                    }
-                })
-            })
-            .collect()
-    };
+            .collect();
 
-    for ((_event, _frame_opt, pts_ms, duration_ms), q_opt) in
-        frame_data.iter().zip(quantized_frames.iter())
-    {
-        if let Some(q) = q_opt {
-            let segments = pgs_encoder.encode_frame(q, *pts_ms, *duration_ms);
-            all_segments.extend(segments);
-            frames_encoded += 1;
+        // Encode phase (sequential: pgs_encoder needs &mut self).
+        let encode_start = std::time::Instant::now();
+        for (event_idx, (event, q_opt)) in dialogues.iter().zip(quantized.iter()).enumerate() {
+            let pts_ms = event.start.as_ms();
+            let duration_ms = event.duration_ms();
+            let event_start = std::time::Instant::now();
+            if let Some(q) = q_opt {
+                let segments = pgs_encoder.encode_frame(q, pts_ms, duration_ms);
+                all_segments.extend(segments);
+                frames_encoded += 1;
+            } else {
+                trace!(pts_ms = pts_ms, "frame skipped (fully transparent)");
+            }
+            let event_elapsed = event_start.elapsed();
+            if event_idx % 100 == 0 || event_idx + 1 == total as usize {
+                trace!(
+                    event_idx,
+                    total = total as usize,
+                    cumulative_ms = encode_start.elapsed().as_millis() as u64,
+                    last_event_us = event_elapsed.as_micros() as u64,
+                    frames_encoded,
+                    rss_mib = current_rss_bytes() / 1024 / 1024,
+                    "encode-loop progress"
+                );
+            }
+            pb.inc(1);
         }
-        pb.inc(1);
+    } else {
+        // Sequential path: render + quantize + encode per event.
+        // Includes palette-reuse path (needs sequential access to prev_palette).
+        let mut prev_palette: Option<Vec<Rgba>> = None;
+        for event in dialogues.iter() {
+            let render_pts = compute_render_pts(event);
+            let pts_ms = event.start.as_ms();
+            let duration_ms = event.duration_ms();
+
+            let q_opt = renderer.render_ass(&ass, render_pts).and_then(|frame| {
+                let (bmp, x, y, w, h) =
+                    crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
+                if use_palette_reuse {
+                    let prev = prev_palette.as_deref();
+                    let mut q =
+                        quantize_with_palette(&bmp, w, h, prev, args.max_colors, dither_method);
+                    q.x = x as u16;
+                    q.y = y as u16;
+                    prev_palette = Some(q.palette.clone());
+                    Some(q)
+                } else {
+                    let mut q = quantizer.quantize(&bmp, w, h);
+                    q.x = x as u16;
+                    q.y = y as u16;
+                    prev_palette = Some(q.palette.clone());
+                    Some(q)
+                }
+            });
+
+            if let Some(q) = &q_opt {
+                let segments = pgs_encoder.encode_frame(q, pts_ms, duration_ms);
+                all_segments.extend(segments);
+                frames_encoded += 1;
+            } else {
+                trace!(pts_ms = pts_ms, "frame skipped (fully transparent)");
+            }
+            pb.inc(1);
+        }
     }
 
     pb.finish_with_message("Done");
+    debug!(
+        total_segments = all_segments.len(),
+        frames_encoded, "all PGS segments collected"
+    );
 
     let sup_data = {
         let sup_file = pgs_encoder::types::SupFile {
@@ -896,6 +1052,7 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
         output_size,
         frames_encoded
     );
+    debug!(path = %output.display(), bytes = output_size, "SUP file written");
 
     Ok(ConversionStats {
         events_processed: total,
@@ -938,6 +1095,15 @@ pub fn convert_to_bdn(
 
     let res = resolve_resolution(args, &ass)?;
     info!("Output resolution: {}x{}", res.width, res.height);
+    debug!(
+        width = res.width,
+        height = res.height,
+        fps = args.fps,
+        max_colors = args.max_colors,
+        dither = %args.dither,
+        quantizer = %args.quantizer,
+        "render configuration resolved"
+    );
 
     let render_config = RenderConfig {
         width: res.width,
@@ -1069,7 +1235,7 @@ pub fn convert_to_bdn(
 /// 4. Runs --check mode if requested (parse + validate only)
 /// 5. Converts a single file or batch of files
 pub fn run(args: Args) -> Result<(), CliError> {
-    setup_logging(args.verbose, args.quiet);
+    setup_logging(args.verbose, args.quiet, args.debug, &args.color);
 
     let use_color = should_use_color(&args.color);
 
@@ -1152,6 +1318,51 @@ pub fn run(args: Args) -> Result<(), CliError> {
         env!("CARGO_PKG_VERSION")
     );
     info!("FPS: {}", args.fps);
+
+    // Pre-warm rayon's global thread pool. The first `par_iter()` call lazily
+    // builds the worker pool; on Windows that first call has been observed to
+    // deadlock when invoked deep inside a parallel render loop. Spinning up
+    // the pool here, with a single no-op task, ensures all subsequent
+    // par_iter() calls reuse the already-initialised pool.
+    if args.parallel_frames {
+        let pool_init = std::time::Instant::now();
+        let pool = rayon::ThreadPoolBuilder::new()
+            .thread_name(|i| format!("ass2sup-worker-{i}"))
+            .build()
+            .map_err(|e| CliError::Conversion(format!("Failed to build rayon thread pool: {e}")))?;
+        let n = pool.current_num_threads();
+        pool.install(|| {
+            (0..n).into_par_iter().for_each(|_i| {});
+        });
+        debug!(
+            elapsed_ms = pool_init.elapsed().as_millis() as u64,
+            workers = n,
+            "rayon thread pool pre-warmed"
+        );
+    }
+
+    // Watchdog thread: prints a heartbeat every 5s so a hang surfaces in the
+    // log even when the main thread is stuck in a Mutex, infinite loop, or
+    // syscalls. Without this the user only sees the last log line and the
+    // wall-clock silence, which makes Windows-side debugging impossible.
+    if args.debug {
+        std::thread::Builder::new()
+            .name("ass2sup-watchdog".to_string())
+            .spawn(|| {
+                let start = std::time::Instant::now();
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    let elapsed = start.elapsed().as_secs();
+                    let rss = current_rss_bytes();
+                    eprintln!(
+                        "[watchdog {elapsed}s] alive, rss={} MiB, thread={:?}",
+                        rss / 1024 / 1024,
+                        std::thread::current().name()
+                    );
+                }
+            })
+            .ok();
+    }
 
     if inputs.len() == 1 {
         let input = &inputs[0];
@@ -1280,4 +1491,42 @@ pub fn run(args: Args) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod setup_logging_tests {
+    use super::*;
+
+    /// Guards against double-init panics from tracing-subscriber when
+    /// setup_logging is invoked more than once in the same process
+    /// (e.g. across test functions or by an embedding binary).
+    #[test]
+    fn setup_logging_is_idempotent_under_try_init() {
+        setup_logging(false, false, false, "auto");
+        setup_logging(true, false, true, "never");
+    }
+
+    /// Verifies the CLI flag contract: every documented color value is
+    /// accepted without panicking, so future clap `value_parser` strictness
+    /// will not regress silently.
+    #[test]
+    fn setup_logging_accepts_all_color_modes() {
+        for color in ["auto", "always", "never"] {
+            setup_logging(false, false, false, color);
+        }
+    }
+
+    /// Exhaustively walks the (verbose, quiet, debug) boolean space. The
+    /// previous implementation used `.init()` which panics on second call;
+    /// this guards the regression forever.
+    #[test]
+    fn setup_logging_accepts_all_flag_combinations() {
+        for debug in [false, true] {
+            for verbose in [false, true] {
+                for quiet in [false, true] {
+                    setup_logging(verbose, quiet, debug, "auto");
+                }
+            }
+        }
+    }
 }

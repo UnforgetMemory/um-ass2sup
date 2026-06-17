@@ -1073,6 +1073,7 @@ fn test_cli_convert_srt_to_sup_produces_nonzero_output() {
             "-o",
         ])
         .arg(&tmp)
+        .arg("--no-check-fonts")
         .assert()
         .success();
     let metadata = std::fs::metadata(&tmp).expect("output should exist");
@@ -1095,6 +1096,7 @@ fn test_cli_convert_chinese_srt_produces_nonzero_output() {
             "-o",
         ])
         .arg(&tmp)
+        .arg("--no-check-fonts")
         .assert()
         .success();
     let metadata = std::fs::metadata(&tmp).expect("output should exist");
