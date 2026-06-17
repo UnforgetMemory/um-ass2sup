@@ -1,0 +1,29 @@
+[Script Info]
+Title: Test
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: SubLeft,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,1,10,10,10,1
+Style: SubCenter,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Style: SubRight,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,3,10,10,10,1
+Style: MidLeft,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,4,10,10,10,1
+Style: MidCenter,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,5,10,10,10,1
+Style: MidRight,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,6,10,10,10,1
+Style: TopLeft,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,7,10,10,10,1
+Style: TopCenter,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,8,10,10,10,1
+Style: TopRight,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,9,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:02.00,SubLeft,,0,0,0,,Bottom Left
+Dialogue: 0,0:00:01.00,0:00:02.00,SubCenter,,0,0,0,,Bottom Center
+Dialogue: 0,0:00:01.00,0:00:02.00,SubRight,,0,0,0,,Bottom Right
+Dialogue: 0,0:00:02.00,0:00:03.00,MidLeft,,0,0,0,,Middle Left
+Dialogue: 0,0:00:02.00,0:00:03.00,MidCenter,,0,0,0,,Middle Center
+Dialogue: 0,0:00:02.00,0:00:03.00,MidRight,,0,0,0,,Middle Right
+Dialogue: 0,0:00:03.00,0:00:04.00,TopLeft,,0,0,0,,Top Left
+Dialogue: 0,0:00:03.00,0:00:04.00,TopCenter,,0,0,0,,Top Center
+Dialogue: 0,0:00:03.00,0:00:04.00,TopRight,,0,0,0,,Top Right

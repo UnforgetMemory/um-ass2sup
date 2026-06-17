@@ -1,0 +1,33 @@
+[Script Info]
+Title: Overlapping events
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+
+Dialogue: 0,0:00:01.00,0:00:10.00,Default,,0,0,0,,Long event
+Dialogue: 1,0:00:03.00,0:00:07.00,Default,,0,0,0,,Overlap mid
+Dialogue: 0,0:00:01.30,0:00:10.00,Default,,0,0,0,,Overlap 3
+Dialogue: 1,0:00:01.40,0:00:10.00,Default,,0,0,0,,Overlap 4
+Dialogue: 2,0:00:01.50,0:00:10.00,Default,,0,0,0,,Overlap 5
+Dialogue: 0,0:00:01.60,0:00:10.00,Default,,0,0,0,,Overlap 6
+Dialogue: 1,0:00:01.70,0:00:10.00,Default,,0,0,0,,Overlap 7
+Dialogue: 2,0:00:01.80,0:00:10.00,Default,,0,0,0,,Overlap 8
+Dialogue: 0,0:00:01.90,0:00:10.00,Default,,0,0,0,,Overlap 9
+Dialogue: 1,0:00:02.00,0:00:10.00,Default,,0,0,0,,Overlap 10
+Dialogue: 2,0:00:02.10,0:00:10.00,Default,,0,0,0,,Overlap 11
+Dialogue: 0,0:00:02.20,0:00:10.00,Default,,0,0,0,,Overlap 12
+Dialogue: 1,0:00:02.30,0:00:10.00,Default,,0,0,0,,Overlap 13
+Dialogue: 2,0:00:02.40,0:00:10.00,Default,,0,0,0,,Overlap 14
+Dialogue: 0,0:00:02.50,0:00:10.00,Default,,0,0,0,,Overlap 15
+Dialogue: 1,0:00:02.60,0:00:10.00,Default,,0,0,0,,Overlap 16
+Dialogue: 2,0:00:02.70,0:00:10.00,Default,,0,0,0,,Overlap 17
+Dialogue: 0,0:00:02.80,0:00:10.00,Default,,0,0,0,,Overlap 18
+Dialogue: 1,0:00:02.90,0:00:10.00,Default,,0,0,0,,Overlap 19
+Dialogue: 2,0:00:03.00,0:00:10.00,Default,,0,0,0,,Overlap 20

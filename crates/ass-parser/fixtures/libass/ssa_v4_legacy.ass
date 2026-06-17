@@ -1,0 +1,15 @@
+[Script Info]
+Title: SSA v4 legacy
+ScriptType: v4.00
+PlayResX: 640
+PlayResY: 480
+
+[V4 Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, AlphaLevel, Encoding
+Style: Default,Arial,28,65535,255,0,0,0,0,1,2,2,2,20,20,20,0,0
+Style: Alt,Arial,20,16777215,65535,255,0,0,0,1,1,1,1,10,10,10,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,Default,,0,0,0,,SSA v4 legacy fields
+Dialogue: 0,0:00:06.00,0:00:10.00,Default,,0,0,0,,More SSA v4 text

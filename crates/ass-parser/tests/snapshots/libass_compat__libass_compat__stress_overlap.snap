@@ -1,0 +1,8 @@
+---
+source: crates/ass-parser/tests/libass_compat.rs
+expression: output
+---
+strict_ok: true
+recovery_warnings: 0
+recovery_errors: 0
+recovery_events: 20
