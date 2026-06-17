@@ -39,5 +39,8 @@ Options:
       --no-check-fonts               Skip font availability check (fonts missing from the system will silently fall back to a substitute, potentially producing blank subtitle output)
       --font-map <STYLE:FALLBACKS>   Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
       --font-dir <DIR>               Additional directories to scan for font files (TTF/OTF/WOFF2). Use this to add platform-specific font collections (e.g. user-installed fonts on macOS, custom CJK packs) without copying them into the OS font dir. Can be repeated; nested directories are scanned recursively
+      --config <PATH>                Path to a TOML config file. Precedence: `--config <PATH>` → `./ass2sup.toml` → `~/.config/ass2sup/config.toml`. CLI flags override config-file values
+      --cjk-fallback <FONT>          CJK fallback font family. Can be repeated to build an ordered chain. Overrides the file-loaded chain in `ass2sup.toml`
+      --log-level <LEVEL>            Explicit log level (`trace` / `debug` / `info` / `warn` / `error`). Overrides `--verbose` / `--quiet` / `--debug` and the env var
   -h, --help                         Print help (see more with '--help')
   -V, --version                      Print version

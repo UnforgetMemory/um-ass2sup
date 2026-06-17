@@ -34,6 +34,9 @@ fn make_args(resolution: Option<String>) -> Args {
         font_map: vec![],
         debug: false,
         font_dir: vec![],
+        config: None,
+        cjk_fallback: vec![],
+        log_level: None,
     }
 }
 

@@ -117,6 +117,15 @@ Options:
       --font-dir <DIR>
           Additional directories to scan for font files (TTF/OTF/WOFF2). Use this to add platform-specific font collections (e.g. user-installed fonts on macOS, custom CJK packs) without copying them into the OS font dir. Can be repeated; nested directories are scanned recursively
 
+      --config <PATH>
+          Path to a TOML config file. Precedence: `--config <PATH>` → `./ass2sup.toml` → `~/.config/ass2sup/config.toml`. CLI flags override config-file values
+
+      --cjk-fallback <FONT>
+          CJK fallback font family. Can be repeated to build an ordered chain. Overrides the file-loaded chain in `ass2sup.toml`
+
+      --log-level <LEVEL>
+          Explicit log level (`trace` / `debug` / `info` / `warn` / `error`). Overrides `--verbose` / `--quiet` / `--debug` and the env var
+
   -h, --help
           Print help (see a summary with '-h')
 

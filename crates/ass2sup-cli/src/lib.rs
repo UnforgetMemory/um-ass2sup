@@ -34,6 +34,15 @@ use subtitle_validator::{OverlapConfig, OverlapSeverity, Validator};
 /// OCR harness for verifying rendered subtitle images via PaddleOCR.
 pub mod ocr;
 
+/// Unified error type system (`Error`, `RenderError`, `OutputError`, ...).
+pub mod error;
+
+/// TOML-backed configuration (`Config`, `Defaults`, `CjkFallback`, ...).
+pub mod config;
+
+/// Telemetry / logging initialisation helpers.
+pub mod telemetry;
+
 /// Maximum input file size in bytes (100 MiB).
 ///
 /// Subtitle files are normally < 1 MiB. Anything over 100 MiB is almost
@@ -172,6 +181,22 @@ pub struct Args {
     /// Can be repeated; nested directories are scanned recursively.
     #[arg(long, value_name = "DIR")]
     pub font_dir: Vec<PathBuf>,
+
+    /// Path to a TOML config file. Precedence: `--config <PATH>` →
+    /// `./ass2sup.toml` → `~/.config/ass2sup/config.toml`. CLI flags
+    /// override config-file values.
+    #[arg(long, value_name = "PATH")]
+    pub config: Option<PathBuf>,
+
+    /// CJK fallback font family. Can be repeated to build an ordered chain.
+    /// Overrides the file-loaded chain in `ass2sup.toml`.
+    #[arg(long = "cjk-fallback", value_name = "FONT")]
+    pub cjk_fallback: Vec<String>,
+
+    /// Explicit log level (`trace` / `debug` / `info` / `warn` / `error`).
+    /// Overrides `--verbose` / `--quiet` / `--debug` and the env var.
+    #[arg(long, value_name = "LEVEL")]
+    pub log_level: Option<String>,
 }
 
 /// Output display resolution parsed from `WIDTHxHEIGHT` strings.
@@ -374,21 +399,13 @@ pub fn crop_to_tight_bbox(
 ///
 /// Uses `try_init` so repeated calls (across tests or embedded usage) are
 /// silent no-ops after the first successful init.
+///
+/// Internally delegates to [`telemetry::init`] so all logging paths share
+/// the same `tracing-subscriber` registry configuration.
 pub fn setup_logging(verbose: bool, quiet: bool, debug: bool, color: &str) {
-    use tracing_subscriber::{
-        filter::{EnvFilter, LevelFilter},
-        fmt,
-        layer::SubscriberExt,
-        util::SubscriberInitExt,
-    };
+    use tracing_subscriber::filter::LevelFilter;
 
-    let use_color = match color {
-        "always" => true,
-        "never" => false,
-        _ => std::io::IsTerminal::is_terminal(&std::io::stderr()),
-    };
-
-    let default_level = if debug {
+    let level = if debug {
         LevelFilter::TRACE
     } else if quiet {
         LevelFilter::ERROR
@@ -398,23 +415,77 @@ pub fn setup_logging(verbose: bool, quiet: bool, debug: bool, color: &str) {
         LevelFilter::INFO
     };
 
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(default_level.into())
-        .from_env_lossy();
+    let color_choice = match color {
+        "always" => crate::telemetry::ColorChoice::Always,
+        "never" => crate::telemetry::ColorChoice::Never,
+        _ => crate::telemetry::ColorChoice::Auto,
+    };
 
-    let fmt_layer = fmt::layer()
-        .with_ansi(use_color)
-        .with_target(debug)
-        .with_file(debug)
-        .with_line_number(debug)
-        .with_thread_ids(false)
-        .with_timer(tracing_subscriber::fmt::time::uptime())
-        .with_writer(std::io::stderr);
+    let _ = crate::telemetry::init(crate::telemetry::TelemetryConfig {
+        level,
+        color: color_choice,
+        with_source: debug,
+        with_thread_ids: false,
+    });
+}
 
-    let _ = tracing_subscriber::registry()
-        .with(env_filter)
-        .with(fmt_layer)
-        .try_init();
+/// Like [`setup_logging`] but honours the loaded `Config` and the
+/// `ASS2SUP_LOG` / `ASS2SUP_COLOR` env vars in addition to the CLI flags.
+///
+/// Precedence (highest first):
+/// 1. `--log-level` (if supplied)
+/// 2. `Config.log_level` (if set)
+/// 3. `--debug` → TRACE, `--verbose` → DEBUG, `--quiet` → ERROR
+/// 4. env var `ASS2SUP_LOG` (lowest priority; only consulted when none of
+///    the above explicitly resolved a level)
+/// 5. INFO default
+fn setup_logging_with_config(args: &Args, config: &crate::config::Config) {
+    use tracing_subscriber::filter::LevelFilter;
+
+    let explicit = args
+        .log_level
+        .as_deref()
+        .or(config.log_level.as_deref())
+        .and_then(crate::telemetry::parse_level);
+
+    let level = explicit.unwrap_or_else(|| {
+        if let Ok(env_level) = std::env::var("ASS2SUP_LOG") {
+            if let Some(parsed) = crate::telemetry::parse_level(&env_level) {
+                return parsed;
+            }
+        }
+        if args.debug {
+            LevelFilter::TRACE
+        } else if args.quiet {
+            LevelFilter::ERROR
+        } else if args.verbose {
+            LevelFilter::DEBUG
+        } else {
+            LevelFilter::INFO
+        }
+    });
+
+    // Color resolution: CLI flag wins. Otherwise consult ASS2SUP_COLOR.
+    // (Env-var-as-secondary is intentional — most users pick one or the
+    // other, not both.)
+    let color = if args.color == "always" {
+        crate::telemetry::ColorChoice::Always
+    } else if args.color == "never" {
+        crate::telemetry::ColorChoice::Never
+    } else {
+        match std::env::var("ASS2SUP_COLOR") {
+            Ok(s) if s.eq_ignore_ascii_case("always") => crate::telemetry::ColorChoice::Always,
+            Ok(s) if s.eq_ignore_ascii_case("never") => crate::telemetry::ColorChoice::Never,
+            _ => crate::telemetry::ColorChoice::Auto,
+        }
+    };
+
+    let _ = crate::telemetry::init(crate::telemetry::TelemetryConfig {
+        level,
+        color,
+        with_source: args.debug,
+        with_thread_ids: false,
+    });
 }
 
 /// Returns the current process RSS in bytes.
@@ -1229,13 +1300,21 @@ pub fn convert_to_bdn(
 /// Run the CLI conversion with parsed arguments.
 ///
 /// This function performs the full workflow:
-/// 1. Sets up logging
-/// 2. Collects input files (positional args + --glob)
-/// 3. Parses the display resolution
-/// 4. Runs --check mode if requested (parse + validate only)
-/// 5. Converts a single file or batch of files
+/// 1. Loads the TOML config (if `--config` or `./ass2sup.toml` present)
+/// 2. Sets up logging (config + env + CLI flags)
+/// 3. Collects input files (positional args + --glob)
+/// 4. Parses the display resolution
+/// 5. Runs --check mode if requested (parse + validate only)
+/// 6. Converts a single file or batch of files
 pub fn run(args: Args) -> Result<(), CliError> {
-    setup_logging(args.verbose, args.quiet, args.debug, &args.color);
+    // Step 1: load config (gracefully falls back to defaults on miss)
+    let config = crate::config::Config::load_default(args.config.as_deref())
+        .map_err(|e| CliError::Conversion(format!("Config error: {e}")))?;
+
+    // Step 2: build the logging config.
+    // CLI flags win over the config file; `RUST_LOG` / `ASS2SUP_LOG`
+    // still layer on top via `EnvFilter::from_env_lossy`.
+    setup_logging_with_config(&args, &config);
 
     let use_color = should_use_color(&args.color);
 
