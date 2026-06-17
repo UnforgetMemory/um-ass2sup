@@ -1,4 +1,6 @@
-use ass_parser::{AssColor, AssFile, Effect, Event, EventType, OverrideTag, Style, Timestamp};
+use ass_parser::{
+    AssColor, AssFile, Effect, Event, EventType, OverrideTag, Style, StyleName, Timestamp,
+};
 use subtitle_renderer::{
     alignment_to_pos, strip_override_blocks, RenderConfig, RenderContext, Renderer,
 };
@@ -13,7 +15,7 @@ fn default_event() -> Event {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(5000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,

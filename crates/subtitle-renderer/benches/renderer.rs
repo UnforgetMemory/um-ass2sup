@@ -1,5 +1,5 @@
 use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
-use ass_parser::{AssFile, Effect, Event, EventType, Timestamp};
+use ass_parser::{AssFile, Effect, Event, EventType, StyleName, Timestamp};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use subtitle_renderer::{
     apply_gaussian_blur, apply_shadow, composite_over, AffineTransform, RenderConfig, Renderer,
@@ -61,7 +61,7 @@ fn karaoke_ass() -> AssFile {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(10000),
-        style_name: "Default".into(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,

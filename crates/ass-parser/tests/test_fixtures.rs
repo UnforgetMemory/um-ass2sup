@@ -119,7 +119,7 @@ fn overlapping_ass_event_count() {
 #[test]
 fn overlapping_ass_has_different_styles() {
     let ass = AssFile::parse(OVERLAPPING_ASS).expect("overlapping.ass should parse");
-    let style_names: Vec<&str> = ass.events.iter().map(|e| e.style_name.as_str()).collect();
+    let style_names: Vec<&str> = ass.events.iter().map(|e| e.style.as_str()).collect();
     assert!(style_names.contains(&"Default"));
     assert!(style_names.contains(&"Top"));
     assert!(style_names.contains(&"Karaoke"));
@@ -250,7 +250,7 @@ fn writing_mode_ass_events_are_dialogue() {
 #[test]
 fn writing_mode_ass_style() {
     let ass = AssFile::parse(WRITING_MODE_ASS).expect("writing_mode.ass should parse");
-    assert!(ass.events.iter().all(|e| e.style_name == "Default"));
+    assert!(ass.events.iter().all(|e| e.style == "Default"));
 }
 
 #[test]

@@ -107,7 +107,7 @@ fn validate_structure(ass: &AssFile, report: &mut ValidationReport) {
     // V005: Duplicate style names
     let mut style_names: HashMap<String, usize> = HashMap::new();
     for (i, style) in ass.styles.iter().enumerate() {
-        if let Some(&prev_idx) = style_names.get(&style.name) {
+        if let Some(&prev_idx) = style_names.get(style.name.as_str()) {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V005,
                 stage: ValidationStage::Structure,
@@ -121,7 +121,7 @@ fn validate_structure(ass: &AssFile, report: &mut ValidationReport) {
                 suggestion: Some("Rename or remove duplicate style".to_string()),
             });
         }
-        style_names.insert(style.name.clone(), i);
+        style_names.insert(style.name.to_string(), i);
     }
 }
 
@@ -162,7 +162,11 @@ fn validate_styles(styles: &[Style], report: &mut ValidationReport) {
         }
 
         // V008: Alignment out of range
-        if style.alignment < 1 || style.alignment > 11 {
+        // Check the raw value (not the typed alignment enum) so values
+        // outside 1..=9 that the parser silently coerces to BottomCenter
+        // are still caught here.
+        let align = style.raw_alignment;
+        if !(1..=11).contains(&align) {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V008,
                 stage: ValidationStage::Style,
@@ -171,7 +175,8 @@ fn validate_styles(styles: &[Style], report: &mut ValidationReport) {
                 column: None,
                 message: format!(
                     "Style '{}' has invalid alignment: {}",
-                    style.name, style.alignment
+                    style.name,
+                    style.alignment.to_u8()
                 ),
                 suggestion: Some("Alignment must be 1-11 (numpad layout)".to_string()),
             });
@@ -191,17 +196,14 @@ fn validate_events(events: &[Event], styles: &[Style], report: &mut ValidationRe
         }
 
         // V009: Reference to non-existent style
-        if !style_names.is_empty() && !style_names.contains(&event.style_name.as_str()) {
+        if !style_names.is_empty() && !style_names.contains(&event.style.as_str()) {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V009,
                 stage: ValidationStage::Event,
                 severity: Severity::Warning,
                 line: None,
                 column: None,
-                message: format!(
-                    "Event #{} references undefined style '{}'",
-                    i, event.style_name
-                ),
+                message: format!("Event #{} references undefined style '{}'", i, event.style),
                 suggestion: Some(format!("Available styles: {:?}", style_names)),
             });
         }
@@ -516,7 +518,7 @@ fn has_effects(event: &Event) -> bool {
 mod tests {
     use super::*;
     use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
-    use ass_parser::{Effect, SubtitleFormat, Timestamp};
+    use ass_parser::{Effect, StyleName, SubtitleFormat, Timestamp};
 
     #[test]
     fn test_v014_non_karaoke_no_finding() {
@@ -529,7 +531,7 @@ mod tests {
                 layer: 0,
                 start: Timestamp::ZERO,
                 end: Timestamp::from_ms(5000),
-                style_name: "Default".into(),
+                style: StyleName::new("Default"),
                 name: String::new(),
                 margin_l: 0,
                 margin_r: 0,
@@ -541,6 +543,7 @@ mod tests {
                 raw_override_block: String::new(),
             }],
             embedded_fonts: vec![],
+            warnings: vec![],
         };
         let mut report = ValidationReport::new();
         validate_semantics(&ass, &mut report);
@@ -602,7 +605,7 @@ mod tests {
                 layer: 0,
                 start: Timestamp::ZERO,
                 end: Timestamp::from_ms(1000),
-                style_name: "Default".into(),
+                style: StyleName::new("Default"),
                 name: String::new(),
                 margin_l: 0,
                 margin_r: 0,
@@ -619,6 +622,7 @@ mod tests {
                 raw_override_block: String::new(),
             }],
             embedded_fonts: vec![],
+            warnings: vec![],
         };
         let mut report = ValidationReport::new();
         validate_semantics(&ass, &mut report);

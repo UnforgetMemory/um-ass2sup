@@ -668,7 +668,7 @@ fn check_ass_fonts(
         );
 
         // Try per-style fallback chain from --font-map
-        if let Some(fallbacks) = font_map.get(&style.name) {
+        if let Some(fallbacks) = font_map.get(style.name.as_str()) {
             let all_missing = fallbacks
                 .iter()
                 .all(|fb| !font_manager.has_available_font(fb));
@@ -699,7 +699,7 @@ fn check_ass_fonts(
 
         // Build the failure description
         let fb_chain: Vec<&str> = font_map
-            .get(&style.name)
+            .get(style.name.as_str())
             .map(|v| v.iter().map(|s| s.as_str()).collect())
             .unwrap_or_default();
         let desc = if fb_chain.is_empty() {

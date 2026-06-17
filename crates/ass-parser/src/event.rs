@@ -2,6 +2,7 @@ use super::effect::{parse_effect, Effect};
 use super::karaoke::{KaraokeSegment, KaraokeStyle};
 use super::override_tag::OverrideTag;
 use super::timestamp::Timestamp;
+use super::types::StyleName;
 
 /// ASS/SSA event type (first field of an event line).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -63,7 +64,9 @@ pub struct Event {
     /// Display end time.
     pub end: Timestamp,
     /// Name of the style from `[V4+ Styles]` section (e.g., `"Default"`).
-    pub style_name: String,
+    /// This is a strong-typed [`StyleName`] that can be used to look up
+    /// the corresponding [`Style`](crate::Style) in an [`AssFile`](crate::AssFile).
+    pub style: StyleName,
     /// Optional actor/speaker name (rarely used).
     pub name: String,
     /// Left margin override in pixels (0 = use style default).
@@ -76,7 +79,7 @@ pub struct Event {
     pub effect: Effect,
     /// Raw subtitle text including override tag blocks (e.g., `"{\b1}Bold{\b0} normal"`).
     pub text: String,
-    /// Parsed override tags extracted from `{\\tag}` blocks in [`text`](Event::text).
+    /// Parsed override tags extracted from `{\tag}` blocks in [`text`](Event::text).
     pub override_tags: Vec<OverrideTag>,
     /// Parsed karaoke segments (populated when karaoke tags are present).
     pub karaoke_segments: Vec<KaraokeSegment>,
@@ -108,7 +111,7 @@ impl Event {
         let layer: u32 = parts[0].trim().parse().unwrap_or(0);
         let start = Timestamp::from_ass_time(parts[1].trim())?;
         let end = Timestamp::from_ass_time(parts[2].trim())?;
-        let style_name = parts[3].trim().to_string();
+        let style = StyleName::new(parts[3].trim());
         let name = parts[4].trim().to_string();
         let margin_l: u32 = parts[5].trim().parse().unwrap_or(0);
         let margin_r: u32 = parts[6].trim().parse().unwrap_or(0);
@@ -121,7 +124,7 @@ impl Event {
             layer,
             start,
             end,
-            style_name,
+            style,
             name,
             margin_l,
             margin_r,
@@ -134,6 +137,32 @@ impl Event {
         })
     }
 
+    /// Serialize this event back into the comma-separated format
+    /// (the part after the `Dialogue:` / `Comment:` prefix).
+    ///
+    /// The output has 10 fields matching [`parse_from_line`](Self::parse_from_line).
+    pub fn to_ass_data(&self) -> String {
+        let effect_str = format!("{}", self.effect);
+        let effect = if effect_str == "None" {
+            String::new()
+        } else {
+            effect_str
+        };
+        format!(
+            "{},{},{},{},{},{},{},{},{},{}",
+            self.layer,
+            self.start.as_ass_time(),
+            self.end.as_ass_time(),
+            self.style,
+            self.name,
+            self.margin_l,
+            self.margin_r,
+            self.margin_v,
+            effect,
+            self.text.replace('\n', "\\N"),
+        )
+    }
+
     /// Returns the display duration in milliseconds (`end - start`).
     pub fn duration_ms(&self) -> u64 {
         self.start.duration_ms(self.end)
@@ -144,12 +173,12 @@ impl Event {
         self.event_type == EventType::Dialogue
     }
 
-    /// Returns `true` if the text contains any override tag blocks (`{\\tag}`).
+    /// Returns `true` if the text contains any override tag blocks (`{\tag}`).
     pub fn has_override_tags(&self) -> bool {
         !self.override_tags.is_empty()
     }
 
-    /// Returns `true` if karaoke timing tags (`\\k`, `\\kf`, `\\ko`, `\\kt`) were found.
+    /// Returns `true` if karaoke timing tags (`\k`, `\kf`, `\ko`, `\kt`) were found.
     pub fn has_karaoke(&self) -> bool {
         !self.karaoke_segments.is_empty()
     }

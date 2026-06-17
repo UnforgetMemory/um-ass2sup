@@ -35,19 +35,21 @@ pub mod override_tag;
 pub mod srt;
 pub mod style;
 pub mod timestamp;
+pub mod types;
 
 use std::collections::HashMap;
 use std::path::Path;
 
 pub use color::AssColor;
 pub use effect::Effect;
-pub use error::ParseError;
+pub use error::{ParseError, ParseWarning};
 pub use event::{Event, EventType};
 pub use karaoke::{KaraokeSegment, KaraokeStyle};
 pub use override_tag::parse_override_tag;
 pub use override_tag::OverrideTag;
 pub use style::Style;
 pub use timestamp::Timestamp;
+pub use types::{Alignment, BorderStyle, Encoding, Margins, StyleName};
 
 /// Script-level metadata from the `[Script Info]` section.
 ///
@@ -139,6 +141,12 @@ pub struct AssFile {
     pub events: Vec<Event>,
     /// Embedded font references from `[Fonts]`.
     pub embedded_fonts: Vec<EmbeddedFont>,
+    /// Non-fatal warnings collected during recovery parsing.
+    ///
+    /// Populated by [`parse_with_recovery`](AssFile::parse_with_recovery) when
+    /// recoverable issues are encountered (unknown sections, malformed field
+    /// values that were defaulted, etc.).
+    pub warnings: Vec<ParseWarning>,
 }
 
 impl Default for AssFile {
@@ -156,6 +164,7 @@ impl AssFile {
             styles: Vec::new(),
             events: Vec::new(),
             embedded_fonts: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -219,6 +228,109 @@ impl AssFile {
             }
         }
         Ok(ass)
+    }
+
+    /// Parse ASS content with full error recovery, collecting both errors and
+    /// recoverable warnings.
+    ///
+    /// Returns a tuple of (partial AssFile with warnings populated, list of errors).
+    /// Invalid events and styles are skipped; valid portions are still parsed correctly.
+    /// The resulting `AssFile.warnings` field contains non-fatal issues where defaults
+    /// were used.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use ass_parser::AssFile;
+    ///
+    /// let content = "\
+    /// [Script Info]
+    /// Title: Test
+    /// PlayResX: 1920
+    /// PlayResY: 1080
+    ///
+    /// [V4+ Styles]
+    /// Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+    /// Style: Default,Arial,48,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+    ///
+    /// [Events]
+    /// Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+    /// Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,First
+    /// Dialogue: 0,bad-time,0:00:06.00,Default,,0,0,0,,Bad time
+    /// Dialogue: 0,0:00:07.00,0:00:10.00,Default,,0,0,0,,Second
+    /// ";
+    ///
+    /// let (ass, errors) = AssFile::parse_with_recovery(content);
+    /// assert_eq!(ass.events.len(), 2);
+    /// assert!(!errors.is_empty());
+    /// ```
+    pub fn parse_with_recovery(content: &str) -> (Self, Vec<ParseError>) {
+        let mut ass = Self::new();
+        let mut errors = Vec::new();
+        let mut current_section = String::new();
+        let mut in_known_section = false;
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with(';') || line.starts_with('!') {
+                continue;
+            }
+            if line.starts_with('[') {
+                if let Some(end) = line.find(']') {
+                    current_section = line[1..end].to_string().trim().to_string();
+                    in_known_section = matches!(
+                        current_section.as_str(),
+                        "Script Info"
+                            | "V4+ Styles"
+                            | "V4 Styles"
+                            | "Events"
+                            | "Fonts"
+                            | "Graphics"
+                            | "Aegisub Project Garbage"
+                    );
+                    if !in_known_section && !current_section.is_empty() {
+                        ass.warnings
+                            .push(ParseWarning::UnknownSection(current_section.clone()));
+                    }
+                    continue;
+                }
+            }
+            if !in_known_section {
+                continue;
+            }
+            match current_section.as_str() {
+                "Script Info" => {
+                    let _ = ass.parse_script_info(line);
+                }
+                "V4+ Styles" | "V4 Styles" => {
+                    if line.starts_with("Format:") {
+                        continue;
+                    }
+                    let is_v4 = current_section == "V4 Styles";
+                    if let Err(e) = ass.parse_style_line(line, is_v4) {
+                        if let ParseError::InvalidStyle(ref msg) = e {
+                            ass.warnings.push(ParseWarning::InvalidField {
+                                field: "Style".to_string(),
+                                value: msg.clone(),
+                                default: "skipped".to_string(),
+                            });
+                        }
+                        errors.push(e);
+                    }
+                }
+                "Events" => {
+                    if line.starts_with("Format:") {
+                        continue;
+                    }
+                    if let Err(e) = ass.parse_event_line(line) {
+                        errors.push(e);
+                    }
+                }
+                "Fonts" => ass.parse_font_line(line),
+                _ => {}
+            }
+        }
+        (ass, errors)
     }
 
     /// Parse ASS content leniently, recovering from errors instead of aborting.
@@ -394,8 +506,9 @@ impl AssFile {
     }
 
     /// Find a style by name.
-    pub fn find_style(&self, name: &str) -> Option<&Style> {
-        self.styles.iter().find(|s| s.name == name)
+    pub fn find_style(&self, name: impl AsRef<str>) -> Option<&Style> {
+        let name_str = name.as_ref();
+        self.styles.iter().find(|s| s.name == *name_str)
     }
 
     /// Returns the script resolution as (width, height) from `[Script Info]`.

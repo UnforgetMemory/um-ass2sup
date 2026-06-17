@@ -1,4 +1,4 @@
-use ass_parser::{AssFile, Effect, Event, EventType, Timestamp};
+use ass_parser::{AssFile, Effect, Event, EventType, StyleName, Timestamp};
 use subtitle_renderer::{
     FontManager, RenderConfig, RenderContext, RenderedFrame, Renderer, Shaper,
 };
@@ -425,7 +425,7 @@ fn make_simple_ass(text: &str, start_cs: u64, end_cs: u64) -> AssFile {
         layer: 0,
         start: Timestamp::from_ms(start_cs),
         end: Timestamp::from_ms(end_cs),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,
@@ -607,7 +607,7 @@ fn test_render_two_overlapping_events() {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(3000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,
@@ -623,7 +623,7 @@ fn test_render_two_overlapping_events() {
         layer: 0,
         start: Timestamp::from_ms(1000),
         end: Timestamp::from_ms(5000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,
@@ -879,7 +879,11 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Opaque,,0,0,0,,Opaque Box Text
     let ass = AssFile::parse(content).unwrap();
     // Verify the style is parsed with BorderStyle=3
     let style = &ass.styles[0];
-    assert_eq!(style.border_style, 3, "Style should have BorderStyle=3");
+    assert_eq!(
+        style.border_style,
+        ass_parser::BorderStyle::OpaqueBox,
+        "Style should have BorderStyle=3"
+    );
 
     let renderer = Renderer::new(RenderConfig::default());
     let frame = renderer.render_ass(&ass, 3000);
@@ -1174,7 +1178,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,Combined,,0,0,0,,Combined Features
 "#;
     let ass = AssFile::parse(content).unwrap();
     let style = &ass.styles[0];
-    assert_eq!(style.border_style, 3);
+    assert_eq!(style.border_style, ass_parser::BorderStyle::OpaqueBox);
     assert_eq!(style.scale_x, 120.0);
     assert_eq!(style.scale_y, 110.0);
     assert_eq!(style.spacing, 3.0);
@@ -1205,7 +1209,7 @@ fn test_banner_effect_ltr_changes_x_position() {
     let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
     ass.styles.push(ass_parser::Style {
-        name: "Default".to_string(),
+        name: StyleName::new("Default"),
         font_name: "DejaVu Sans".to_string(),
         ..ass_parser::Style::default()
     });
@@ -1214,7 +1218,7 @@ fn test_banner_effect_ltr_changes_x_position() {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(10000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,
@@ -1256,7 +1260,7 @@ fn test_banner_effect_rtl_changes_x_position() {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(10000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,
@@ -1300,7 +1304,7 @@ fn test_scroll_up_effect_changes_y_position() {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(10000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,
@@ -1342,7 +1346,7 @@ fn test_scroll_down_effect_changes_y_position() {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(10000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,
@@ -1380,7 +1384,7 @@ fn test_scroll_up_top_offset_limits_scroll() {
     let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
     ass.styles.push(ass_parser::Style {
-        name: "Default".to_string(),
+        name: StyleName::new("Default"),
         font_name: "DejaVu Sans".to_string(),
         ..ass_parser::Style::default()
     });
@@ -1389,7 +1393,7 @@ fn test_scroll_up_top_offset_limits_scroll() {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(50000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,
@@ -1437,7 +1441,7 @@ fn test_scroll_down_bottom_offset_limits_scroll() {
     let renderer = Renderer::new(RenderConfig::default());
     let mut ass = AssFile::new();
     ass.styles.push(ass_parser::Style {
-        name: "Default".to_string(),
+        name: StyleName::new("Default"),
         font_name: "DejaVu Sans".to_string(),
         ..ass_parser::Style::default()
     });
@@ -1446,7 +1450,7 @@ fn test_scroll_down_bottom_offset_limits_scroll() {
         layer: 0,
         start: Timestamp::from_ms(0),
         end: Timestamp::from_ms(50000),
-        style_name: "Default".to_string(),
+        style: StyleName::new("Default"),
         name: String::new(),
         margin_l: 0,
         margin_r: 0,

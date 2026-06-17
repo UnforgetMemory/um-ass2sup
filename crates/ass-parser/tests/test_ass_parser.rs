@@ -121,8 +121,8 @@ Dialogue: 0,0:00:06.00,0:00:10.00,Sign,,0,0,0,,Sign text
     let ass = AssFile::parse(input).unwrap();
     assert_eq!(ass.styles.len(), 2);
     assert_eq!(ass.events.len(), 2);
-    assert_eq!(ass.events[0].style_name, "Default");
-    assert_eq!(ass.events[1].style_name, "Sign");
+    assert_eq!(ass.events[0].style, "Default");
+    assert_eq!(ass.events[1].style, "Sign");
 }
 
 #[test]

@@ -395,7 +395,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,, ,0,0,0,,Empty style name
     // Empty style name "" doesn't match "Default" → V009
     // But the parser may trim it; check if the style_name is empty
     let event = &ass.events[0];
-    if event.style_name.is_empty() || event.style_name == " " {
+    if event.style.as_str().is_empty() || event.style.as_str() == " " {
         let v009: Vec<_> = report
             .findings
             .iter()

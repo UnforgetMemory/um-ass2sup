@@ -192,10 +192,7 @@ impl Renderer {
 
         for event in events {
             let event_start = std::time::Instant::now();
-            let style = ass
-                .find_style(&event.style_name)
-                .cloned()
-                .unwrap_or_default();
+            let style = ass.find_style(&event.style).cloned().unwrap_or_default();
             let event_start_ms = event.start.as_ms();
             let event_end_ms = event.end.as_ms();
             let ctx = self.build_context(
@@ -213,7 +210,7 @@ impl Renderer {
             if event_elapsed.as_millis() > 500 {
                 tracing::warn!(
                     timestamp_ms,
-                    style = %event.style_name,
+                    style = %event.style,
                     text_len = event.text.len(),
                     elapsed_ms = event_elapsed.as_millis() as u64,
                     "render_ass: SLOW event (>500ms)"
@@ -221,7 +218,7 @@ impl Renderer {
             } else {
                 tracing::trace!(
                     timestamp_ms,
-                    style = %event.style_name,
+                    style = %event.style,
                     text_len = event.text.len(),
                     elapsed_us = event_elapsed.as_micros() as u64,
                     "render_ass: event done"
@@ -289,13 +286,13 @@ impl Renderer {
             shadow_color: style.shadow_color.to_rgba(),
             bold: style.bold,
             italic: style.italic,
-            outline_width: style.outline_width as f32,
-            shadow_depth: style.shadow_depth as f32,
-            alignment: style.alignment,
+            outline_width: style.outline as f32,
+            shadow_depth: style.shadow as f32,
+            alignment: style.alignment.to_u8(),
             margin_l: event.margin_l as f32,
             margin_r: event.margin_r as f32,
             margin_v: event.margin_v as f32,
-            border_style: style.border_style,
+            border_style: style.border_style.to_u8(),
             ..Default::default()
         };
 
@@ -506,16 +503,16 @@ impl Renderer {
                         ctx.secondary_color = s.secondary_color.to_rgba();
                         ctx.outline_color = s.outline_color.to_rgba();
                         ctx.shadow_color = s.shadow_color.to_rgba();
-                        ctx.outline_width = s.outline_width as f32;
-                        ctx.shadow_depth = s.shadow_depth as f32;
-                        ctx.alignment = s.alignment;
+                        ctx.outline_width = s.outline as f32;
+                        ctx.shadow_depth = s.shadow as f32;
+                        ctx.alignment = s.alignment.to_u8();
                         ctx.scale_x = s.scale_x as f32;
                         ctx.scale_y = s.scale_y as f32;
                         ctx.spacing = s.spacing as f32;
                         ctx.underline = s.underline;
                         ctx.strikeout = s.strikeout;
                         ctx.rotation = s.angle as f32;
-                        ctx.border_style = s.border_style;
+                        ctx.border_style = s.border_style.to_u8();
                         ctx.perspective_x = 0.0;
                         ctx.perspective_y = 0.0;
                         ctx.animation_skip = false;
@@ -530,9 +527,9 @@ impl Renderer {
                     ctx.secondary_color = style.secondary_color.to_rgba();
                     ctx.outline_color = style.outline_color.to_rgba();
                     ctx.shadow_color = style.shadow_color.to_rgba();
-                    ctx.outline_width = style.outline_width as f32;
-                    ctx.shadow_depth = style.shadow_depth as f32;
-                    ctx.alignment = style.alignment;
+                    ctx.outline_width = style.outline as f32;
+                    ctx.shadow_depth = style.shadow as f32;
+                    ctx.alignment = style.alignment.to_u8();
                     ctx.writing_mode = 0;
                     ctx.baseline_offset = 0.0;
                     ctx.perspective_x = 0.0;
@@ -1856,7 +1853,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_ms(0),
             end: Timestamp::from_ms(1000),
-            style_name: "Default".into(),
+            style: ass_parser::StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -2002,7 +1999,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_ms(0),
             end: Timestamp::from_ms(10000),
-            style_name: "Default".into(),
+            style: ass_parser::StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -2093,7 +2090,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_ms(0),
             end: Timestamp::from_ms(5000),
-            style_name: "Default".into(),
+            style: ass_parser::StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -2179,7 +2176,7 @@ mod tests {
     #[test]
     fn test_build_context_border_style_opaque_box() {
         let style = Style {
-            border_style: 3,
+            border_style: ass_parser::BorderStyle::OpaqueBox,
             ..Default::default()
         };
         let event = make_test_event("Hello");
@@ -2249,7 +2246,7 @@ mod tests {
             layer: 1,
             start: Timestamp::from_ms(0),
             end: Timestamp::from_ms(1000),
-            style_name: "Default".into(),
+            style: ass_parser::StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -2265,7 +2262,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_ms(0),
             end: Timestamp::from_ms(1000),
-            style_name: "Default".into(),
+            style: ass_parser::StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
