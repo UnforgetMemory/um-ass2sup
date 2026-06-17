@@ -7,11 +7,11 @@ fn test_default_style() {
     assert_eq!(s.font_name, "Arial");
     assert_eq!(s.font_size, 20.0);
     assert!(!s.bold);
-    assert_eq!(s.alignment, 2);
-    assert_eq!(s.margin_l, 10);
-    assert_eq!(s.margin_r, 10);
-    assert_eq!(s.margin_v, 10);
-    assert_eq!(s.encoding, 1);
+    assert_eq!(s.alignment.to_u8(), 2);
+    assert_eq!(s.margins.left, 10);
+    assert_eq!(s.margins.right, 10);
+    assert_eq!(s.margins.vertical, 10);
+    assert_eq!(s.encoding.to_u8(), 1);
 }
 
 #[test]
@@ -22,7 +22,7 @@ fn test_parse_style_line() {
     assert_eq!(s.font_name, "Arial");
     assert_eq!(s.font_size, 20.0);
     assert!(!s.bold);
-    assert_eq!(s.alignment, 2);
+    assert_eq!(s.alignment.to_u8(), 2);
 }
 
 #[test]
@@ -44,8 +44,8 @@ fn test_parse_style_custom_alignment() {
     let s = Style::parse_from_line(line).unwrap();
     assert_eq!(s.name, "Sign");
     assert_eq!(s.font_size, 48.0);
-    assert_eq!(s.alignment, 8);
-    assert_eq!(s.margin_v, 60);
+    assert_eq!(s.alignment.to_u8(), 8);
+    assert_eq!(s.margins.vertical, 60);
 }
 
 #[test]
@@ -66,15 +66,14 @@ fn test_parse_v4_style_line() {
     assert!(!s.italic);
     assert!(!s.underline);
     assert!(!s.strikeout);
-    assert_eq!(s.border_style, 1);
-    assert!((s.outline_width - 2.0).abs() < f64::EPSILON);
-    assert!((s.shadow_depth - 2.0).abs() < f64::EPSILON);
-    assert_eq!(s.alignment, 2);
-    assert_eq!(s.margin_l, 10);
-    assert_eq!(s.margin_r, 10);
-    assert_eq!(s.margin_v, 10);
-    assert_eq!(s.encoding, 1);
-    assert_eq!(s.relative_to, 0);
+    assert_eq!(s.border_style.to_u8(), 1);
+    assert!((s.outline - 2.0).abs() < f64::EPSILON);
+    assert!((s.shadow - 2.0).abs() < f64::EPSILON);
+    assert_eq!(s.alignment.to_u8(), 2);
+    assert_eq!(s.margins.left, 10);
+    assert_eq!(s.margins.right, 10);
+    assert_eq!(s.margins.vertical, 10);
+    assert_eq!(s.encoding.to_u8(), 1);
 }
 
 #[test]

@@ -1,9 +1,11 @@
 use super::color::AssColor;
 use super::effect::Effect;
+use super::error::ParseError;
+use super::error::ParseWarning;
 use super::event::{Event, EventType};
 use super::style::Style;
 use super::timestamp::Timestamp;
-use super::ParseError;
+use super::types::{Alignment, BorderStyle, Encoding, Margins, StyleName};
 use super::{AssFile, ScriptInfo, SubtitleFormat};
 
 /// Parses an SRT (SubRip) subtitle file into an [`AssFile`].
@@ -47,7 +49,7 @@ pub fn parse_srt(content: &str) -> Result<AssFile, ParseError> {
             layer: 0,
             start,
             end,
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -66,6 +68,7 @@ pub fn parse_srt(content: &str) -> Result<AssFile, ParseError> {
         styles: vec![srt_default_style()],
         events,
         embedded_fonts: Vec::new(),
+        warnings: Vec::new(),
     })
 }
 
@@ -202,7 +205,7 @@ impl AssFile {
 
 fn srt_default_style() -> Style {
     Style {
-        name: "Default".to_string(),
+        name: StyleName::new("Default"),
         font_name: "Arial".to_string(),
         font_size: 48.0,
         primary_color: AssColor::WHITE,
@@ -217,21 +220,138 @@ fn srt_default_style() -> Style {
         scale_y: 100.0,
         spacing: 0.0,
         angle: 0.0,
-        border_style: 1,
-        outline_width: 2.0,
-        shadow_depth: 2.0,
-        alignment: 2,
-        margin_l: 10,
-        margin_r: 10,
-        margin_v: 10,
-        encoding: 1,
-        relative_to: 0,
+        border_style: BorderStyle::OutlineAndShadow,
+        outline: 2.0,
+        shadow: 2.0,
+        alignment: Alignment::BottomCenter,
+        raw_alignment: 2,
+        margins: Margins::default(),
+        encoding: Encoding::default(),
+    }
+}
+
+/// A parsed SubRip (SRT) subtitle file in its native format.
+///
+/// SRT is a simpler format than ASS. This struct preserves the original
+/// event data (timing + text) without adding ASS-style formatting.
+/// Use [`AssFile::from_srt`] to convert to a full ASS representation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SrtFile {
+    /// Dialogue events extracted from the SRT file.
+    pub events: Vec<Event>,
+    /// Non-fatal warnings collected during parsing.
+    pub warnings: Vec<ParseWarning>,
+}
+
+impl SrtFile {
+    /// Parse SRT content into an [`SrtFile`].
+    ///
+    /// This parses the same format as [`parse_srt`] but returns an [`SrtFile`]
+    /// instead of directly converting to [`AssFile`].
+    pub fn parse(content: &str) -> Self {
+        let mut events = Vec::new();
+        let mut warnings = Vec::new();
+        let mut block_index = 0usize;
+        let blocks: Vec<&str> = content.split("\n\n").collect();
+
+        for block in blocks {
+            let block = block.trim();
+            if block.is_empty() {
+                continue;
+            }
+            let lines: Vec<&str> = block.lines().collect();
+            if lines.len() < 2 {
+                warnings.push(ParseWarning::SrtBlockSkipped {
+                    index: block_index,
+                    reason: "fewer than 2 lines".to_string(),
+                });
+                block_index += 1;
+                continue;
+            }
+            let timecode_line = if lines[0].contains("-->") {
+                lines[0]
+            } else if lines.len() > 1 && lines[1].contains("-->") {
+                lines[1]
+            } else {
+                warnings.push(ParseWarning::SrtBlockSkipped {
+                    index: block_index,
+                    reason: "no timecode line found".to_string(),
+                });
+                block_index += 1;
+                continue;
+            };
+            let text_start = if lines[0].contains("-->") { 1 } else { 2 };
+            let text: String = lines[text_start..].join("\n");
+
+            match parse_srt_timecodes(timecode_line) {
+                Ok((start, end)) => {
+                    events.push(Event {
+                        event_type: EventType::Dialogue,
+                        layer: 0,
+                        start,
+                        end,
+                        style: StyleName::new("Default"),
+                        name: String::new(),
+                        margin_l: 0,
+                        margin_r: 0,
+                        margin_v: 0,
+                        effect: Effect::None,
+                        text: convert_srt_tags(&text),
+                        override_tags: Vec::new(),
+                        karaoke_segments: Vec::new(),
+                        raw_override_block: String::new(),
+                    });
+                }
+                Err(e) => {
+                    warnings.push(ParseWarning::SrtBlockSkipped {
+                        index: block_index,
+                        reason: format!("invalid timestamp: {e}"),
+                    });
+                }
+            }
+            block_index += 1;
+        }
+
+        Self { events, warnings }
+    }
+}
+
+impl AssFile {
+    /// Convert a parsed [`SrtFile`] to an [`AssFile`] with ASS defaults.
+    ///
+    /// The resulting `AssFile` uses the standard SRT default style
+    /// (Arial, 48pt, white with black outline) and default script info
+    /// (1920x1080, v4.00+). This provides an "upgrade path" from the
+    /// simpler SRT format to full ASS.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ass_parser::srt::SrtFile;
+    /// use ass_parser::AssFile;
+    ///
+    /// let srt_content = "1\n00:00:01,000 --> 00:00:05,000\nHello World";
+    /// let srt = SrtFile::parse(srt_content);
+    /// let ass = AssFile::from_srt(&srt);
+    /// assert_eq!(ass.events.len(), 1);
+    /// assert_eq!(ass.events[0].text, "Hello World");
+    /// ```
+    pub fn from_srt(srt: &SrtFile) -> Self {
+        Self {
+            format: SubtitleFormat::Ass,
+            script_info: ScriptInfo::default(),
+            styles: vec![srt_default_style()],
+            events: srt.events.clone(),
+            embedded_fonts: Vec::new(),
+            warnings: srt.warnings.clone(),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::StyleName;
     use crate::{Effect, Event, EventType};
 
     #[test]
@@ -242,7 +362,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_ms(1000),
             end: Timestamp::from_ms(5000),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -267,7 +387,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_ms(5000),
             end: Timestamp::from_ms(10000),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -283,7 +403,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_ms(1000),
             end: Timestamp::from_ms(5000),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -308,7 +428,7 @@ mod tests {
             layer: 0,
             start: Timestamp::ZERO,
             end: Timestamp::from_ms(3000),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -333,7 +453,7 @@ mod tests {
             layer: 0,
             start: Timestamp::ZERO,
             end: Timestamp::from_ms(3000),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -357,7 +477,7 @@ mod tests {
             layer: 0,
             start: Timestamp::ZERO,
             end: Timestamp::from_ms(3000),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -373,7 +493,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_ms(1000),
             end: Timestamp::from_ms(2000),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -405,7 +525,7 @@ mod tests {
             layer: 0,
             start: Timestamp::from_hms(1, 23, 45, 678),
             end: Timestamp::from_hms(2, 0, 0, 0),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,
@@ -486,7 +606,7 @@ mod tests {
             layer: 0,
             start: Timestamp::ZERO,
             end: Timestamp::from_ms(3000),
-            style_name: "Default".to_string(),
+            style: StyleName::new("Default"),
             name: String::new(),
             margin_l: 0,
             margin_r: 0,

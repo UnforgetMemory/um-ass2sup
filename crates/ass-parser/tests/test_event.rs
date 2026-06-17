@@ -12,7 +12,7 @@ fn test_parse_dialogue_line() {
     assert_eq!(e.layer, 0);
     assert_eq!(e.start.as_ms(), 1000);
     assert_eq!(e.end.as_ms(), 5000);
-    assert_eq!(e.style_name, "Default");
+    assert_eq!(e.style, "Default");
     assert_eq!(e.text, "Hello World");
     assert_eq!(e.duration_ms(), 4000);
 }
@@ -122,7 +122,7 @@ fn test_event_with_style() {
         "0,0:00:01.00,0:00:05.00,Sign,,0,0,0,,Text with sign style",
     )
     .unwrap();
-    assert_eq!(e.style_name, "Sign");
+    assert_eq!(e.style, "Sign");
 }
 
 #[test]
