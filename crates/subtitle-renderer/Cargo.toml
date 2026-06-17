@@ -17,10 +17,12 @@ ass-parser = { path = "../ass-parser" }
 wide.workspace = true
 parking_lot.workspace = true
 fontconfig = { version = "0.11", optional = true, features = ["dlopen"] }
+cosmic-text = { workspace = true, optional = true }
 
 [features]
 default = []
 fontconfig = ["dep:fontconfig"]
+cosmic-text = ["dep:cosmic-text"]
 
 [dev-dependencies]
 criterion.workspace = true
