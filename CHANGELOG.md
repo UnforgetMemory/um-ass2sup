@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.3] - 2026-06-17 (Sprint 6: Sub-7 Output Formats - sink trait + TTML + WebVTT + ASS passthrough)
+
+### Added
+- **`bdn-xml::sink` module**: the v2.0 multi-format seam.
+  - `OutputSink` trait: `write_frame(SinkFrame) -> Result<()>` + `finalize()`. `Send + Sync` so async dispatch is possible.
+  - `SinkError` (thiserror): `Io(std::io::Error)` and `Format(String)`.
+  - `SinkFrame`: minimal frame struct (`start_ms`, `end_ms`, `text`, `width`, `height`, `rgba`).
+  - `TtmlSink<W>`: W3C TTML2 / SMPTE-TT serializer. Validates timing before write. Emits one `<p>` per frame.
+  - `WebVttSink<W>`: W3C WebVTT serializer. Numbered cues, `HH:MM:SS.mmm` timecodes.
+  - `AssPassthroughSink<W>`: emits a valid ASS v4.00+ document with `[Script Info]`, `[V4+ Styles]`, `[Events]`. Header is written once on the first frame.
+  - `write_ttml_header` / `write_webvtt_header` helpers: caller-controlled prologue/epilogue flow.
+  - `xml_escape()` for `<`/`>`/`&`/`"`/`'` in TTML text content.
+  - `ms_to_ttml_timecode`, `ms_to_webvtt_timecode`, `ms_to_ass_timecode` formatters.
+  - 12 unit tests covering happy path, timing validation, finalize-after-write rejection, empty-passthrough.
+
+### Verification
+- `cargo test -p bdn-xml --lib sink` — 12/12 pass
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo fmt --check` — clean
+
+### Migration
+PGS/BDN paths are unchanged. v2.0 will add a `PgsSink: OutputSink` adapter in the `pgs-encoder` crate so the entire pipeline can dispatch through one trait. CLI `--format pgs|bdn|ttml|webvtt|ass` flag is a follow-up.
+
+---
+
 ## [0.6.2] - 2026-06-17 (Sprint 5: Sub-6 GPU - backend trait + dispatch)
 
 ### Added
