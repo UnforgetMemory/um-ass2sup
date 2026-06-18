@@ -16,6 +16,12 @@ mod dithering;
 mod median_cut;
 mod types;
 
+pub mod color_pipeline;
+
+pub use color_pipeline::{
+    convert_rgb, detect_source_color_space, ColorPipelineConfig, ColorSpace, Tonemap,
+    TransferFunction,
+};
 pub use median_cut::find_nearest_index;
 pub use types::{DitherMethod, QuantizedFrame, Rgba};
 

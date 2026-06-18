@@ -9,6 +9,7 @@ description = "Color quantization for PGS subtitle encoding (max 256 colors)"
 [dependencies]
 thiserror.workspace = true
 tracing.workspace = true
+serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 criterion.workspace = true
