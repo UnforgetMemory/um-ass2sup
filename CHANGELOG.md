@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-06-17 (Sprint 3: Sub-4 Renderer - effect stack)
+
+### Added
+- **`subtitle-renderer::effect_stack` module**: typed per-line effect stack consolidating the 11 ASS effect categories (Fade, FadeComplex, Pos, Move, Clip, InverseClip, RotationX/Y/Z, ShearX/Y, Blur, EdgeBlur). `EffectStack` provides push/resolve_*/apply methods with per-frame evaluation semantics. The `apply()` method is the v2.0 entry point that the renderer calls per frame.
+- **14 new unit tests** in `effect_stack::tests` covering: empty stack defaults, Pos, Move (before/after/inside window), Fade (in/out), FadeComplex three-segment, Clip + InverseClip, RotationZ accumulation, Blur+EdgeBlur precedence, and apply() to RenderContext.
+- **`docs/plans/04-renderer/task-01-effect-stack.md`**: architectural documentation.
+
+### Migration path
+`EffectStack::apply()` is the v2.0 entry point; the legacy `build_context()` in `context.rs` continues to work. The full renderer migration is tracked in `docs/superpowers/specs/2026-06-17-Sub-4-renderer.md`.
+
+### Verification
+- `cargo test -p subtitle-renderer` — passes (incl. 14 new EffectStack tests)
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo fmt --check` — clean
+
+---
+
 ## [0.5.9] - 2026-06-17 (Sprint 2: Sub-3 Font Engine - foundation)
 
 ### Added
