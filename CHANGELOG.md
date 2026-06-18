@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.2] - 2026-06-17 (Sprint 5: Sub-6 GPU - backend trait + dispatch)
+
+### Added
+- **`subtitle-renderer::backend` module**: the v2.0 GPU seam.
+  - `RendererBackend` trait: `draw_glyph`, `fill_rect`, `apply_effect`, `finalize`. `Send + Sync` so the GPU implementation can carry a wgpu device handle.
+  - `BackendPolicy` enum: `CpuOnly` (default) | `GpuOnly` | `Hybrid` with `select(event_count, gpu_available) -> &'static str`.
+  - Types: `Point`, `Rect`, `Color { r, g, b, a }` with `BLACK`/`WHITE`/`TRANSPARENT` constants, `Glyph { id: GlyphId, pos, color }`, `BackendEffect::FillRect | Blur`, `RenderedBitmap { width, height, data: Vec<u8> }` (RGBA, 8-bit, row-major).
+  - 9 unit tests covering point/rect/color construction, hybrid dispatch policy boundaries (event_count=99 → cpu, 100 → gpu).
+
+### Verification
+- `cargo test -p subtitle-renderer backend` — 9/9 pass
+- `cargo test --workspace` — 0 failures across 50+ test binaries (1000+ tests)
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo fmt --check` — clean
+
+### Migration
+The v0.6.x CPU renderer is unchanged. v2.0 will add `VelloBackend: RendererBackend` behind a `vello` cargo feature; `BackendPolicy::Hybrid` will be wired into the CLI via a new `--render-backend` flag.
+
+---
+
 ## [0.6.1] - 2026-06-17 (Sprint 4: Sub-5 Color Pipeline - foundation)
 
 ### Added
