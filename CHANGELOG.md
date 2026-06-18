@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.5] - 2026-06-17 (Sprint 8: Sub-9 Testing - 3-OS CI matrix + Criterion + coverage)
+
+### Added
+- **CI matrix expansion (`.github/workflows/ci.yml`)**:
+  - **test** job now runs on `ubuntu-latest`, `macos-latest`, `windows-latest` (3-OS matrix, `fail-fast: false`).
+  - **coverage** job: `cargo install cargo-llvm-cov && cargo llvm-cov --workspace --all-targets --lcov` + uploads `lcov.info` as a build artifact.
+  - **fmt** / **clippy** / **bench** / **msrv** jobs kept on Linux.
+  - Push trigger expanded to `dev-**` so dev branches are tested.
+- **Criterion benchmark scaffold (`crates/ass-parser/benches/parser_bench.rs`)**:
+  - 3 benches: `parse_simple_ass`, `parse_karaoke_ass`, `parse_with_recovery`.
+  - `criterion = "0.5"` dev-dependency added to `ass-parser/Cargo.toml`.
+  - HTML reports land in `target/criterion/`.
+- **Confirmed `cargo bench` works**: `parse_with_recovery` runs in ~1.5 µs on this host.
+
+### Verification
+- `cargo bench -p ass-parser --no-run` — compiles
+- `cargo bench -p ass-parser --bench parser_bench` — runs and produces timings
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo fmt --check` — clean
+
+### Follow-up
+- Add Criterion benches for the renderer and quantizer (separate sub-tasks).
+- Generate a coverage badge from the uploaded `lcov.info` (next sprint).
+
+---
+
 ## [0.6.4] - 2026-06-17 (Sprint 7: Sub-8 CLI - smart error diagnostics)
 
 ### Added
