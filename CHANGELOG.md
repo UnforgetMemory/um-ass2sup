@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.4] - 2026-06-17 (Sprint 7: Sub-8 CLI - smart error diagnostics)
+
+### Added
+- **`ass2sup-cli::smart_error` module**: actionable error wrapping.
+  - `Suggestion` struct (text + optional example) with `new()` and `with_example()` constructors.
+  - `SmartError<'a>` borrows the underlying `Error` (avoids `Clone` on `Error`).
+  - `format_human()` produces "error: ...\n\nsuggestions:\n  - ...\n" output.
+  - `diagnose(&Error) -> SmartError` matches:
+    - `Error::Io { source, .. }` with `NotFound` → path-existence hint + INPUT.md link
+    - `Error::Io { source, .. }` with `PermissionDenied` → chmod hint
+    - `Error::Parse { file, line, .. }` → line-specific location + CRLF fix + PARSE_ERRORS.md
+    - `Error::Render(RenderError::Effect { effect, .. })` → effect-specific hint
+    - `Error::Render(RenderError::Event { event_idx, .. })` → event-isolation hint
+- **12 unit tests** in `smart_error::tests` covering: suggestion constructors, SmartError builder, format_human output, every diagnose() branch (including parse-without-line + the `Other` no-op path).
+
+### Verification
+- `cargo test -p ass2sup-cli --lib smart_error` — 12/12 pass
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo fmt --check` — clean
+
+### Migration
+The CLI's main() still prints bare `Display` output for now. v2.0 will switch to `smart_error::diagnose().format_human()` for every error print site.
+
+---
+
 ## [0.6.3] - 2026-06-17 (Sprint 6: Sub-7 Output Formats - sink trait + TTML + WebVTT + ASS passthrough)
 
 ### Added
