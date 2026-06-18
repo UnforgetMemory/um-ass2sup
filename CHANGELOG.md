@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.1] - 2026-06-17 (Sprint 4: Sub-5 Color Pipeline - foundation)
+
+### Added
+- **`color-quantizer::color_pipeline` module**: typed colour-pipeline primitives for the v2.0 HDR path.
+  - `ColorSpace` enum: SdrBt709, HdrBt2020Pq, HdrBt2020Hlg with `is_hdr()` predicate and `to_xyz_matrix()` (BT.601/BT.709/BT.2020 D65 matrix).
+  - `TransferFunction` enum: Linear, Srgb, Pq (SMPTE ST 2084), Hlg (ARIB STD-B67) with `to_linear()` / `from_linear()` roundtrips.
+  - `Tonemap` enum: None, Hable (Uncharted 2 filmic), Reinhard, Aces (Narkowicz fit) with `apply()` operator.
+  - `ColorPipelineConfig` + `convert_rgb()` end-to-end helper.
+  - `detect_source_color_space(ass_text)` for `Output: HDR` and `YCbCr Matrix: BT.2020` auto-detection.
+- **18 new unit tests** in `color_pipeline::tests` covering: default colour space, HDR detection, BT.709 D65 reference, sRGB/Linear/PQ/HLG roundtrips, all four tonemapping operators, and HDR→SDR conversion.
+
+### Verification
+- `cargo test -p color-quantizer color_pipeline` — 18/18 pass
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo fmt --check` — clean
+
+---
+
 ## [0.6.0] - 2026-06-17 (Sprint 3: Sub-4 Renderer - effect stack)
 
 ### Added
