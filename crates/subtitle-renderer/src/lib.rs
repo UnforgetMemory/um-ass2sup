@@ -1,3 +1,4 @@
+pub mod backend;
 pub mod cache;
 mod context;
 pub mod effect_stack;
@@ -12,6 +13,10 @@ pub mod transform;
 #[cfg(feature = "cosmic-text")]
 pub mod font_cosmic;
 
+pub use backend::{
+    BackendEffect, BackendPolicy, Color, Glyph, GlyphId, Point, Rect, RenderedBitmap,
+    RendererBackend,
+};
 pub use cache::{make_frame_key, FrameCache, FrameCacheKey};
 pub use context::{RenderConfig, RenderContext, RenderedFrame};
 pub use effect_stack::{EffectStack, RendererEffect};
