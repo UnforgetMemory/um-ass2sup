@@ -48,9 +48,14 @@
 //! ```
 
 mod error;
+pub mod sink;
 mod types;
 mod xml;
 
 pub use error::BdnError;
+pub use sink::{
+    write_ttml_header, write_webvtt_header, AssPassthroughSink, OutputSink, Result as SinkResult,
+    SinkError, TtmlSink, WebVttSink,
+};
 pub use types::{BdnEvent, BdnXml, QuantizedFrame};
 pub use xml::{generate_png, generate_xml, ms_to_timecode, save_frame_png};
