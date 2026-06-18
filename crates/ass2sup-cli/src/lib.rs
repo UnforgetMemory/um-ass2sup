@@ -43,6 +43,9 @@ pub mod config;
 /// Telemetry / logging initialisation helpers.
 pub mod telemetry;
 
+/// Smart error diagnostics with actionable suggestions (Sub-8).
+pub mod smart_error;
+
 /// Maximum input file size in bytes (100 MiB).
 ///
 /// Subtitle files are normally < 1 MiB. Anything over 100 MiB is almost
