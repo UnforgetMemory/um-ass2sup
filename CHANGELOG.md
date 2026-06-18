@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-06-17 — v2.0 release
+
+This is the major-version release that closes out the v2.0 refactor plan.
+It bundles eight sprints of work (Sprint 0 → Sprint 8) and introduces
+the v2.0 architecture: typed AST parsing, error recovery, color pipeline,
+GPU seam, multi-format outputs, and smart CLI diagnostics.
+
+### Added (full v2.0 surface)
+- **Sub-1 Infrastructure (Sprint 0)**: `error` (unified thiserror enum), `config`
+  (TOML-backed with `--config` override), `telemetry` (tracing-subscriber with
+  `ASS2SUP_LOG` / `ASS2SUP_COLOR` env vars), wired into the CLI behind
+  `--config`, `--cjk-fallback`, `--log-level`.
+- **Sub-2 ASS Parser (Sprint 1 + 1.5)**: strong-typed domain types
+  (`StyleName`, `Alignment` enum, `AssColor` named fields), `parse_with_recovery`
+  for malformed inputs, `OverrideExpr` AST + `\t` animation evaluator with
+  piecewise libass semantics, 122-fixture libass-compat suite.
+- **Sub-3 Font Engine (Sprint 2)**: opt-in `cosmic-text` backend behind the
+  `cosmic-text` cargo feature. Legacy `fontdb`+`rustybuzz`+`ttf-parser` stack
+  preserved as the default; migration path documented.
+- **Sub-4 Renderer (Sprint 3)**: `EffectStack` (Fade, Move, Rotation, Scale,
+  Color animation, Blur, Shadow, Outline, Karaoke, Clip, InverseClip) with
+  11 effect primitives, 23 unit tests.
+- **Sub-5 Color Pipeline (Sprint 4)**: `color_quantizer::color_pipeline` module
+  with `ColorSpace` (SdrBt709 / HdrBt2020Pq / HdrBt2020Hlg), `TransferFunction`
+  (Linear / Srgb / Pq / Hlg), `Tonemap` (None / Hable / Reinhard / Aces), and
+  `convert_rgb()` + `detect_source_color_space()`.
+- **Sub-6 GPU (Sprint 5)**: `RendererBackend` trait + `BackendPolicy` dispatch
+  (CpuOnly / GpuOnly / Hybrid) — the seam for the future vello integration.
+  `Point`, `Rect`, `Color`, `Glyph`, `GlyphId`, `RenderedBitmap` types.
+- **Sub-7 Output Formats (Sprint 6)**: `bdn-xml::sink` module with
+  `OutputSink` trait, `TtmlSink` (W3C TTML2), `WebVttSink` (W3C WebVTT),
+  `AssPassthroughSink`, `SinkError`, `SinkFrame`. PGS/BDN paths unchanged.
+- **Sub-8 CLI (Sprint 7)**: `ass2sup-cli::smart_error` with `Suggestion`,
+  `SmartError`, `diagnose()` matching every major `Error` variant
+  (Io NotFound / PermissionDenied, Parse, Render::Effect / Render::Event).
+- **Sub-9 Testing (Sprint 8)**: 3-OS CI matrix (ubuntu/macOS/Windows),
+  `cargo-llvm-cov` coverage job uploading `lcov.info` as a build artifact,
+  Criterion bench scaffold at `crates/ass-parser/benches/parser_bench.rs`
+  (3 benches).
+
+### Quality gates
+- `cargo fmt --all -- --check` — clean
+- `cargo clippy --workspace --all-targets -- -D warnings` — 0 warnings
+- `cargo test --workspace` — 0 failures (1 OCR-roundtrip test ignored by design)
+- `cargo doc --workspace --no-deps` — 0 new warnings
+- `cargo bench -p ass-parser --bench parser_bench` — runs and produces timings
+
+### Migration notes
+- The public API surface is additive across all 8 sprints; no breaking
+  changes. Existing CLI invocations, library callers, and fixtures continue
+  to work unchanged.
+- The `cosmic-text` and `vello` features remain opt-in; the legacy
+  CPU paths are the default and are battle-tested.
+- The `telemetry::init()` env-var path (`ASS2SUP_LOG`, `ASS2SUP_COLOR`) is
+  the preferred way to control log level / colour from the shell.
+
+---
+
 ## [0.6.5] - 2026-06-17 (Sprint 8: Sub-9 Testing - 3-OS CI matrix + Criterion + coverage)
 
 ### Added
