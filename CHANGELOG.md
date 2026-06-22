@@ -7,7 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.5.2] - 2026-06-17
+## [2.1.0] - 2026-06-22
+
+### Added
+- **New `ass-core` crate**: Complete rewrite of ASS/SSA/SRT parser from scratch on branch `dev-2026-06-22`.
+  - `SubtitleDocument` AST: lossless, preserves original text (`text_raw`), `Option<u32>` margins with unset semantics.
+  - `time/` module: `Fps{num,den}` rational frame rate, pure integer `ms_to_90khz = ms * 90`, 5 timecode formats (ASS/SRT/TTML/BDN XML/90kHz).
+  - `lexer.rs`: Token stream + Section recognition with BOM handling and `Span(line,col,len)` tracking.
+  - `section.rs`: ScriptInfo/Style/Event/Font section parsers.
+  - `override_tag/`: 9 per-category sub-modules (position, color, font, geometry, clip, effect, karaoke, border + shared util).
+  - Libass-compatible override tag parsing: 50/50 PASS per TAG_MATRIX.md, including `\K`=`\kf`, `\a4`→5 VSFilter quirks, `\clip(@)` path reference, `\fsc` scale reset.
+  - `srt.rs`: Standalone SRT parser with `to_srt()` roundtrip.
+  - 193 tests: unit + proptest + complex scenarios + irregular fixtures + malformed ASS.
+  - 4 fuzz targets, 3 Criterion benchmarks.
+- **DDD modular architecture**: `types.rs` (StyleRef/Alignment/BorderStyle/Margins), `event.rs` (Event/EventType), `style.rs` (Style) separated from `lib.rs`.
+
+### Changed
+- **Old `ass-parser` moved**: `crates/ass-parser/` → `crates/_archive/ass-parser/` for clear separation. Downstream crates (ass2sup-cli, subtitle-renderer, subtitle-validator) still reference it via updated path.
+- **Workspace Cargo.toml**: Updated member paths for archive relocation.
+
+### Fixed
+- **Eliminated 760 lines of duplicate code**: No more `event.rs::parse_single_tag` vs `override_tag.rs::parse_override_tag` divergence.
+- **Zero unwrap_or in parser path**: All silent data loss paths replaced with explicit error/warning propagation.
+- **Pure integer timestamp math**: No f64 division/ceil/multiply/round accumulation drift.
+- **`\t()` transform parsing**: Fixed to use libass cnt-based argument counting (was treating tag as timing parameter).
+- **`\fsc` missing**: Added `ScaleReset` variant (libass resets both scale axes to style defaults).
+- **`\fn0` style reset**: Empty `FontName("")` signals style default font (libass compat).
+- **`\b0`/`\i0`/`\K` case handling**: Fixed in old ass-parser duplicate code; eliminated in ass-core.
+- **`\a4`→5 VSFilter mapping**: Legacy alignment values 4 and 8 remapped to center alignment 5.
 
 ### Changed
 - **Dependency upgrades**: fontdb 0.16.2→0.23.0, ttf-parser 0.21→0.25.1, rustybuzz 0.14→0.20.1, tiny-skia 0.11→0.12.0 — 4 core dependencies upgraded across 19 major versions.

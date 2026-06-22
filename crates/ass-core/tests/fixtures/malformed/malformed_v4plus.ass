@@ -1,0 +1,14 @@
+[Script Info]
+Title: Malformed V4+ Styles
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour
+Style: OnlyThreeFields,Arial,20
+Style: ShortLine
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:05.00,OnlyThreeFields,,0,0,0,,Should use defaults

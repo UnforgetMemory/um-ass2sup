@@ -1,0 +1,38 @@
+[package]
+name = "ass-core-fuzz"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ass_core = { path = ".." }
+
+[[bin]]
+name = "parse_ass"
+path = "fuzz_targets/parse_ass.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "parse_override_tag"
+path = "fuzz_targets/parse_override_tag.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "parse_srt"
+path = "fuzz_targets/parse_srt.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "parse_lenient"
+path = "fuzz_targets/parse_lenient.rs"
+test = false
+doc = false

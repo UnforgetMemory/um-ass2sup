@@ -1,0 +1,22 @@
+[package]
+name = "ass_core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ASS/SSA/SRT subtitle parser core — libass-compatible, lossless AST"
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+insta.workspace = true
+criterion.workspace = true
+
+[lints.rust]
+unsafe_code = "deny"
