@@ -1,11 +1,14 @@
-pub(super) enum DrawingCommand {
+pub(crate) enum DrawingCommand {
     MoveTo(f32, f32),
     LineTo(f32, f32),
     BezierTo(f32, f32, f32, f32, f32, f32),
     Close,
 }
 
-pub(super) fn parse_drawing_level(text: &str) -> u8 {
+/// Maximum number of times a drawing command can be repeated (DoS protection).
+const MAX_DRAWING_REPEAT: usize = 10000;
+
+pub(crate) fn parse_drawing_level(text: &str) -> u8 {
     for tag_block in text.chars().collect::<Vec<_>>().windows(4) {
         if tag_block[0] == '\\' && tag_block[1] == 'p' {
             if let Some(d) = tag_block.get(2).and_then(|c| c.to_digit(10)) {
@@ -16,7 +19,7 @@ pub(super) fn parse_drawing_level(text: &str) -> u8 {
     0
 }
 
-pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
+pub(crate) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
     let mut commands = Vec::new();
     let tokens: Vec<&str> = text.split_whitespace().collect();
     let mut i = 0;
@@ -89,7 +92,7 @@ pub(super) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
                             "b" => 6,
                             _ => 0,
                         };
-                        for _ in 0.._repeat {
+                        for _ in 0.._repeat.min(MAX_DRAWING_REPEAT) {
                             if i + 1 + args_needed < tokens.len() {
                                 match cmd_char {
                                     "m" => {

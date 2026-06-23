@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0] - 2026-06-23
+
+### Added
+- **cosmic-text font engine**: Migrated from `fontdb`+`rustybuzz`+`ttf-parser` to unified `cosmic-text` with `swash` glyph rasterization. `FontCosmicResolver` wraps `FontSystem`+`SwashCache` for cross-platform font discovery (DirectWrite/CoreText/fontconfig).
+- **CosmicShaper**: HarfBuzz shaping pipeline via `cosmic-text::Buffer` with per-glyph color, border, and outline rendering.
+- **CosmicPixmapPool**: 8-buffer reusable pixmap pool replaces per-call `Pixmap::new()` allocations, bounding peak memory regardless of parallel render count.
+- **53-tag build_context**: Full `OverrideTag`→`RenderContext` pipeline supporting all ASS override tags including `\k`/`\kf`/`\ko` karaoke, `\clip`/`\iclip` vector clipping, `\p4` drawing level-4 clip masks, and `\frz`/`\frx`/`\fry` perspective transforms.
+- **Karaoke 4-mode**: `\k` (syllable start), `\kf` (fill clip sweep with sub-pixel accuracy), `\ko` (outline only), and `\K` (optional fine timing). Blur and shadow apply only to the filled/active portion.
+- **Cross-platform font fallback**: 8-level chain with CJK glyph verification (`query_cjk_capable_any`), hardcoded CJK fallback list (Noto Sans CJK, WenQuanYi, IPAGothic, NanumGothic), fontconfig alias resolution, and `Family::SansSerif` generic fallback.
+- **Parallel rendering**: Rayon `par_iter()` chain merges render+quantize into a single pass, eliminating the intermediate `Vec<RenderedFrame>` (16.5 GB peak avoided for 1988 events at 1080p). Pre-warmed `ThreadPool` prevents Windows deadlock.
+- **Spans parsing module**: Structured parse of ASS event text into styled text spans via `cosmic/spans.rs`.
+- **Multiline banner/scroll effects**: BOB/TOP/BOTTOM scrolling, left/right/up/down banner scroll implemented with per-line wrap.
+
+### Changed
+- **Renderer modularization**: Split monolithic files into focused modules:
+  - `renderer/cosmic.rs` (918→236 lines) — extracted layout and karaoke to separate files
+  - `renderer/animation.rs` (834 lines) → `animation/{fade,transform,move}.rs`
+  - `renderer/compositing.rs` (488→225 lines) — effects extracted to `cosmic/effects/{composite,clip,blur,shadow}`
+  - `effects.rs` (446→9 lines) — thin re-export of `cosmic/effects`
+  - `renderer/mod.rs` (492→195 lines) — build_context extracted to standalone file
+- **Renderer context**: Deprecated `renderer/context/` module (old build_context) with `#[allow(dead_code)]`; unified 53-tag `build_context.rs` is the single source of truth.
+- **CLI `-debug` output**: Full execution-chain tracing (read→parse→render→encode→write) via `tracing` spans.
+- **`--font-dir` repeatable**: Load TTF/OTF/WOFF2 from arbitrary directories (containerised deployments).
+
+### Fixed
+- **3 DoS vulnerabilities** (audit-discovered, security-reviewed):
+  - Blur radius clamped to 64px max (`\blur(999999999)` no longer causes CPU DoS)
+  - Outline width clamped to 64px max (`\bord(999999999)` no longer causes OOM)
+  - Drawing repeat count capped at 10000 (`\p1 999999999 m 0 0` no longer allocates huge Vec)
+- **5 `unwrap()` calls** in shadow/clip/karaoke effects replaced with safe `match` fallbacks (prevent potential panic on zero-dimension pixmaps).
+- **\p4 clip mask**: Drawing level-4 now correctly applies clip masks instead of skipping.
+
+### Removed
+- Legacy `font.rs`/`font_manager.rs`/`shaper.rs`/`rasterizer.rs` (fontdb+rustybuzz stack) — archived to `docs/_archive/fontdb-legacy/`.
+- Old `renderer/karaoke.rs` state machine — replaced by `renderer/cosmic_karaoke.rs`.
+- `ass-parser` fuzz targets from workspace (crate archived to `_archive`).
+- `#[cfg(feature = "cosmic-text")]` gates — cosmic-text is now the sole font backend, not an optional feature.
+
+### Added
+- **PGS encoder Epoch management**: `CompositionState::EpochContinue(0xC0)` variant added for PGS spec compliance. `palette_update` flag now dynamically computed from palette hash (was always true). `DisplaySetKind` enum (EpochStart/NormalCase/EpochContinue/PaletteOnly) drives epoch state selection. 8 new tests verifying epoch state transitions, palette update flags, and display set composition.
+- **53-tag build_context coverage tests**: 62 new unit tests in `crates/subtitle-renderer/src/renderer/context/tests.rs` covering every `OverrideTag` variant through the `build_context` pipeline. Tests verify correct `RenderContext` field mutations per handler module (position, font, color, border, geometry, clip, karaoke, reset, transform, misc) including scaling, move interpolation, and composite states.
+- **Test helper module**: `crates/subtitle-renderer/tests/common/mod.rs` with shared builders (`make_event`, `make_test_doc`, `parse_doc`, `render_doc`) for ass_core type integration tests.
+
+### Changed
+- **test_renderer.rs fully migrated to ass_core types**: 107 of 123 tests switched from `renderer.render_ass(&AssFile)` to `common::render_doc(&SubtitleDocument)`. 16 effect/animation tests (banner, scroll, fade, karaoke-fade, perspective, transform) retained on `renderer.render_ass(&AssFile)` for the legacy path — these effects are pending `render_ass_core` implementation.
+
+### Fixed
+- **Archived ass-parser test paths**: Fixed `include_str!` paths in `crates/_archive/ass-parser/tests/` that broke when the crate was moved from `crates/ass-parser/` to `crates/_archive/ass-parser/`.
+
 ## [2.1.0] - 2026-06-22
 
 ### Added

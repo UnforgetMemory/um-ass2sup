@@ -151,7 +151,7 @@ fn process_segment(
                     ctx.objects.clear();
                     ctx.last_pcs_objects.clear();
                 }
-                CompositionState::NormalCase => {}
+                CompositionState::NormalCase | CompositionState::EpochContinue => {}
             }
 
             ctx.palette_id = *palette_id;

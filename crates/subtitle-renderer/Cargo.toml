@@ -9,18 +9,14 @@ description = "ASS/SRT subtitle rendering to RGBA bitmaps with font management, 
 [dependencies]
 thiserror.workspace = true
 tracing.workspace = true
-fontdb.workspace = true
-rustybuzz.workspace = true
-ttf-parser.workspace = true
 tiny-skia.workspace = true
-ass-parser = { path = "../ass-parser" }
+ass-parser = { path = "../_archive/ass-parser" }
+ass_core = { path = "../ass-core" }
 wide.workspace = true
 parking_lot.workspace = true
-fontconfig = { version = "0.11", optional = true, features = ["dlopen"] }
-
-[features]
-default = []
-fontconfig = ["dep:fontconfig"]
+cosmic-text = { workspace = true, features = ["swash"] }
+fontdb = "0.23"
+ttf-parser.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

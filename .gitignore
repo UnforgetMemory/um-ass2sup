@@ -93,3 +93,6 @@ __pycache__/
 # ── Cross-compilation cache (xwin) ─────────────────────────────────
 .xwin-cache/
 output/
+
+# Performance test artifacts
+.perf_test/

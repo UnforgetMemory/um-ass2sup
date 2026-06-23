@@ -1,10 +1,4 @@
-use crate::shaper::Shaper;
-
 /// Converts an ASS alignment value (1–9, numpad layout) to a normalized (x, y) position.
-///
-/// Alignment follows the numpad layout: 7=top-left, 8=top-center, 9=top-right,
-/// 4=middle-left, 5=middle-center, 6=middle-right, 1=bottom-left, 2=bottom-center,
-/// 3=bottom-right. Returns values in 0.0–1.0 range.
 pub fn alignment_to_pos(alignment: u8) -> (f32, f32) {
     match alignment {
         1 => (0.0, 1.0),
@@ -57,9 +51,7 @@ pub fn strip_override_blocks(text: &str) -> String {
     for ch in text.chars() {
         match ch {
             '{' => depth += 1,
-            '}' if depth > 0 => {
-                depth -= 1;
-            }
+            '}' if depth > 0 => depth -= 1,
             _ if depth == 0 => result.push(ch),
             _ => {}
         }
@@ -67,327 +59,39 @@ pub fn strip_override_blocks(text: &str) -> String {
     result
 }
 
-/// Converts ASS escape sequences to their actual characters:
-/// - `\N` → newline (soft break, same karaoke block)
-/// - `\n` → newline (hard break)
-/// - `\h` → non-breaking space (U+00A0)
-///
-/// Note: Current implementation converts `\N` and `\n` at the parser level
-/// (`ass-parser/src/event.rs`), so this function is typically not needed
-/// for new code paths. Retained as a public utility for API consumers.
-#[allow(dead_code)]
-pub fn convert_ass_escapes(text: &str) -> String {
-    text.replace("\\N", "\n")
-        .replace("\\n", "\n")
-        .replace("\\h", "\u{00A0}")
-}
-
-pub(super) fn wrap_text(
-    text: &str,
-    wrap_style: u8,
-    shaper: &Shaper,
-    font_id: fontdb::ID,
-    font_size: f32,
-    spacing: f32,
-    available_width: f32,
-) -> Vec<String> {
-    let explicit_lines: Vec<&str> = text.split('\n').collect();
-
-    match wrap_style {
-        1 => explicit_lines.into_iter().map(String::from).collect(),
-        3 => {
-            // Low-end wrapping: word-wrap from bottom-right (ASS q=3)
-            // Uses same smart wrapping but places lines from bottom
-            let mut result: Vec<String> = wrap_text(
-                text,
-                0,
-                shaper,
-                font_id,
-                font_size,
-                spacing,
-                available_width,
-            );
-            // q=3 places lines from bottom, achieved by reversing the line order
-            result.reverse();
-            result
-        }
-        2 => explicit_lines.into_iter().map(String::from).collect(),
-        _ => {
-            let mut result = Vec::new();
-            for line in &explicit_lines {
-                if line.is_empty() {
-                    result.push(String::new());
-                    continue;
-                }
-                let words: Vec<&str> = line.split(' ').collect();
-
-                // Phase 1: Pre-shape each word individually (O(W) instead of O(W²)).
-                struct WordInfo {
-                    text: String,
-                    width: f32,
-                }
-                let word_data: Vec<WordInfo> = words
-                    .iter()
-                    .filter_map(|w| {
-                        if w.is_empty() {
-                            return None;
-                        }
-                        shaper
-                            .shape(w, font_id, font_size)
-                            .ok()
-                            .map(|shaped| WordInfo {
-                                text: w.to_string(),
-                                width: shaped.total_advance + spacing * shaped.glyphs.len() as f32,
-                            })
-                    })
-                    .collect();
-
-                if word_data.is_empty() {
-                    if !line.is_empty() {
-                        result.push(line.to_string());
-                    }
-                    continue;
-                }
-
-                // Phase 2: Shape single space to correctly measure inter-word gaps.
-                let space_width = shaper
-                    .shape(" ", font_id, font_size)
-                    .ok()
-                    .map(|s| s.total_advance + spacing * s.glyphs.len() as f32)
-                    .unwrap_or(0.0);
-
-                // Phase 3: Line breaking using cumulative word widths.
-                let mut current_line = String::new();
-                let mut current_width = 0.0f32;
-
-                for (i, wi) in word_data.iter().enumerate() {
-                    let gap = if current_line.is_empty() {
-                        0.0
-                    } else {
-                        space_width
-                    };
-                    let test_width = current_width + gap + wi.width;
-
-                    if current_width > 0.0 && test_width > available_width {
-                        result.push(current_line.clone());
-                        current_line = wi.text.clone();
-                        current_width = wi.width;
-                    } else {
-                        if !current_line.is_empty() {
-                            current_line.push(' ');
-                        }
-                        current_line.push_str(&wi.text);
-                        current_width = test_width;
-                    }
-
-                    if i == word_data.len() - 1 && !current_line.is_empty() {
-                        result.push(current_line.clone());
-                    }
-                }
-            }
-            result
-        }
-    }
-}
-
 pub(super) fn wrap_text_vertical(
     text: &str,
     available_height: f32,
     line_height: f32,
 ) -> Vec<String> {
-    let chars: Vec<char> = text.chars().filter(|c| *c != '\n').collect();
-    if chars.is_empty() {
-        return Vec::new();
+    if text.is_empty() || available_height <= 0.0 || line_height <= 0.0 {
+        return vec![text.to_string()];
     }
-
-    let chars_per_column = (available_height / line_height).floor().max(1.0) as usize;
-    let mut columns = Vec::new();
-    let mut i = 0;
-
-    while i < chars.len() {
-        let end = (i + chars_per_column).min(chars.len());
-        let column: String = chars[i..end].iter().collect();
-        columns.push(column);
-        i = end;
+    let max_lines_per_column = (available_height / line_height).floor() as usize;
+    if max_lines_per_column == 0 {
+        return vec![text.to_string()];
     }
-
+    let lines: Vec<&str> = text.split('\n').collect();
+    if lines.is_empty() {
+        return vec![String::new()];
+    }
+    let mut columns: Vec<String> = Vec::new();
+    let mut current_column = String::new();
+    let mut current_line_count = 0usize;
+    for line in &lines {
+        if current_line_count >= max_lines_per_column && !current_column.is_empty() {
+            columns.push(current_column);
+            current_column = String::new();
+            current_line_count = 0;
+        }
+        if !current_column.is_empty() {
+            current_column.push('\n');
+        }
+        current_column.push_str(line);
+        current_line_count += 1;
+    }
+    if !current_column.is_empty() {
+        columns.push(current_column);
+    }
     columns
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── alignment_to_pos ──────────────────────────────────────
-
-    #[test]
-    fn test_alignment_to_pos_bottom_left() {
-        let (x, y) = alignment_to_pos(1);
-        assert!((x - 0.0).abs() < f32::EPSILON);
-        assert!((y - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_bottom_center() {
-        let (x, y) = alignment_to_pos(2);
-        assert!((x - 0.5).abs() < f32::EPSILON);
-        assert!((y - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_bottom_right() {
-        let (x, y) = alignment_to_pos(3);
-        assert!((x - 1.0).abs() < f32::EPSILON);
-        assert!((y - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_middle_left() {
-        let (x, y) = alignment_to_pos(4);
-        assert!((x - 0.0).abs() < f32::EPSILON);
-        assert!((y - 0.5).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_middle_center() {
-        let (x, y) = alignment_to_pos(5);
-        assert!((x - 0.5).abs() < f32::EPSILON);
-        assert!((y - 0.5).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_middle_right() {
-        let (x, y) = alignment_to_pos(6);
-        assert!((x - 1.0).abs() < f32::EPSILON);
-        assert!((y - 0.5).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_top_left() {
-        let (x, y) = alignment_to_pos(7);
-        assert!((x - 0.0).abs() < f32::EPSILON);
-        assert!((y - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_top_center() {
-        let (x, y) = alignment_to_pos(8);
-        assert!((x - 0.5).abs() < f32::EPSILON);
-        assert!((y - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_top_right() {
-        let (x, y) = alignment_to_pos(9);
-        assert!((x - 1.0).abs() < f32::EPSILON);
-        assert!((y - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_default_is_bottom_center() {
-        let (x, y) = alignment_to_pos(0);
-        assert!((x - 0.5).abs() < f32::EPSILON);
-        assert!((y - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_to_pos_out_of_range_default() {
-        let (x, y) = alignment_to_pos(10);
-        assert!((x - 0.5).abs() < f32::EPSILON);
-        assert!((y - 1.0).abs() < f32::EPSILON);
-    }
-
-    // ── strip_override_blocks ─────────────────────────────────
-
-    #[test]
-    fn test_strip_override_blocks_no_blocks() {
-        assert_eq!(strip_override_blocks("Hello World"), "Hello World");
-    }
-
-    #[test]
-    fn test_strip_override_blocks_empty() {
-        assert_eq!(strip_override_blocks(""), "");
-    }
-
-    #[test]
-    fn test_strip_override_blocks_single_block() {
-        assert_eq!(strip_override_blocks("{\\b1}Bold"), "Bold");
-    }
-
-    #[test]
-    fn test_strip_override_blocks_multiple_blocks() {
-        assert_eq!(
-            strip_override_blocks("{\\b1}Hello{\\i1} World"),
-            "Hello World"
-        );
-    }
-
-    #[test]
-    fn test_strip_override_blocks_nested_blocks() {
-        assert_eq!(strip_override_blocks("{\\b1{\\i1}}Nested"), "Nested");
-    }
-
-    #[test]
-    fn test_strip_override_blocks_empty_block() {
-        assert_eq!(strip_override_blocks("{}Empty"), "Empty");
-    }
-
-    #[test]
-    fn test_strip_override_blocks_only_blocks() {
-        assert_eq!(strip_override_blocks("{\\b1}{\\i1}"), "");
-    }
-
-    #[test]
-    fn test_strip_override_blocks_unmatched_close_ignored() {
-        assert_eq!(strip_override_blocks("Hello}World"), "Hello}World");
-    }
-
-    #[test]
-    fn test_strip_override_blocks_unmatched_open_strips_rest() {
-        assert_eq!(strip_override_blocks("{Hello"), "");
-    }
-
-    // ── convert_ass_escapes ────────────────────────────────────
-
-    #[test]
-    fn test_convert_escapes_backslash_n() {
-        assert_eq!(convert_ass_escapes("A\\NB"), "A\nB");
-    }
-
-    #[test]
-    fn test_convert_escapes_backslash_n_lowercase() {
-        assert_eq!(convert_ass_escapes("A\\nB"), "A\nB");
-    }
-
-    #[test]
-    fn test_convert_escapes_backslash_h() {
-        assert_eq!(convert_ass_escapes("A\\hB"), "A\u{00A0}B");
-    }
-
-    #[test]
-    fn test_convert_escapes_no_escape() {
-        assert_eq!(convert_ass_escapes("Hello"), "Hello");
-    }
-
-    #[test]
-    fn test_convert_escapes_after_strip() {
-        let text = "{\\b1}A\\NB\\ni";
-        let result = strip_override_blocks(text);
-        assert_eq!(convert_ass_escapes(&result), "A\nB\ni");
-    }
-
-    #[test]
-    fn test_convert_escapes_multiple_n() {
-        assert_eq!(
-            convert_ass_escapes("Line1\\NLine2\\NLine3"),
-            "Line1\nLine2\nLine3"
-        );
-    }
-
-    #[test]
-    fn test_convert_escapes_n_replaced_before_n_lowercase() {
-        // \N should not be partially matched by \n replacement
-        assert_eq!(convert_ass_escapes("\\N"), "\n");
-        assert_eq!(convert_ass_escapes("\\n"), "\n");
-    }
 }

@@ -1,7 +1,0 @@
-];
-;
-
-[Events]
-ZE,,%h
-Command:11110,5,,,mf,Tm,fma,,K,
-;

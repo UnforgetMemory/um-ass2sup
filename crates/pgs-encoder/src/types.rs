@@ -43,6 +43,8 @@ pub enum CompositionState {
     AcquirePoint = 0x40,
     /// Epoch start — new epoch, clears screen
     EpochStart = 0x80,
+    /// Epoch continue — frame continues epoch with no object changes
+    EpochContinue = 0xC0,
 }
 
 /// Object composition entry in PCS

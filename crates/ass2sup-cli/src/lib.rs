@@ -28,7 +28,7 @@ use ass_parser::{AssFile, Event, OverrideTag, SubtitleFormat};
 use bdn_xml::{BdnEvent, BdnXml};
 use color_quantizer::{quantize_with_palette, DitherMethod, Quantizer, Rgba};
 use pgs_encoder::PgsEncoder;
-use subtitle_renderer::{FontManager, RenderConfig, Renderer};
+use subtitle_renderer::{FontCosmicResolver, RenderConfig, Renderer};
 use subtitle_validator::{OverlapConfig, OverlapSeverity, Validator};
 
 /// OCR harness for verifying rendered subtitle images via PaddleOCR.
@@ -562,7 +562,7 @@ fn parse_font_map(entries: &[String]) -> Result<FontMap, String> {
 /// fallback chains; the `global_fallback` is the --font CLI argument value.
 fn check_ass_fonts(
     ass: &AssFile,
-    font_manager: &FontManager,
+    resolver: &FontCosmicResolver,
     font_map: &FontMap,
     global_fallback: &str,
     no_check: bool,
@@ -586,7 +586,7 @@ fn check_ass_fonts(
             &style.font_name
         };
 
-        if font_manager.has_available_font(primary) {
+        if resolver.resolve_font(primary, false, false).is_some() {
             trace!(style = %style.name, font = %primary, "style font OK");
             continue;
         }
@@ -598,9 +598,7 @@ fn check_ass_fonts(
 
         // Try per-style fallback chain from --font-map
         if let Some(fallbacks) = font_map.get(&style.name) {
-            let all_missing = fallbacks
-                .iter()
-                .all(|fb| !font_manager.has_available_font(fb));
+            let all_missing = fallbacks.iter().all(|fb| resolver.resolve_font(fb, false, false).is_none());
             if !all_missing {
                 trace!(
                     style = %style.name,
@@ -615,7 +613,7 @@ fn check_ass_fonts(
         if global_fallback != primary
             && !global_fallback.is_empty()
             && global_fallback != "Arial"
-            && font_manager.has_available_font(global_fallback)
+            && resolver.resolve_font(global_fallback, false, false).is_some()
         {
             debug!(
                 style = %style.name,
@@ -860,13 +858,15 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
 
     let mut renderer = Renderer::new(render_config);
     trace!(
-        font_count = renderer.font_manager().font_count(),
+        font_count = renderer.cosmic_render().resolver.font_count(),
         rss_mib = current_rss_bytes() / 1024 / 1024,
         "Renderer constructed"
     );
 
     for dir in &args.font_dir {
-        let added = renderer.font_manager_mut().load_fonts_dir(dir);
+        let added = renderer.cosmic_render().resolver.load_fonts_dir(dir);
+        #[cfg(feature = "cosmic-text")]
+        renderer.load_fonts_dir_cosmic(dir);
         if added > 0 {
             info!("Loaded {} font face(s) from {}", added, dir.display());
         } else {
@@ -879,7 +879,11 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
         ass.load_embedded_fonts(input.parent().unwrap_or(std::path::Path::new(".")));
     let embedded_count = font_data_list.len();
     for (_font_name, font_data) in font_data_list {
-        let _id = renderer.font_manager_mut().load_font_data(font_data);
+        #[cfg(feature = "cosmic-text")]
+        let cosmic_data = font_data.clone();
+        let _id = renderer.cosmic_render().resolver.load_font_data(font_data);
+        #[cfg(feature = "cosmic-text")]
+        renderer.load_font_data_cosmic(cosmic_data);
     }
     debug!(
         embedded_count,
@@ -889,7 +893,7 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
     let font_map = parse_font_map(&args.font_map)?;
     check_ass_fonts(
         &ass,
-        renderer.font_manager(),
+        &renderer.cosmic_render().resolver,
         &font_map,
         &args.font,
         args.no_check_fonts,
@@ -1118,13 +1122,13 @@ pub fn convert_to_bdn(
     let font_data_list =
         ass.load_embedded_fonts(input.parent().unwrap_or(std::path::Path::new(".")));
     for (_font_name, font_data) in font_data_list {
-        let _id = renderer.font_manager_mut().load_font_data(font_data);
+        let _id = renderer.cosmic_render().resolver.load_font_data(font_data);
     }
 
     let font_map = parse_font_map(&args.font_map)?;
     check_ass_fonts(
         &ass,
-        renderer.font_manager(),
+        &renderer.cosmic_render().resolver,
         &font_map,
         &args.font,
         args.no_check_fonts,

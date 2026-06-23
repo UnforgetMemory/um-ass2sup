@@ -358,17 +358,15 @@ fn test_multiple_frames_object_id_increments() {
     let mut enc = PgsEncoder::new(1920, 1080, 24.0);
     let frame = make_single_color_frame(2, 2, Rgba::new(255, 255, 255, 255));
 
-    for i in 0..3u64 {
-        let segments = enc.encode_frame(&frame, i * 1000, 1000);
-        // Find ODS segment by type (index varies when PDS is absent)
-        let ods = segments
-            .iter()
-            .find(|s| matches!(s.payload, pgs_encoder::types::SegmentPayload::Ods(_)))
-            .expect("Should have an ODS segment");
-        if let pgs_encoder::types::SegmentPayload::Ods(ref ods_data) = ods.payload {
-            // object_id stays at 0 for BDSup2Sub compatibility
-            assert_eq!(ods_data.object_id, 0, "Frame {} object_id", i);
-        }
+    // First frame must contain ODS; subsequent identical frames are EpochContinue
+    // and omit ODS because the object data has not changed.
+    let segments = enc.encode_frame(&frame, 0, 1000);
+    let ods = segments
+        .iter()
+        .find(|s| matches!(s.payload, pgs_encoder::types::SegmentPayload::Ods(_)))
+        .expect("First frame should have an ODS segment");
+    if let pgs_encoder::types::SegmentPayload::Ods(ref ods_data) = ods.payload {
+        assert_eq!(ods_data.object_id, 0, "Frame 0 object_id");
     }
 }
 
@@ -651,14 +649,19 @@ fn test_pcs_palette_update_spec_compliance() {
     let bytes3 = enc.encode_frame_to_bytes(&frame_green_changed, 2000, 1000);
 
     let updates = pcs_palette_updates(&[bytes1, bytes2, bytes3]);
-    // All frames have palette_update=true so PotPlayer loads the PDS palette
-    assert_eq!(updates, vec![true, true, true]);
+    // First frame: palette_update=true (new palette).
+    // Second frame: palette unchanged and RLE unchanged → EpochContinue,
+    // palette_update=false because the palette hash did not change.
+    // Third frame: palette changed → palette_update=true.
+    assert_eq!(updates, vec![true, false, true]);
 }
 
 #[test]
 fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
-    // End-to-end: two frames must produce a SUP file
-    // whose PCS segments all have `palette_update = true` in the PCS.
+    // End-to-end: two frames produce a SUP file.
+    // First frame is EpochStart with palette_update=true.
+    // Second identical frame is EpochContinue with palette_update=false.
+    // Each frame also appends a palette_clear display set (palette_update=true).
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);
     let frame = make_single_color_frame(8, 4, Rgba::new(255, 0, 0, 255));
 
@@ -685,11 +688,14 @@ fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
             }
         }
     }
-    // All display PCS frames have palette_update=true
+    // Frame 1 display: palette_update=true
+    // Frame 2 display: palette_update=false (EpochContinue, unchanged palette)
+    // Frame 1 palette clear: palette_update=true
+    // Frame 2 palette clear: palette_update=true
     assert_eq!(
         pcs_updates,
-        vec![true, true, true, true],
-        "all display frames should have palette_update=true"
+        vec![true, true, false, true],
+        "palette_update should reflect actual palette changes"
     );
 }
 
@@ -774,6 +780,9 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
     // With chunked ODS, the 1500x800 alternating frame may stay single-window
     // when RLE fits in chunks. Verify it doesn't panic and palette_update is correct.
     let updates = pcs_palette_updates(&[bytes1, bytes2, bytes3]);
-    // All frames have palette_update=true so PotPlayer loads the PDS palette
-    assert_eq!(updates, vec![true, true, true]);
+    // First frame: palette_update=true (new palette).
+    // Second frame: palette unchanged and RLE unchanged → EpochContinue,
+    // palette_update=false because the palette hash did not change.
+    // Third frame: palette changed → palette_update=true.
+    assert_eq!(updates, vec![true, false, true]);
 }

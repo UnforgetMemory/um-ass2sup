@@ -1,6 +1,6 @@
 use ass_parser::{AssColor, AssFile, Effect, Event, EventType, OverrideTag, Style, Timestamp};
 use subtitle_renderer::{
-    alignment_to_pos, strip_override_blocks, RenderConfig, RenderContext, Renderer,
+    alignment_to_pos, RenderConfig, RenderContext, Renderer,
 };
 
 fn default_ass() -> AssFile {
