@@ -441,3 +441,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Golden snapshot tests for renderer output.
 - 100+ unit and integration tests.
 - GitHub Actions CI (linux, stable Rust).
+
+## [2.6.0] - 2026-06-24
+
+### Refactored
+- **pgs-encoder DDD architecture**: Extracted domain layer (`domain/`) with 6 submodules — `composition`, `palette`, `segment`, `timing`, `rle`, `epoch`. Split encoding and decoding concerns into `encoding/` and `decoding/` layers. Encoder shrunk from 1034 to 488 lines.
+- **ColorPipeline migration**: Replaced legacy `Quantizer` builder with `ColorPipeline` builder supporting color-space selection, tone mapping, and temporal palette reuse.
+- **build_palette**: Accepts `ColorSpace` parameter instead of hardcoded `display_height > 576` heuristic. Colour space decision now flows from the frame data.
+
+### Added
+- **CLI options**: `--color-space` (srgb/bt709/bt2020) and `--tonemap` (hable/reinhard/aces) for fine-grained colour pipeline control.
+- **EpochManager**: Extracted FSM logic from PgsEncoder into a dedicated module with unit tests.
+- **DisplaySetConfig**: Value object encapsulating encoder configuration for display set building, replacing 8-parameter function signatures.
+- **RLE proptest**: 500-case property test `rle_encode(rle_decode(x)) = x` — discovered and fixed a bug where color value 0x00 collided with the RLE escape byte when used as an opaque pixel.
+- **Golden tests**: Deterministic SHA-256 tests for RLE encoding, palette YCbCr conversion, and small-frame encoding.
+- **PotPlayer compat toggle**: `--no-potplayer-compat` flag to disable the `num_objects=1` workaround.
+
+### Fixed
+- **RLE 0x00 collision**: Opaque color value 0x00 (when `transparent_index != 0`) can no longer be emitted as a bare byte colliding with the RLE escape marker.
+- **PCS serialization**: Corrected width/height/frame_rate ordering and palette_update_flag byte alignment to match PGS BD-ROM spec exactly.
+- **ODS serialization**: `total_size` uses 3-byte big-endian format, geometry (width/height) emitted only on `first_in_sequence` segments as spec requires.
+- **Epoch-split colour space**: Synthetic band frames now propagate `frame.color_space` instead of defaulting to `Srgb`.
