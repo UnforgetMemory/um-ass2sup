@@ -3,7 +3,9 @@ use wide::u32x4;
 /// Alpha-composite `src` over `dst` in-place using Porter-Duff "over".
 pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
     let len = (width * height * 4) as usize;
-    debug_assert!(dst.len() >= len && src.len() >= len);
+    if dst.len() < len || src.len() < len {
+        return;
+    }
 
     let one = u32x4::splat(255);
     let chunks = len / 16;

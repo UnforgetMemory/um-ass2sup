@@ -5,25 +5,46 @@ use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform
 /// Apply a rectangular clip mask to RGBA pixel data.
 /// Pixels outside the clip rectangle are zeroed (or inside for inverse).
 pub fn apply_clip_mask(data: &mut [u8], w: u32, h: u32, ctx: &RenderContext) {
+    let wu = w as usize;
+    let expected_len = wu.saturating_mul(h as usize).saturating_mul(4);
+    if data.len() < expected_len {
+        return;
+    }
     let x1 = ctx.clip_x1.max(0.0) as usize;
     let y1 = ctx.clip_y1.max(0.0) as usize;
     let x2 = ctx.clip_x2.min(w as f32) as usize;
     let y2 = ctx.clip_y2.min(h as f32) as usize;
     let wu = w as usize;
+    let len = data.len();
     if ctx.clip_inverse {
-        for y in y1..y2 {
-            data[y * wu * 4 + x1 * 4..y * wu * 4 + x2 * 4].fill(0);
+        for y in y1..y2.min(h as usize) {
+            let start = y * wu * 4 + x1 * 4;
+            let end = y * wu * 4 + x2 * 4;
+            if end <= len {
+                data[start..end].fill(0);
+            }
         }
     } else {
         for y in 0..h as usize {
             if y < y1 || y >= y2 {
-                data[y * wu * 4..(y + 1) * wu * 4].fill(0);
+                let start = y * wu * 4;
+                let end = ((y + 1) * wu * 4).min(len);
+                if start < end {
+                    data[start..end].fill(0);
+                }
             } else {
                 if x1 > 0 {
-                    data[y * wu * 4..y * wu * 4 + x1 * 4].fill(0);
+                    let end = y * wu * 4 + x1 * 4;
+                    if end <= len {
+                        data[y * wu * 4..end].fill(0);
+                    }
                 }
                 if x2 < wu {
-                    data[y * wu * 4 + x2 * 4..(y + 1) * wu * 4].fill(0);
+                    let start = y * wu * 4 + x2 * 4;
+                    let end = ((y + 1) * wu * 4).min(len);
+                    if start < end {
+                        data[start..end].fill(0);
+                    }
                 }
             }
         }

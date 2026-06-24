@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.7.1] - 2026-06-24
+
+### Fixed
+- **cosmic-text/gaussian blur**: Fix pixel write offset miscalculation in `apply_gaussian_blur` where `off` offset was double-counted against the row slice.
+- **cosmic-text/clip mask**: Add bounds checking to prevent out-of-bounds memory writes when data buffer is undersized.
+- **cosmic-text/composite**: Replace debug-only `debug_assert!` with runtime bounds check and early return for release-build safety.
+
+### Changed
+- Workspace version bumped to 2.7.1 (from 0.5.5).
+
 ## [2.7.0] - 2026-06-24
 
 ### Added

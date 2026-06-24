@@ -25,7 +25,7 @@ pub fn apply_gaussian_blur(pixmap: &mut Pixmap, radius: f32) {
                 n += 1;
             }
             if n > 0 {
-                let di = off + x * 4;
+                let di = x * 4;
                 row[di] = (ra / n) as u8;
                 row[di + 1] = (ga / n) as u8;
                 row[di + 2] = (ba / n) as u8;
