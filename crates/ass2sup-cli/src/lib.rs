@@ -26,7 +26,10 @@ use walkdir::WalkDir;
 
 use ass_parser::{AssFile, Event, OverrideTag, SubtitleFormat};
 use bdn_xml::{BdnEvent, BdnXml};
-use color_quantizer::{quantize_with_palette, DitherMethod, Quantizer, Rgba};
+use color_quantizer::color::tonemap::ToneMapOperator;
+use color_quantizer::color::ColorSpace;
+use color_quantizer::pipeline::ColorPipeline;
+use color_quantizer::{DitherMethod, QuantizedFrame};
 use pgs_encoder::PgsEncoder;
 use subtitle_renderer::{FontCosmicResolver, RenderConfig, Renderer};
 use subtitle_validator::{OverlapConfig, OverlapSeverity, Validator};
@@ -172,6 +175,20 @@ pub struct Args {
     /// Can be repeated; nested directories are scanned recursively.
     #[arg(long, value_name = "DIR")]
     pub font_dir: Vec<PathBuf>,
+
+    /// Output colour space (srgb/bt709/bt2020).
+    ///
+    /// Affects the RGB→YCbCr conversion in the PGS palette. Default is srgb
+    /// (BT.601 for SD, BT.709 for HD is automatically chosen when not set).
+    #[arg(long, default_value = "srgb")]
+    pub color_space: String,
+
+    /// HDR-to-SDR tone mapping operator (hable/reinhard/aces).
+    ///
+    /// When set, applies tone mapping before quantisation. Requires a colour
+    /// space that supports wide gamut (bt2020 recommended).
+    #[arg(long)]
+    pub tonemap: Option<String>,
 }
 
 /// Output display resolution parsed from `WIDTHxHEIGHT` strings.
@@ -598,7 +615,9 @@ fn check_ass_fonts(
 
         // Try per-style fallback chain from --font-map
         if let Some(fallbacks) = font_map.get(&style.name) {
-            let all_missing = fallbacks.iter().all(|fb| resolver.resolve_font(fb, false, false).is_none());
+            let all_missing = fallbacks
+                .iter()
+                .all(|fb| resolver.resolve_font(fb, false, false).is_none());
             if !all_missing {
                 trace!(
                     style = %style.name,
@@ -613,7 +632,9 @@ fn check_ass_fonts(
         if global_fallback != primary
             && !global_fallback.is_empty()
             && global_fallback != "Arial"
-            && resolver.resolve_font(global_fallback, false, false).is_some()
+            && resolver
+                .resolve_font(global_fallback, false, false)
+                .is_some()
         {
             debug!(
                 style = %style.name,
@@ -906,12 +927,33 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
     };
     debug!(?dither_method, "dither method selected");
 
+    let color_space = match args.color_space.as_str() {
+        "bt709" => ColorSpace::Bt709,
+        "bt2020" => ColorSpace::Bt2020,
+        _ => ColorSpace::Srgb,
+    };
     let use_palette_reuse = args.quantizer == "median-cut";
-    let quantizer = Quantizer::new(args.max_colors).with_dither(dither_method);
+    let mut pipeline = ColorPipeline::new()
+        .with_max_colors(args.max_colors)
+        .with_dither(dither_method);
+    if color_space != ColorSpace::Srgb {
+        pipeline = pipeline.with_color_space(color_space);
+    }
+    if let Some(ref op) = args.tonemap {
+        let operator = match op.as_str() {
+            "hable" => ToneMapOperator::Hable,
+            "reinhard" => ToneMapOperator::Reinhard,
+            "aces" => ToneMapOperator::Aces,
+            _ => ToneMapOperator::Reinhard,
+        };
+        pipeline = pipeline.with_tonemap(operator);
+    }
     trace!(
         max_colors = args.max_colors,
         use_palette_reuse,
-        "quantizer configured"
+        ?color_space,
+        tonemap = ?args.tonemap,
+        "pipeline configured"
     );
 
     let mut pgs_encoder = PgsEncoder::new(res.width as u16, res.height as u16, args.fps);
@@ -959,7 +1001,7 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
                 frame.and_then(|frame| {
                     let (bmp, x, y, w, h) =
                         crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
-                    let mut q = quantizer.quantize(&bmp, w, h);
+                    let mut q = pipeline.quantize(&bmp, w, h);
                     q.x = x as u16;
                     q.y = y as u16;
                     Some(q)
@@ -996,8 +1038,8 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
         }
     } else {
         // Sequential path: render + quantize + encode per event.
-        // Includes palette-reuse path (needs sequential access to prev_palette).
-        let mut prev_palette: Option<Vec<Rgba>> = None;
+        // Includes palette-reuse path (needs sequential access to prev_frame).
+        let mut prev_frame: Option<QuantizedFrame> = None;
         for event in dialogues.iter() {
             let render_pts = compute_render_pts(event);
             let pts_ms = event.start.as_ms();
@@ -1006,21 +1048,11 @@ pub fn convert_file(input: &Path, output: &Path, args: &Args) -> Result<Conversi
             let q_opt = renderer.render_ass(&ass, render_pts).and_then(|frame| {
                 let (bmp, x, y, w, h) =
                     crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
-                if use_palette_reuse {
-                    let prev = prev_palette.as_deref();
-                    let mut q =
-                        quantize_with_palette(&bmp, w, h, prev, args.max_colors, dither_method);
-                    q.x = x as u16;
-                    q.y = y as u16;
-                    prev_palette = Some(q.palette.clone());
-                    Some(q)
-                } else {
-                    let mut q = quantizer.quantize(&bmp, w, h);
-                    q.x = x as u16;
-                    q.y = y as u16;
-                    prev_palette = Some(q.palette.clone());
-                    Some(q)
-                }
+                let mut q = pipeline.quantize_with_prev(&bmp, w, h, prev_frame.as_ref());
+                q.x = x as u16;
+                q.y = y as u16;
+                prev_frame = Some(q.clone());
+                Some(q)
             });
 
             if let Some(q) = &q_opt {
@@ -1140,7 +1172,9 @@ pub fn convert_to_bdn(
         _ => DitherMethod::FloydSteinberg,
     };
 
-    let quantizer = Quantizer::new(args.max_colors).with_dither(dither_method);
+    let bdn_pipeline = ColorPipeline::new()
+        .with_max_colors(args.max_colors)
+        .with_dither(dither_method);
 
     let dialogues: Vec<_> = ass.dialogue_events().cloned().collect();
     let total = dialogues.len() as u64;
@@ -1168,7 +1202,7 @@ pub fn convert_to_bdn(
 
         let frame_opt = renderer.render_ass(&ass, render_pts);
         if let Some(frame) = frame_opt {
-            let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
+            let quantized = bdn_pipeline.quantize(&frame.bitmap, frame.width, frame.height);
 
             // Convert quantizer Vec<Rgba> to Vec<[u8; 4]> for bdn-xml
             let palette: Vec<[u8; 4]> = quantized

@@ -3,7 +3,8 @@ use color_quantizer::{DitherMethod, Quantizer, Rgba};
 #[test]
 fn median_cut_empty_pixels_returns_empty() {
     let result = color_quantizer::Quantizer::new(16).quantize(&[], 0, 0);
-    assert!(result.palette.is_empty());
+    // ColorPipeline returns a single transparent entry for empty input
+    assert_eq!(result.palette.len(), 1);
     assert!(result.indices.is_empty());
 }
 

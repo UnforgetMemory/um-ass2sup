@@ -98,8 +98,9 @@ proptest! {
 fn quantize_empty_input() {
     let q = Quantizer::new(255);
     let frame = q.quantize(&[], 0, 0);
-    assert!(frame.palette.is_empty());
-    assert_eq!(frame.indices.len(), 0);
+    // Empty input: ColorPipeline returns a single transparent entry
+    assert_eq!(frame.palette.len(), 1);
+    assert!(frame.indices.is_empty());
 }
 
 #[test]

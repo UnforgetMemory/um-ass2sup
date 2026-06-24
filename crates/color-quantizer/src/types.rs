@@ -51,6 +51,8 @@ impl Rgba {
     }
 }
 
+use crate::color::ColorSpace;
+
 /// The output of color quantization: a reduced palette and per-pixel index map.
 ///
 /// For PGS subtitle encoding, the palette is limited to ≤255 entries so that
@@ -71,12 +73,29 @@ pub struct QuantizedFrame {
     pub x: u16,
     /// Vertical position on the display (pixels from top edge).
     pub y: u16,
+    /// Colour space of the frame data.
+    pub color_space: ColorSpace,
 }
 
 impl QuantizedFrame {
     /// Returns the number of colors in the palette.
     pub fn palette_size(&self) -> usize {
         self.palette.len()
+    }
+}
+
+impl Default for QuantizedFrame {
+    fn default() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            palette: Vec::new(),
+            indices: Vec::new(),
+            transparent_index: 0,
+            x: 0,
+            y: 0,
+            color_space: ColorSpace::Srgb,
+        }
     }
 }
 
