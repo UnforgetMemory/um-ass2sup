@@ -2,7 +2,6 @@
 resolver = "2"
 exclude = ["crates/*/fuzz"]
 members = [
-    "crates/_archive/ass-parser",
     "crates/subtitle-validator",
     "crates/subtitle-renderer",
     "crates/color-quantizer",
@@ -22,8 +21,7 @@ keywords = ["subtitle", "blu-ray", "pgs", "sup", "ass"]
 categories = ["multimedia", "command-line-utilities"]
 
 [workspace.dependencies]
-ass-parser = { path = "crates/_archive/ass-parser" }
-ass-core = { path = "crates/ass-core" }
+ass-core = { path = "crates/ass-core", package = "ass_core" }
 subtitle-validator = { path = "crates/subtitle-validator" }
 subtitle-renderer = { path = "crates/subtitle-renderer" }
 color-quantizer = { path = "crates/color-quantizer" }

@@ -1,5 +1,5 @@
 use crate::context::RenderContext;
-use ass_parser::OverrideTag;
+use ass_core::OverrideTag;
 
 /// Apply a `\t(tag, t1, t2, accel)` transform animation to a RenderContext.
 #[allow(clippy::too_many_arguments)]
@@ -123,7 +123,7 @@ pub fn apply_transform_tag(
 
 /// Apply the start or end state of a transform tag.
 fn apply_tag_state(ctx: &mut RenderContext, tag: &str, is_end: bool, scale_x: f32, scale_y: f32) {
-    use ass_parser::OverrideTag::*;
+    use ass_core::OverrideTag::*;
     let inner_tags = parse_override_block(tag);
     for inner in &inner_tags {
         match inner {
@@ -142,8 +142,8 @@ fn apply_tag_state(ctx: &mut RenderContext, tag: &str, is_end: bool, scale_x: f3
                 ctx.outline_color[3] = a;
                 ctx.shadow_color[3] = a;
             }
-            Border(w) => ctx.outline_width = *w as f32,
-            Shadow(d) => ctx.shadow_depth = *d as f32,
+            Border { x: w, .. } => ctx.outline_width = *w as f32,
+            Shadow { x: d, .. } => ctx.shadow_depth = *d as f32,
             Blur(r) | GaussianBlur(r) => ctx.blur = *r as f32,
             Spacing(s) => ctx.spacing = *s as f32,
             Scale { x, y } => {
@@ -210,7 +210,7 @@ pub fn parse_override_block(text: &str) -> Vec<OverrideTag> {
     // Parse each part
     let mut tags = Vec::new();
     for part in parts {
-        if let Some(tag) = ass_parser::parse_override_tag(&part) {
+        if let Some(tag) = ass_core::override_tag::parse_one_tag(&part) {
             tags.push(tag);
         }
     }

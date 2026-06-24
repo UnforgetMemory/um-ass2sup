@@ -10,7 +10,6 @@ description = "ASS/SRT subtitle rendering to RGBA bitmaps with font management, 
 thiserror.workspace = true
 tracing.workspace = true
 tiny-skia.workspace = true
-ass-parser = { path = "../_archive/ass-parser" }
 ass_core = { path = "../ass-core" }
 wide.workspace = true
 parking_lot.workspace = true
@@ -22,6 +21,3 @@ ttf-parser.workspace = true
 criterion.workspace = true
 tempfile.workspace = true
 
-[[bench]]
-name = "renderer"
-harness = false

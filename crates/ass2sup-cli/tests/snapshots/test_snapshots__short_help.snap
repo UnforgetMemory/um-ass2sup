@@ -21,23 +21,25 @@ Options:
       --overlap-warn                 Enable overlap warning detection
       --overlap-mode <OVERLAP_MODE>  Overlap detection mode (strict/lenient) [default: lenient]
       --quantizer <QUANTIZER>        Quantizer algorithm (median-cut) [default: median-cut]
-      --max-colors <MAX_COLORS>      Maximum colors in palette (1-255) [default: 255]
+      --max-colors <MAX_COLORS>      Maximum colors in palette (1–255) [default: 255]
       --dither <DITHER>              Dithering method (none/floyd-steinberg/ordered) [default: floyd-steinberg]
       --font <FONT>                  Default font name for SRT input [default: Arial]
       --font-size <FONT_SIZE>        Default font size for SRT input [default: 48.0]
-  -v, --verbose                      Enable verbose logging
+      --font-map <STYLE:FALLBACKS>   Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
+      --font-dir <DIR>               Additional directories to scan for font files (TTF/OTF/WOFF2)
+      --no-check-fonts               Skip font availability check
   -p, --parallel                     Process files in parallel (batch mode)
-      --force                        Force conversion even if validation fails
-      --dry-run                      Dry run: parse and validate only, don't write output
       --parallel-frames              Render frames in parallel using rayon (single-file mode)
-      --quiet                        Suppress progress bar
-      --check                        Parse and validate only, don't convert (exit 0 if OK, 1 if errors)
-      --color <COLOR>                Color output mode (auto/always/never) [default: auto] [possible values: auto, always, never]
+      --color-space <COLOR_SPACE>    Output colour space (srgb/bt709/bt2020) [default: srgb]
+      --tonemap <TONEMAP>            HDR-to-SDR tone mapping operator (hable/reinhard/aces)
       --to-srt                       Convert to SRT format instead of SUP/PGS
       --to-bdn                       Convert to BDN XML + PNG format (Blu-ray authoring)
+      --check                        Parse and validate only, don't convert (exit 0 if OK, 1 if errors)
+      --dry-run                      Dry run: parse and validate only, don't write output
+      --force                        Force conversion even if validation fails
+  -v, --verbose                      Enable verbose logging
       --debug                        Enable trace-level debug output for pipeline diagnosis
-      --no-check-fonts               Skip font availability check (fonts missing from the system will silently fall back to a substitute, potentially producing blank subtitle output)
-      --font-map <STYLE:FALLBACKS>   Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
-      --font-dir <DIR>               Additional directories to scan for font files (TTF/OTF/WOFF2). Use this to add platform-specific font collections (e.g. user-installed fonts on macOS, custom CJK packs) without copying them into the OS font dir. Can be repeated; nested directories are scanned recursively
+      --quiet                        Suppress progress bar
+      --color <COLOR>                Colour output mode (auto/always/never) [default: auto] [possible values: auto, always, never]
   -h, --help                         Print help (see more with '--help')
   -V, --version                      Print version

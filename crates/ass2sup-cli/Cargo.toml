@@ -11,7 +11,7 @@ name = "ass2sup"
 path = "src/main.rs"
 
 [dependencies]
-ass-parser.workspace = true
+ass-core.workspace = true
 subtitle-validator.workspace = true
 subtitle-renderer.workspace = true
 color-quantizer.workspace = true

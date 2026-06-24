@@ -4,7 +4,7 @@
 //! ASS override tags. The renderer computes syllable states (pending/active/done) at a
 //! given timestamp and produces layered RGBA output for karaoke fill effects.
 
-use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
+use ass_core::{KaraokeSegment, KaraokeStyle};
 
 /// Current animation phase of a karaoke syllable.
 #[derive(Debug, Clone, Copy, PartialEq)]

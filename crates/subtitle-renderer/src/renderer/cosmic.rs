@@ -5,7 +5,7 @@
 //! sharing all post-processing (effects, transforms, clip masks) with the
 //! existing pipeline.
 
-use ass_parser::{Effect, Event};
+use ass_core::{Effect, Event};
 use parking_lot::Mutex;
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform};
 
@@ -96,42 +96,33 @@ pub fn render_event_cosmic(
     // Banner/Scroll effect offset
     match &event.effect {
         Effect::Banner {
-            delay_per_pixel,
+            delay,
             left_to_right,
             ..
-        } if *delay_per_pixel > 0 => {
+        } if *delay > 0 => {
             let elapsed = (timestamp_ms.saturating_sub(event_start_ms)) as f32;
-            ctx.x += elapsed / *delay_per_pixel as f32 * if *left_to_right { 1.0 } else { -1.0 };
+            ctx.x += elapsed / *delay as f32 * if *left_to_right { 1.0 } else { -1.0 };
         }
-        Effect::ScrollUp {
-            delay_per_row,
-            top_offset,
-            bottom_offset,
-        } if *delay_per_row > 0 => {
+        Effect::ScrollUp { delay, top, bottom } if *delay > 0 => {
             let elapsed = (timestamp_ms.saturating_sub(event_start_ms)) as f32;
             ctx.y =
-                (config.height as f32 - *bottom_offset as f32 - elapsed / *delay_per_row as f32)
-                    .max(*top_offset as f32);
+                (config.height as f32 - *bottom as f32 - elapsed / *delay as f32).max(*top as f32);
         }
-        Effect::ScrollDown {
-            delay_per_row,
-            top_offset,
-            bottom_offset,
-        } if *delay_per_row > 0 => {
+        Effect::ScrollDown { delay, top, bottom } if *delay > 0 => {
             let elapsed = (timestamp_ms.saturating_sub(event_start_ms)) as f32;
-            ctx.y = (*top_offset as f32 + elapsed / *delay_per_row as f32)
-                .min(config.height as f32 - *bottom_offset as f32);
+            ctx.y =
+                (*top as f32 + elapsed / *delay as f32).min(config.height as f32 - *bottom as f32);
         }
         _ => {}
     }
 
-    let plain_text = strip_override_blocks(&event.text);
+    let plain_text = strip_override_blocks(&event.text_raw);
     if plain_text.is_empty() {
         return;
     }
 
     // Karaoke
-    if event.has_karaoke() && !event.karaoke_segments.is_empty() {
+    if !event.karaoke.is_empty() {
         render_karaoke_cosmic(
             pixmap,
             event,
@@ -146,7 +137,7 @@ pub fn render_event_cosmic(
     }
 
     // Drawing mode
-    let drawing_level = crate::renderer::drawing::parse_drawing_level(&event.text);
+    let drawing_level = crate::renderer::drawing::parse_drawing_level(&event.text_raw);
     if drawing_level > 0 {
         render_drawing(pixmap, &plain_text, &ctx, drawing_level);
         return;

@@ -351,10 +351,11 @@ pub struct ValidationStats {
 /// # Examples
 ///
 /// ```rust,no_run
-/// use ass_parser::AssFile;
+/// use ass_core::SubtitleDocument;
 /// use subtitle_validator::Validator;
 ///
-/// let ass = AssFile::parse_file(std::path::Path::new("subtitles.ass")).unwrap();
+/// let content = std::fs::read_to_string("subtitles.ass").unwrap();
+/// let ass = SubtitleDocument::parse(&content).unwrap();
 /// let report = Validator::new().validate(&ass);
 ///
 /// // Check validity

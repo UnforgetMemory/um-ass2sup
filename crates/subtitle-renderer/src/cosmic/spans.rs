@@ -9,7 +9,7 @@
 //! - `style`     ← `\i` (Italic)
 //! - `font_size` ← `\fs` / `\fs±N` (FontSize / FontSizeRelative)
 
-use ass_parser::{parse_override_tag, OverrideTag, Style};
+use ass_core::{override_tag, OverrideTag, Style};
 use cosmic_text::{Attrs, AttrsOwned, Family, Metrics, Weight};
 
 /// Font attributes accumulated while walking override blocks.
@@ -142,7 +142,7 @@ pub fn parse_spans(text: &str, style: &Style) -> Vec<(String, AttrsOwned)> {
             }
             // Parse and apply tags.
             for part in split_tags(&block) {
-                if let Some(tag) = parse_override_tag(part) {
+                if let Some(tag) = override_tag::parse_one_tag(part) {
                     active.apply(&tag);
                 }
             }

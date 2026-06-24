@@ -1,7 +1,7 @@
 //! Cosmic-text karaoke rendering: syllable-level fill clip sweep, outline highlight.
 
-use ass_parser::karaoke::KaraokeStyle;
-use ass_parser::Event;
+use ass_core::Event;
+use ass_core::KaraokeStyle;
 use tiny_skia::Pixmap;
 
 use crate::context::{RenderConfig, RenderContext};
@@ -25,7 +25,7 @@ pub(crate) fn render_karaoke_cosmic(
 ) {
     let w = pixmap.width();
     let h = pixmap.height();
-    let segs = &event.karaoke_segments;
+    let segs = &event.karaoke;
     let states = KaraokeRenderer::compute_syllable_states(segs, es, ts);
 
     // Phase 1: Shape all syllables, build glyph info list

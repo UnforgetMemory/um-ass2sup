@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ass_parser::{AssFile, Event, EventType, OverrideTag, ScriptInfo, Style};
+use ass_core::{Event, EventType, OverrideTag, ScriptMetadata, Style, SubtitleDocument};
 
 use crate::report::{
     OverlapConfig, OverlapSeverity, OverlapWarning, RuleId, Severity, ValidationFinding,
@@ -10,11 +10,11 @@ use crate::report::{
 /// Runs all validation stages (encoding, structure, style, event, semantic)
 /// plus overlap detection against the parsed ASS file, returning a
 /// [`ValidationReport`] describing all findings and statistics.
-pub fn validate(ass: &AssFile, overlap_config: &OverlapConfig) -> ValidationReport {
+pub fn validate(ass: &SubtitleDocument, overlap_config: &OverlapConfig) -> ValidationReport {
     let mut report = ValidationReport::new();
 
     // Stage 1: Encoding checks
-    validate_encoding(&ass.script_info, &mut report);
+    validate_encoding(&ass.metadata, &mut report);
 
     // Stage 2: Structure checks
     validate_structure(ass, &mut report);
@@ -33,7 +33,7 @@ pub fn validate(ass: &AssFile, overlap_config: &OverlapConfig) -> ValidationRepo
 
     report.stats.total_events = ass.events.len();
     report.stats.total_styles = ass.styles.len();
-    report.stats.karaoke_events = ass.events.iter().filter(|e| e.has_karaoke()).count();
+    report.stats.karaoke_events = ass.events.iter().filter(|e| !e.karaoke.is_empty()).count();
     report.stats.effect_events = ass.events.iter().filter(|e| has_effects(e)).count();
 
     report
@@ -41,7 +41,7 @@ pub fn validate(ass: &AssFile, overlap_config: &OverlapConfig) -> ValidationRepo
 
 // ─────────────────────── Stage 1: Encoding ───────────────────────
 
-fn validate_encoding(info: &ScriptInfo, report: &mut ValidationReport) {
+fn validate_encoding(info: &ScriptMetadata, report: &mut ValidationReport) {
     // V001: Check script type
     if info.script_type != "v4.00" && info.script_type != "v4.00+" {
         report.add_finding(ValidationFinding {
@@ -77,7 +77,7 @@ fn validate_encoding(info: &ScriptInfo, report: &mut ValidationReport) {
 
 // ─────────────────────── Stage 2: Structure ───────────────────────
 
-fn validate_structure(ass: &AssFile, report: &mut ValidationReport) {
+fn validate_structure(ass: &SubtitleDocument, report: &mut ValidationReport) {
     // V003: No events
     if ass.events.is_empty() {
         report.add_finding(ValidationFinding {
@@ -107,7 +107,7 @@ fn validate_structure(ass: &AssFile, report: &mut ValidationReport) {
     // V005: Duplicate style names
     let mut style_names: HashMap<String, usize> = HashMap::new();
     for (i, style) in ass.styles.iter().enumerate() {
-        if let Some(&prev_idx) = style_names.get(&style.name) {
+        if let Some(&prev_idx) = style_names.get(style.name.as_str()) {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V005,
                 stage: ValidationStage::Structure,
@@ -121,7 +121,7 @@ fn validate_structure(ass: &AssFile, report: &mut ValidationReport) {
                 suggestion: Some("Rename or remove duplicate style".to_string()),
             });
         }
-        style_names.insert(style.name.clone(), i);
+        style_names.insert(style.name.0.clone(), i);
     }
 }
 
@@ -162,7 +162,7 @@ fn validate_styles(styles: &[Style], report: &mut ValidationReport) {
         }
 
         // V008: Alignment out of range
-        if style.alignment < 1 || style.alignment > 11 {
+        if style.alignment.to_u8() < 1 || style.alignment.to_u8() > 11 {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V008,
                 stage: ValidationStage::Style,
@@ -171,7 +171,8 @@ fn validate_styles(styles: &[Style], report: &mut ValidationReport) {
                 column: None,
                 message: format!(
                     "Style '{}' has invalid alignment: {}",
-                    style.name, style.alignment
+                    style.name,
+                    style.alignment.to_u8()
                 ),
                 suggestion: Some("Alignment must be 1-11 (numpad layout)".to_string()),
             });
@@ -191,23 +192,20 @@ fn validate_events(events: &[Event], styles: &[Style], report: &mut ValidationRe
         }
 
         // V009: Reference to non-existent style
-        if !style_names.is_empty() && !style_names.contains(&event.style_name.as_str()) {
+        if !style_names.is_empty() && !style_names.contains(&event.style.as_str()) {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V009,
                 stage: ValidationStage::Event,
                 severity: Severity::Warning,
                 line: None,
                 column: None,
-                message: format!(
-                    "Event #{} references undefined style '{}'",
-                    i, event.style_name
-                ),
+                message: format!("Event #{} references undefined style '{}'", i, event.style),
                 suggestion: Some(format!("Available styles: {:?}", style_names)),
             });
         }
 
         // V010: Empty text
-        if event.text.trim().is_empty() {
+        if event.text_raw.trim().is_empty() {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V010,
                 stage: ValidationStage::Event,
@@ -220,7 +218,7 @@ fn validate_events(events: &[Event], styles: &[Style], report: &mut ValidationRe
         }
 
         // V011: Start time >= end time
-        if event.start.as_ms() >= event.end.as_ms() {
+        if event.start_ms >= event.end_ms {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V011,
                 stage: ValidationStage::Event,
@@ -230,15 +228,15 @@ fn validate_events(events: &[Event], styles: &[Style], report: &mut ValidationRe
                 message: format!(
                     "Event #{}: start time ({}) >= end time ({})",
                     i,
-                    event.start.as_ass_time(),
-                    event.end.as_ass_time()
+                    ass_time(event.start_ms),
+                    ass_time(event.end_ms)
                 ),
                 suggestion: Some("Ensure end time is after start time".to_string()),
             });
         }
 
         // V012: Extremely long duration (>30s)
-        let duration = event.duration_ms();
+        let duration = event.end_ms.saturating_sub(event.start_ms);
         if duration > 30000 {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V012,
@@ -256,8 +254,8 @@ fn validate_events(events: &[Event], styles: &[Style], report: &mut ValidationRe
         }
 
         // V013: Unmatched override block braces
-        let open = event.text.chars().filter(|&c| c == '{').count();
-        let close = event.text.chars().filter(|&c| c == '}').count();
+        let open = event.text_raw.chars().filter(|&c| c == '{').count();
+        let close = event.text_raw.chars().filter(|&c| c == '}').count();
         if open != close {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V013,
@@ -277,14 +275,14 @@ fn validate_events(events: &[Event], styles: &[Style], report: &mut ValidationRe
 
 // ─────────────────────── Stage 5: Semantic ───────────────────────
 
-fn validate_semantics(ass: &AssFile, report: &mut ValidationReport) {
+fn validate_semantics(ass: &SubtitleDocument, report: &mut ValidationReport) {
     // V014: Karaoke events with missing karaoke tags
     for (i, event) in ass.events.iter().enumerate() {
-        if event.has_karaoke() {
+        if !event.karaoke.is_empty() {
             let has_k_tag = event
                 .override_tags
                 .iter()
-                .any(|t| matches!(t, OverrideTag::Karaoke { .. }));
+                .any(|to| matches!(to.tag, OverrideTag::Karaoke { .. }));
             if !has_k_tag {
                 report.add_finding(ValidationFinding {
                     rule_id: RuleId::V014,
@@ -306,7 +304,7 @@ fn validate_semantics(ass: &AssFile, report: &mut ValidationReport) {
 
     // V015: Check for common encoding issues (mojibake patterns)
     for (i, event) in ass.events.iter().enumerate() {
-        let text = &event.text;
+        let text = &event.text_raw;
         if text.contains('\u{00c3}') || text.contains('\u{00c2}') {
             report.add_finding(ValidationFinding {
                 rule_id: RuleId::V015,
@@ -343,8 +341,8 @@ impl EventPosition {
 
 /// Extract the effective position of an event
 fn get_event_position(event: &Event, _play_res_x: u32, _play_res_y: u32) -> EventPosition {
-    for tag in &event.override_tags {
-        match tag {
+    for to in &event.override_tags {
+        match &to.tag {
             OverrideTag::Pos { x, y } => {
                 return EventPosition {
                     x: *x,
@@ -411,8 +409,8 @@ pub fn detect_overlaps(events: &[Event], config: &OverlapConfig, report: &mut Va
             let pos_b = get_event_position(event_b, play_res_x, play_res_y);
 
             // Time overlap check
-            let overlap_start = event_a.start.as_ms().max(event_b.start.as_ms());
-            let overlap_end = event_a.end.as_ms().min(event_b.end.as_ms());
+            let overlap_start = event_a.start_ms.max(event_b.start_ms);
+            let overlap_end = event_a.end_ms.min(event_b.end_ms);
 
             if overlap_start >= overlap_end {
                 continue; // No time overlap
@@ -438,15 +436,15 @@ pub fn detect_overlaps(events: &[Event], config: &OverlapConfig, report: &mut Va
             }
 
             // Skip karaoke overlaps if configured
-            let karaoke_involved = event_a.has_karaoke() || event_b.has_karaoke();
+            let karaoke_involved = !event_a.karaoke.is_empty() || !event_b.karaoke.is_empty();
             if config.ignore_karaoke && karaoke_involved {
                 continue;
             }
 
             // Determine severity
             let severity = if visual_overlap
-                && overlap_duration == event_a.duration_ms()
-                && overlap_duration == event_b.duration_ms()
+                && overlap_duration == event_a.end_ms - event_a.start_ms
+                && overlap_duration == event_b.end_ms - event_b.start_ms
             {
                 OverlapSeverity::Critical // Full overlap at same position
             } else if visual_overlap && overlap_duration > 200 {
@@ -486,9 +484,9 @@ pub fn detect_overlaps(events: &[Event], config: &OverlapConfig, report: &mut Va
 
 /// Extract effective alignment from override tags
 fn effective_alignment(event: &Event) -> Option<u8> {
-    for tag in &event.override_tags {
-        match tag {
-            OverrideTag::Alignment(a) | OverrideTag::AlignmentNumpad(a) => {
+    for to in &event.override_tags {
+        match &to.tag {
+            OverrideTag::AlignmentVsfilter(a) | OverrideTag::AlignmentNumpad(a) => {
                 return Some(*a);
             }
             _ => {}
@@ -499,9 +497,9 @@ fn effective_alignment(event: &Event) -> Option<u8> {
 
 /// Check if event has visual effects
 fn has_effects(event: &Event) -> bool {
-    event.override_tags.iter().any(|t| {
+    event.override_tags.iter().any(|to| {
         matches!(
-            t,
+            &to.tag,
             OverrideTag::Fade { .. }
                 | OverrideTag::FadeComplex { .. }
                 | OverrideTag::Transform { .. }
@@ -512,35 +510,48 @@ fn has_effects(event: &Event) -> bool {
     })
 }
 
+/// Format milliseconds as ASS time string H:MM:SS.CC
+fn ass_time(ms: u64) -> String {
+    let total_cs = ms / 10;
+    let cs = total_cs % 100;
+    let total_secs = total_cs / 100;
+    let secs = total_secs % 60;
+    let mins = (total_secs / 60) % 60;
+    let hours = total_secs / 3600;
+    format!("{}:{:02}:{:02}.{:02}", hours, mins, secs, cs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
-    use ass_parser::{Effect, SubtitleFormat, Timestamp};
+    use ass_core::{
+        Effect, KaraokeSegment, KaraokeStyle, ScriptMetadata, SubtitleDocument, SubtitleFormat,
+    };
 
     #[test]
     fn test_v014_non_karaoke_no_finding() {
-        let ass = AssFile {
+        let ass = SubtitleDocument {
             format: SubtitleFormat::Ass,
-            script_info: ScriptInfo::default(),
+            metadata: ScriptMetadata::default(),
             styles: vec![],
             events: vec![Event {
                 event_type: EventType::Dialogue,
                 layer: 0,
-                start: Timestamp::ZERO,
-                end: Timestamp::from_ms(5000),
-                style_name: "Default".into(),
-                name: String::new(),
-                margin_l: 0,
-                margin_r: 0,
-                margin_v: 0,
+                start_ms: 0,
+                end_ms: 5000,
+                style: "Default".into(),
+                actor: String::new(),
+                margin_l: Some(0),
+                margin_r: Some(0),
+                margin_v: Some(0),
                 effect: Effect::None,
-                text: "Hello World".into(),
+                text_raw: "Hello World".into(),
                 override_tags: vec![],
-                karaoke_segments: vec![],
-                raw_override_block: String::new(),
+                karaoke: vec![],
+                source_line: 0,
             }],
-            embedded_fonts: vec![],
+            fonts: vec![],
+            warnings: vec![],
         };
         let mut report = ValidationReport::new();
         validate_semantics(&ass, &mut report);
@@ -556,7 +567,7 @@ mod tests {
     fn test_v014_parsed_karaoke_no_finding() {
         // A parsed karaoke event with {\k50} has both karaoke_segments AND
         // OverrideTag::Karaoke — no V014 should fire (consistent state)
-        let ass = AssFile::parse(
+        let ass = SubtitleDocument::parse(
             "[Script Info]\n\
              ScriptType: v4.00+\n\
              PlayResX: 1920\n\
@@ -593,32 +604,33 @@ mod tests {
     #[test]
     fn test_v014_inconsistent_karaoke_triggers_warning() {
         // Event with karaoke_segments but no OverrideTag::Karaoke => V014
-        let ass = AssFile {
+        let ass = SubtitleDocument {
             format: SubtitleFormat::Ass,
-            script_info: ScriptInfo::default(),
+            metadata: ScriptMetadata::default(),
             styles: vec![],
             events: vec![Event {
                 event_type: EventType::Dialogue,
                 layer: 0,
-                start: Timestamp::ZERO,
-                end: Timestamp::from_ms(1000),
-                style_name: "Default".into(),
-                name: String::new(),
-                margin_l: 0,
-                margin_r: 0,
-                margin_v: 0,
+                start_ms: 0,
+                end_ms: 1000,
+                style: "Default".into(),
+                actor: String::new(),
+                margin_l: Some(0),
+                margin_r: Some(0),
+                margin_v: Some(0),
                 effect: Effect::None,
-                text: "inconsistent".into(),
-                override_tags: vec![], // deliberately missing OverrideTag::Karaoke
-                karaoke_segments: vec![KaraokeSegment::new(
+                text_raw: "inconsistent".into(),
+                override_tags: vec![],
+                karaoke: vec![KaraokeSegment::new(
                     KaraokeStyle::Instant,
                     500,
                     "ly".into(),
                     0,
                 )],
-                raw_override_block: String::new(),
+                source_line: 0,
             }],
-            embedded_fonts: vec![],
+            fonts: vec![],
+            warnings: vec![],
         };
         let mut report = ValidationReport::new();
         validate_semantics(&ass, &mut report);

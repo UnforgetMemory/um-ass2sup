@@ -4,14 +4,14 @@
 //! karaoke overlap handling, strict vs lenient modes, structural validation,
 //! timestamp validation, style references, duration warnings, and brace matching.
 
-use ass_parser::AssFile;
+use ass_core::SubtitleDocument;
 use subtitle_validator::report::{OverlapConfig, OverlapSeverity, RuleId};
 use subtitle_validator::{validate, validate_strict, Validator};
 
 // ─────────────────────── Helpers ───────────────────────
 
-fn parse_ass(input: &str) -> AssFile {
-    AssFile::parse(input).unwrap()
+fn parse_ass(input: &str) -> SubtitleDocument {
+    SubtitleDocument::parse(input).unwrap()
 }
 
 /// Generate an ASS file with N dialogue events at 1-second intervals.
@@ -395,7 +395,7 @@ Dialogue: 0,0:00:01.00,0:00:05.00,, ,0,0,0,,Empty style name
     // Empty style name "" doesn't match "Default" → V009
     // But the parser may trim it; check if the style_name is empty
     let event = &ass.events[0];
-    if event.style_name.is_empty() || event.style_name == " " {
+    if event.style.as_str().is_empty() || event.style.as_str() == " " {
         let v009: Vec<_> = report
             .findings
             .iter()

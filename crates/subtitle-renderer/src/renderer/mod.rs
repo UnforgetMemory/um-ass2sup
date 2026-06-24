@@ -1,4 +1,6 @@
-use ass_parser::{AssFile, Event, Style, Timestamp};
+use ass_core::{
+    Alignment, AssColor, BorderStyle, Event, FontEncoding, Margins, Style, SubtitleDocument,
+};
 use tiny_skia::Pixmap;
 
 use crate::context::{RenderConfig, RenderContext, RenderedFrame};
@@ -24,7 +26,7 @@ pub mod cosmic_karaoke;
 pub(crate) mod drawing;
 mod layout;
 pub mod text_layout;
-pub use text_layout::alignment_to_pos;
+pub use text_layout::{alignment_to_pos, strip_override_blocks};
 
 /// Reusable pixmap buffer pool to reduce allocations across events.
 pub(crate) struct PixmapPool {
@@ -83,32 +85,35 @@ impl Renderer {
     }
 
     /// Renders all visible dialogue events at the given timestamp to an RGBA frame.
-    pub fn render_ass(&self, ass: &AssFile, timestamp_ms: u64) -> Option<RenderedFrame> {
-        self.render_ass_cosmic_inner(ass, timestamp_ms, &mut self.cosmic_render.lock())
+    pub fn render_ass(&self, doc: &SubtitleDocument, timestamp_ms: u64) -> Option<RenderedFrame> {
+        self.render_ass_cosmic_inner(doc, timestamp_ms, &mut self.cosmic_render.lock())
     }
 
     /// Cosmic-text render loop.
     fn render_ass_cosmic_inner(
         &self,
-        ass: &AssFile,
+        doc: &SubtitleDocument,
         timestamp_ms: u64,
         cosmic: &mut CosmicRenderResources,
     ) -> Option<RenderedFrame> {
         let fn_start = std::time::Instant::now();
-        let ts = Timestamp::from_ms(timestamp_ms);
         let mut pixmap = self
             .pixmap_pool
             .lock()
             .get(self.config.width, self.config.height)
             .or_else(|| Pixmap::new(self.config.width, self.config.height))?;
 
-        let mut events: Vec<&Event> = ass.dialogue_events().collect();
-        events.retain(|e| e.start <= ts && ts < e.end);
+        let mut events: Vec<&Event> = doc
+            .events
+            .iter()
+            .filter(|e| e.event_type == ass_core::EventType::Dialogue)
+            .collect();
+        events.retain(|e| e.start_ms <= timestamp_ms && timestamp_ms < e.end_ms);
         events.sort_by_key(|e| e.layer);
 
         let duration_ms = events
             .iter()
-            .map(|e| e.end.as_ms().saturating_sub(e.start.as_ms()))
+            .map(|e| e.end_ms.saturating_sub(e.start_ms))
             .max()
             .unwrap_or(0);
 
@@ -120,17 +125,41 @@ impl Renderer {
 
         for event in events {
             let event_start = std::time::Instant::now();
-            let event_start_ms = event.start.as_ms();
-            let event_end_ms = event.end.as_ms();
+            let event_start_ms = event.start_ms;
+            let event_end_ms = event.end_ms;
 
-            let style = ass
-                .find_style(&event.style_name)
+            let style = doc
+                .styles
+                .iter()
+                .find(|s| s.name.as_str() == event.style.as_str())
                 .cloned()
-                .unwrap_or_default();
+                .unwrap_or_else(|| Style {
+                    name: event.style.clone(),
+                    font_name: String::new(),
+                    font_size: 0.0,
+                    primary_color: AssColor::WHITE,
+                    secondary_color: AssColor::WHITE,
+                    outline_color: AssColor::BLACK,
+                    shadow_color: AssColor::BLACK,
+                    bold: false,
+                    italic: false,
+                    underline: false,
+                    strikeout: false,
+                    scale_x: 100.0,
+                    scale_y: 100.0,
+                    spacing: 0.0,
+                    angle: 0.0,
+                    border_style: BorderStyle::OutlineAndShadow,
+                    outline: 0.0,
+                    shadow: 0.0,
+                    alignment: Alignment::BottomCenter,
+                    margins: Margins::default(),
+                    encoding: FontEncoding::default(),
+                });
             let ctx = self.build_context(
                 event,
                 &style,
-                ass,
+                doc,
                 timestamp_ms,
                 event_start_ms,
                 event_end_ms,
@@ -150,7 +179,7 @@ impl Renderer {
             if elapsed.as_millis() > 500 {
                 tracing::warn!(
                     timestamp_ms,
-                    style = %event.style_name,
+                    style = %event.style,
                     elapsed_ms = elapsed.as_millis() as u64,
                     "render_ass: SLOW event (>500ms)"
                 );
@@ -177,7 +206,7 @@ impl Renderer {
         &self,
         event: &Event,
         style: &Style,
-        ass: &AssFile,
+        doc: &SubtitleDocument,
         timestamp_ms: u64,
         event_start_ms: u64,
         event_end_ms: u64,
@@ -186,7 +215,7 @@ impl Renderer {
             &self.config,
             event,
             style,
-            ass,
+            doc,
             timestamp_ms,
             event_start_ms,
             event_end_ms,

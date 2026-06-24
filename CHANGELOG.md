@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.2.0] - 2026-06-23
+## [2.7.0] - 2026-06-24
+
+### Added
+- **DDD architecture for CLI**: Complete rewrite of `ass2sup-cli` from monolithic 1570-line `lib.rs` to domain-driven modules: `cli/` (args, progress), `pipeline/` (convert, batch, srt, check), `config/` (resolution, color-space, font), `error.rs`, `telemetry.rs`. Each source file ≤300 lines.
+- **Resolution validation**: `-r` flag is now validated early with a clear error message for malformed values.
+- **Feature gate removal**: `cosmic-text` is now the always-enabled font backend (no `cfg(feature = "cosmic-text")`). The old `fontdb`+`rustybuzz`+`ttf-parser` codepath is removed.
+- **New test suite**: 15 new test files covering CLI args, errors, telemetry, pipeline, integration, renderer basic, effects, karaoke, and pixmap pool. Old broken test files (10 files, 5000+ lines) rewritten or deleted.
+
+### Changed
+- **ass-parser → ass-core**: Renamed and restructured `ass_parser` crate to `ass_core`. `AssFile` → `SubtitleDocument`, `ScriptInfo` → `ScriptMetadata`. Event fields `start`/`end` → `start_ms`/`end_ms` (u64), `style_name` → `style` (StyleRef), `text` → `text_raw`, `name` → `actor`, `margin_l/r/v` → `Option<u32>`, `override_tags` → `Vec<TaggedOverride>`, `karaoke_segments` → `karaoke`. Removed `raw_override_block`.
+- **Style type safety**: `border_style` → `BorderStyle` enum, `alignment` → `Alignment` enum, `encoding` → `FontEncoding` enum. Margins consolidated into `Margins` struct. `outline_width` → `outline`, `shadow_depth` → `shadow`.
+- **Effect field names**: `Banner.delay_per_pixel` → `delay`, `ScrollUp/ScrollDown.delay_per_row` → `delay`, `top_offset` → `top`, `bottom_offset` → `bottom`.
+- **Custom resolution detection**: When `-r` is omitted, the CLI now falls back to `PlayResX`/`PlayResY` from the ASS `[Script Info]` section. Falls back to 1920×1080 if both CLI and script resolution are missing or invalid.
+
+### Removed
+- **`_archive/ass-parser/`**: Entire archived crate (200+ files, 5435 lines) deleted, including its fuzz targets, examples, and test data.
+- **`FontManager`/`Shaper`/`FrameCache`**: All removed in favour of `cosmic-text` equivalents.
+- **Broken test files**: 10 stale test files deleted from `subtitle-renderer/tests/`, `subtitle-renderer/benches/`, and `ass2sup-cli/tests/`.
+- **`ass-parser` workspace dependency**: Fully replaced by `ass-core`.
+- **`#[cfg(feature = "cosmic-text")]` guards**: Feature-gated codepath removed.
+
+### Fixed
+- **Integer overflow in validator**: `event.end_ms - event.start_ms` uses `saturating_sub` to avoid panics when end < start (V012 duration check).
+- **Alignment enum validation**: V008 rule still works with `Alignment::to_u8()` type-safe access.
+
+### Internal
+- All workspace crates (`subtitle-validator`, `subtitle-renderer`, `ass2sup-cli`) migrated to `ass_core` types exclusively.
 
 ### Added
 - **cosmic-text font engine**: Migrated from `fontdb`+`rustybuzz`+`ttf-parser` to unified `cosmic-text` with `swash` glyph rasterization. `FontCosmicResolver` wraps `FontSystem`+`SwashCache` for cross-platform font discovery (DirectWrite/CoreText/fontconfig).

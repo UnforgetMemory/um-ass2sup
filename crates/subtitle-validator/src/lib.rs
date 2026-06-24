@@ -9,16 +9,16 @@
 //! ## Overview
 //!
 //! The validator runs a series of rules ([`report::ValidationStage`]) against a
-//! parsed [`ass_parser::AssFile`] and produces a [`report::ValidationReport`]
+//! parsed [`ass_core::SubtitleDocument`] and produces a [`report::ValidationReport`]
 //! containing findings, overlap warnings, and summary statistics.
 //!
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use ass_parser::AssFile;
+//! use ass_core::SubtitleDocument;
 //! use subtitle_validator::Validator;
 //!
-//! let ass = AssFile::parse_file(std::path::Path::new("subtitles.ass")).unwrap();
+//! let ass = SubtitleDocument::parse(&std::fs::read_to_string("subtitles.ass").unwrap()).unwrap();
 //! let report = Validator::new().validate(&ass);
 //! if !report.is_valid {
 //!     eprintln!("{}", report.display());
@@ -30,7 +30,7 @@ pub mod report;
 /// Validation rule implementations.
 pub mod rules;
 
-use ass_parser::AssFile;
+use ass_core::SubtitleDocument;
 
 pub use crate::report::{OverlapConfig, OverlapSeverity, OverlapWarning, ValidationReport};
 
@@ -101,19 +101,20 @@ impl Validator {
     ///
     /// # Arguments
     ///
-    /// * `ass` - A reference to a parsed [`AssFile`] (from the `ass-parser` crate).
+    /// * `ass` - A reference to a parsed [`SubtitleDocument`] (from the `ass-parser` crate).
     ///
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use ass_parser::AssFile;
+    /// use ass_core::SubtitleDocument;
     /// use subtitle_validator::Validator;
     ///
-    /// let ass = AssFile::parse_file(std::path::Path::new("subtitles.ass")).unwrap();
+    /// let content = std::fs::read_to_string("subtitles.ass").unwrap();
+    /// let ass = SubtitleDocument::parse(&content).unwrap();
     /// let report = Validator::new().validate(&ass);
     /// println!("{}", report.summary());
     /// ```
-    pub fn validate(&self, ass: &AssFile) -> ValidationReport {
+    pub fn validate(&self, ass: &SubtitleDocument) -> ValidationReport {
         rules::validate(ass, &self.overlap_config)
     }
 }
@@ -128,12 +129,12 @@ impl Default for Validator {
 ///
 /// This is a convenience function equivalent to:
 /// ```rust,no_run
-/// # use ass_parser::AssFile;
+/// # use ass_core::SubtitleDocument;
 /// # use subtitle_validator::Validator;
-/// # let ass: &AssFile = todo!();
+/// # let ass: &SubtitleDocument = todo!();
 /// Validator::new().validate(&ass);
 /// ```
-pub fn validate(ass: &AssFile) -> ValidationReport {
+pub fn validate(ass: &SubtitleDocument) -> ValidationReport {
     Validator::new().validate(ass)
 }
 
@@ -144,14 +145,14 @@ pub fn validate(ass: &AssFile) -> ValidationReport {
 ///
 /// Equivalent to:
 /// ```rust,no_run
-/// # use ass_parser::AssFile;
+/// # use ass_core::SubtitleDocument;
 /// # use subtitle_validator::{Validator, OverlapConfig};
-/// # let ass: &AssFile = todo!();
+/// # let ass: &SubtitleDocument = todo!();
 /// Validator::new()
 ///     .with_overlap_config(OverlapConfig::strict())
 ///     .validate(&ass);
 /// ```
-pub fn validate_strict(ass: &AssFile) -> ValidationReport {
+pub fn validate_strict(ass: &SubtitleDocument) -> ValidationReport {
     Validator::new()
         .with_overlap_config(OverlapConfig::strict())
         .validate(ass)

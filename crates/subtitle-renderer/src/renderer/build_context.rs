@@ -9,7 +9,7 @@ use crate::renderer::animation::{
     parse_override_block,
 };
 use crate::renderer::text_layout::alignment_to_pos;
-use ass_parser::{AssFile, Event, OverrideTag, Style};
+use ass_core::{Event, OverrideTag, Style, SubtitleDocument};
 
 /// Maximum allowed blur radius to prevent DoS via large blur values.
 const MAX_BLUR_RADIUS: f64 = 64.0;
@@ -22,7 +22,7 @@ pub fn build_context(
     config: &RenderConfig,
     event: &Event,
     style: &Style,
-    ass: &AssFile,
+    doc: &SubtitleDocument,
     timestamp_ms: u64,
     event_start_ms: u64,
     event_end_ms: u64,
@@ -40,13 +40,13 @@ pub fn build_context(
         shadow_color: style.shadow_color.to_rgba(),
         bold: style.bold,
         italic: style.italic,
-        outline_width: style.outline_width as f32,
-        shadow_depth: style.shadow_depth as f32,
-        alignment: style.alignment,
-        margin_l: event.margin_l as f32,
-        margin_r: event.margin_r as f32,
-        margin_v: event.margin_v as f32,
-        border_style: style.border_style,
+        outline_width: style.outline as f32,
+        shadow_depth: style.shadow as f32,
+        alignment: style.alignment.to_u8(),
+        margin_l: event.margin_l.unwrap_or(style.margins.left) as f32,
+        margin_r: event.margin_r.unwrap_or(style.margins.right) as f32,
+        margin_v: event.margin_v.unwrap_or(style.margins.vertical) as f32,
+        border_style: style.border_style.to_u8(),
         ..Default::default()
     };
     ctx.scale_x = style.scale_x as f32;
@@ -75,8 +75,8 @@ pub fn build_context(
     let mut has_fade_complex = false;
     let mut fade_params = (0u8, 0u8, 0u8, 0u64, 0u64, 0u64, 0u64);
 
-    for tag in &event.override_tags {
-        match tag {
+    for tagged in &event.override_tags {
+        match &tagged.tag {
             OverrideTag::FontSize(fs) => ctx.font_size = *fs as f32 * scale_y,
             OverrideTag::FontName(n) => ctx.font_name = n.clone(),
             OverrideTag::Bold(b) => ctx.bold = *b,
@@ -99,8 +99,8 @@ pub fn build_context(
             OverrideTag::SecondaryAlpha { value } => ctx.secondary_color[3] = 255 - *value,
             OverrideTag::OutlineAlpha { value } => ctx.outline_color[3] = 255 - *value,
             OverrideTag::ShadowAlpha { value } => ctx.shadow_color[3] = 255 - *value,
-            OverrideTag::Border(w) => {
-                ctx.outline_width = (*w).clamp(0.0, MAX_OUTLINE_WIDTH) as f32;
+            OverrideTag::Border { x, y: _ } => {
+                ctx.outline_width = (*x).clamp(0.0, MAX_OUTLINE_WIDTH) as f32;
                 ctx.outline_x_width = 0.0;
                 ctx.outline_y_width = 0.0;
             }
@@ -110,8 +110,8 @@ pub fn build_context(
             OverrideTag::BorderY(w) => {
                 ctx.outline_y_width = (*w).clamp(0.0, MAX_OUTLINE_WIDTH) as f32
             }
-            OverrideTag::Shadow(d) => {
-                ctx.shadow_depth = *d as f32;
+            OverrideTag::Shadow { x, y: _ } => {
+                ctx.shadow_depth = *x as f32;
                 ctx.shadow_x = 0.0;
                 ctx.shadow_y = 0.0;
             }
@@ -138,7 +138,7 @@ pub fn build_context(
                 ctx.shear_x = *x as f32;
                 ctx.shear_y = *y as f32;
             }
-            OverrideTag::Alignment(a) => ctx.alignment = *a,
+            OverrideTag::AlignmentVsfilter(a) => ctx.alignment = *a,
             OverrideTag::AlignmentNumpad(a) => ctx.alignment = *a,
             OverrideTag::WrapStyle(w) => ctx.wrap_style = *w,
             OverrideTag::Pos { x, y } => {
@@ -240,7 +240,7 @@ pub fn build_context(
                 let reset_style = if style_name.is_empty() {
                     Some(style)
                 } else {
-                    ass.find_style(style_name)
+                    doc.styles.iter().find(|s| s.name.as_str() == style_name)
                 };
                 if let Some(s) = reset_style {
                     ctx.font_name = s.font_name.clone();
@@ -251,16 +251,16 @@ pub fn build_context(
                     ctx.secondary_color = s.secondary_color.to_rgba();
                     ctx.outline_color = s.outline_color.to_rgba();
                     ctx.shadow_color = s.shadow_color.to_rgba();
-                    ctx.outline_width = s.outline_width as f32;
-                    ctx.shadow_depth = s.shadow_depth as f32;
-                    ctx.alignment = s.alignment;
+                    ctx.outline_width = s.outline as f32;
+                    ctx.shadow_depth = s.shadow as f32;
+                    ctx.alignment = s.alignment.to_u8();
                     ctx.scale_x = s.scale_x as f32;
                     ctx.scale_y = s.scale_y as f32;
                     ctx.spacing = s.spacing as f32;
                     ctx.underline = s.underline;
                     ctx.strikeout = s.strikeout;
                     ctx.rotation = s.angle as f32;
-                    ctx.border_style = s.border_style;
+                    ctx.border_style = s.border_style.to_u8();
                     ctx.perspective_x = 0.0;
                     ctx.perspective_y = 0.0;
                     ctx.animation_skip = false;
@@ -275,9 +275,9 @@ pub fn build_context(
                 ctx.secondary_color = style.secondary_color.to_rgba();
                 ctx.outline_color = style.outline_color.to_rgba();
                 ctx.shadow_color = style.shadow_color.to_rgba();
-                ctx.outline_width = style.outline_width as f32;
-                ctx.shadow_depth = style.shadow_depth as f32;
-                ctx.alignment = style.alignment;
+                ctx.outline_width = style.outline as f32;
+                ctx.shadow_depth = style.shadow as f32;
+                ctx.alignment = style.alignment.to_u8();
                 ctx.writing_mode = 0;
                 ctx.baseline_offset = 0.0;
                 ctx.perspective_x = 0.0;

@@ -7,6 +7,6 @@ license.workspace = true
 description = "Subtitle syntax validation and overlap detection"
 
 [dependencies]
-ass-parser.workspace = true
+ass-core.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

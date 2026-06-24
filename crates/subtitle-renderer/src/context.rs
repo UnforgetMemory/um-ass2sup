@@ -47,7 +47,7 @@ impl Default for RenderConfig {
 
 /// Per-event rendering state built from ASS style defaults + override tags.
 ///
-/// `build_context()` populates this from a [`Style`](ass_parser::style::Style)
+/// `build_context()` populates this from a [`Style`](ass_core::style::Style)
 /// and the event's override tags. Fields use RGBA byte order (`[R, G, B, A]`)
 /// where alpha 255 = fully opaque (the opposite of ASS's inverted alpha).
 ///

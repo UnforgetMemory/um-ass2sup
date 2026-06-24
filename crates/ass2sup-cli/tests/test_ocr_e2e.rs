@@ -144,10 +144,10 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
     use std::process::Command;
 
     use ass2sup_cli::ocr;
-    use ass_parser::AssFile;
+    use ass_core::SubtitleDocument;
     use color_quantizer::Quantizer;
     use pgs_encoder::{decode_frame_to_rgba, decode_sup, frame_to_png, PgsEncoder, RenderContext};
-    use subtitle_renderer::{FontManager, RenderConfig, Renderer};
+    use subtitle_renderer::{RenderConfig, Renderer};
     use tempfile::TempDir;
 
     let temp = TempDir::new().unwrap();
@@ -155,27 +155,15 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
 
     let content = std::fs::read_to_string(fixture_path)
         .unwrap_or_else(|e| panic!("{fixture_name} fixture should exist: {e}"));
-    let ass = AssFile::parse(&content).expect("ASS should parse");
+    let mut doc = SubtitleDocument::parse(&content).expect("ASS should parse");
 
-    // Build the rendering pipeline
-    let mut fm = FontManager::default();
-    fm.load_system_fonts();
-    let font_name = [
-        "Arial",
-        "Liberation Sans",
-        "DejaVu Sans",
-        "Noto Sans CJK SC",
-        "Microsoft YaHei",
-    ]
-    .iter()
-    .find(|n| fm.query_with_fallback(n, false, false).is_some())
-    .unwrap_or(&"Arial");
+    // Build the rendering pipeline — uses default font (no FontManager)
     let config = RenderConfig {
         width: 1920,
         height: 1080,
         script_width: 1920,
         script_height: 1080,
-        default_font: font_name.to_string(),
+        default_font: "Arial".to_string(),
         default_font_size: 48.0,
     };
     let renderer = Renderer::new(config);
@@ -183,15 +171,15 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
     let mut encoder = PgsEncoder::new(1920, 1080, 24.0);
 
     // Encode first dialogue event to SUP
-    let dialogues: Vec<_> = ass.dialogue_events().cloned().collect();
+    let dialogues: Vec<_> = doc.events.iter().collect();
     assert!(
         !dialogues.is_empty(),
         "{fixture_name} should have dialogue events"
     );
     let first = &dialogues[0];
-    let pts_ms = first.start.as_ms();
+    let pts_ms = first.start_ms;
 
-    if let Some(frame) = renderer.render_ass(&ass, pts_ms) {
+    if let Some(frame) = renderer.render_ass(&doc, pts_ms) {
         eprintln!(
             "DEBUG: frame {}x{}, bitmap len={}, duration={}ms",
             frame.width,
@@ -276,7 +264,7 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
     eprintln!("OCR extracted: '{combined}'");
 
     // Collect ASS text for the rendered event only
-    let reference = ocr::strip_ass_tags(&first.text);
+    let reference = ocr::strip_ass_tags(&first.text_raw);
     eprintln!("ASS reference: '{reference}'");
 
     let sim = ocr::normalized_similarity(&combined, &reference);
