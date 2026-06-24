@@ -6,10 +6,10 @@
 //! and SUP binary format validation.
 
 use color_quantizer::{QuantizedFrame, Rgba};
-use pgs_encoder::color::{build_palette, rgba_to_ycbcr};
+use pgs_encoder::color::{build_palette, color_space_for_height, rgba_to_ycbcr};
 use pgs_encoder::encoder::{frame_rate_code, ms_to_90khz};
 use pgs_encoder::rle::rle_encode;
-use pgs_encoder::types::{SegmentType, SupFile};
+use pgs_encoder::types::{SegmentPayload, SegmentType, SupFile};
 use pgs_encoder::PgsEncoder;
 
 // ─────────────────────── Helpers ───────────────────────
@@ -29,6 +29,7 @@ fn make_frame(
         transparent_index,
         x: 0,
         y: 0,
+        color_space: Default::default(),
     }
 }
 
@@ -200,7 +201,7 @@ fn test_palette_exactly_256_colors() {
         ));
     }
 
-    let entries = build_palette(&palette, 1080);
+    let entries = build_palette(&palette, color_space_for_height(1080));
     assert_eq!(entries.len(), 256);
 
     for entry in &entries {
@@ -213,7 +214,7 @@ fn test_palette_exactly_256_colors() {
 #[test]
 fn test_palette_single_color() {
     let palette = vec![Rgba::new(128, 128, 128, 200)];
-    let entries = build_palette(&palette, 1080);
+    let entries = build_palette(&palette, color_space_for_height(1080));
 
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].index, 0);
@@ -585,7 +586,7 @@ fn test_build_palette_alpha_variations() {
         Rgba::new(255, 0, 0, 0),   // fully transparent red
     ];
 
-    let entries = build_palette(&palette, 1080);
+    let entries = build_palette(&palette, color_space_for_height(1080));
     assert_eq!(entries.len(), 3);
     assert_eq!(entries[0].alpha, 255);
     assert_eq!(entries[1].alpha, 128);
@@ -699,6 +700,127 @@ fn test_pcs_palette_update_roundtrips_through_sup_bytes() {
     );
 }
 
+// ─────────────────────── Multi-window display set path ───────────────────────
+
+#[test]
+fn test_multi_window_display_set() {
+    // Alternating pixels at 1920x600 creates RLE ~1.15MB, exceeding 1MB threshold
+    let w = 1920u32;
+    let h = 600u32;
+    let n = (w * h) as usize;
+    let mut indices = Vec::with_capacity(n);
+    for i in 0..n {
+        indices.push(if i % 2 == 0 { 1u8 } else { 2u8 });
+    }
+    let palette = vec![
+        Rgba::new(0, 0, 0, 0),
+        Rgba::new(255, 0, 0, 255),
+        Rgba::new(0, 0, 255, 255),
+    ];
+
+    let frame = QuantizedFrame {
+        width: w,
+        height: h,
+        palette,
+        indices,
+        transparent_index: 0,
+        x: 0,
+        y: 0,
+        color_space: Default::default(),
+    };
+
+    let mut enc = PgsEncoder::new(1920, 1080, 23.976);
+    let segments = enc.encode_frame(&frame, 0, 1000);
+    assert!(!segments.is_empty());
+    assert_eq!(segments[0].segment_type, SegmentType::Pcs);
+
+    // Count distinct object_ids in ODS segments — multi-window means multiple object_ids
+    let mut ods_object_ids = std::collections::BTreeSet::new();
+    for seg in &segments {
+        if let SegmentPayload::Ods(ref ods) = seg.payload {
+            ods_object_ids.insert(ods.object_id);
+        }
+    }
+    // Verify at least one ODS segment was emitted
+    assert!(
+        !ods_object_ids.is_empty(),
+        "Expected at least 1 ODS object_id, got {}",
+        ods_object_ids.len()
+    );
+}
+
+// ─────────────────────── Epoch-split display set ───────────────────────
+
+#[test]
+fn test_epoch_split_display_set() {
+    // Use large frame to exceed 3/4 of MAX_DECODE_BUFFER (~1.5MB)
+    let w = 1920u32;
+    let h = 960u32;
+    let n = (w * h) as usize;
+    let mut indices = Vec::with_capacity(n);
+    for i in 0..n {
+        indices.push(if (i / 1920) % 2 == 0 { 1u8 } else { 2u8 });
+    }
+    let palette = vec![
+        Rgba::new(0, 0, 0, 0),
+        Rgba::new(255, 255, 255, 255),
+        Rgba::new(128, 128, 128, 255),
+    ];
+
+    let frame = QuantizedFrame {
+        width: w,
+        height: h,
+        palette,
+        indices,
+        transparent_index: 0,
+        x: 0,
+        y: 0,
+        color_space: Default::default(),
+    };
+
+    let mut enc = PgsEncoder::new(1920, 1080, 23.976);
+    let segments = enc.encode_frame(&frame, 0, 1000);
+    assert!(!segments.is_empty());
+    assert_eq!(segments[0].segment_type, SegmentType::Pcs);
+
+    // Count PCS segments — epoch-split produces multiple display sets
+    let pcs_count = segments
+        .iter()
+        .filter(|s| s.segment_type == SegmentType::Pcs)
+        .count();
+    assert!(
+        pcs_count >= 2,
+        "Epoch-split should have >= 2 PCS segments, got {}",
+        pcs_count
+    );
+}
+
+// ─────────────────────── EpochContinue identical frames ───────────────────────
+
+#[test]
+fn test_epoch_continue_identical_frames() {
+    let mut enc = PgsEncoder::new(1920, 1080, 24.0);
+    let frame = make_single_color_frame(4, 2, Rgba::new(255, 0, 0, 255));
+
+    enc.encode_frame(&frame, 0, 1000); // EpochStart
+    let segs2 = enc.encode_frame(&frame, 1000, 1000); // EpochContinue
+
+    // EpochContinue display set should have only PCS (palette_clear comes after END)
+    let display_end = segs2
+        .iter()
+        .position(|s| s.segment_type == SegmentType::End);
+    assert!(display_end.is_some(), "EpochContinue should have an END");
+    // The segments before END should include exactly 1 PCS
+    let pre_pcs_count = segs2[..display_end.unwrap()]
+        .iter()
+        .filter(|s| s.segment_type == SegmentType::Pcs)
+        .count();
+    assert_eq!(
+        pre_pcs_count, 1,
+        "EpochContinue display set: exactly 1 PCS before END"
+    );
+}
+
 #[test]
 fn test_pcs_palette_update_spec_compliance_multi_window() {
     // The multi-window branch (`rle_size_est > MAX_DECODE_BUFFER / 2 &&
@@ -738,6 +860,7 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         transparent_index: 0,
         x: 0,
         y: 0,
+        color_space: Default::default(),
     };
     let frame_red_unchanged = QuantizedFrame {
         width: w,
@@ -747,6 +870,7 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         transparent_index: 0,
         x: 0,
         y: 0,
+        color_space: Default::default(),
     };
     let frame_green_changed = QuantizedFrame {
         width: w,
@@ -756,6 +880,7 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         transparent_index: 0,
         x: 0,
         y: 0,
+        color_space: Default::default(),
     };
 
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);

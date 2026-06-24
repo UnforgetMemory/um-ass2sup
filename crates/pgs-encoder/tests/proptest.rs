@@ -27,6 +27,7 @@ fn arb_quantized_frame() -> impl Strategy<Value = QuantizedFrame> {
                 transparent_index,
                 x: 0,
                 y: 0,
+                color_space: Default::default(),
             },
         )
 }
@@ -190,5 +191,33 @@ proptest! {
                 }
             }
         }
+    }
+}
+
+// ============================================================
+// Property: RLE roundtrip: rle_encode(rle_decode(x)) = x
+// ============================================================
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(500))]
+
+    #[test]
+    fn rle_roundtrip(
+        indices in proptest::collection::vec(any::<u8>(), 1..=200usize),
+        width in 1u32..=20u32,
+    ) {
+        // transparent_index is always 0: the encoder swaps palette so index 0 = transparent
+        // before calling rle_encode. rle_decode reverses this swap after decoding.
+        let transparent_index = 0u8;
+        // Round up to full rows
+        let height = ((indices.len() as f64) / (width as f64)).ceil() as u32;
+        let total = (width * height) as usize;
+        let mut padded = indices.clone();
+        padded.resize(total, transparent_index);
+
+        let encoded = pgs_encoder::rle::rle_encode(&padded, width, height, transparent_index);
+        let decoded = pgs_encoder::rle::rle_decode(&encoded, width, height, transparent_index)
+            .expect("RLE decode must succeed");
+        assert_eq!(decoded.len(), total, "Decoded length must match total pixels");
+        assert_eq!(decoded, padded, "Roundtrip must preserve indices");
     }
 }

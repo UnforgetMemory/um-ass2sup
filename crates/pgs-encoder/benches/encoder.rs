@@ -33,6 +33,7 @@ fn make_test_frame(width: u32, height: u32, color_count: usize) -> QuantizedFram
         indices,
         x: 0,
         y: 0,
+        color_space: Default::default(),
     }
 }
 
