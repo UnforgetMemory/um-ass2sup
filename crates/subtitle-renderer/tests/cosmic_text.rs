@@ -1,13 +1,12 @@
-//! Unit tests for the cosmic-text backend (FontCosmicResolver, CosmicShaper, rasterizer).
+//! Unit tests for the cosmic-text backend (CosmicRenderResources, CosmicShaper, rasterizer).
 
 mod common;
 
 use cosmic_text::{FontSystem, SwashCache};
 use subtitle_renderer::{
     cosmic::rasterizer::rasterize_cosmic_glyph,
-    cosmic::resolver::FontCosmicResolver,
     cosmic::shaper::{CosmicShapedGlyph, CosmicShaper},
-    RenderContext,
+    CosmicRenderResources, RenderContext,
 };
 use tiny_skia::Pixmap;
 
@@ -72,16 +71,16 @@ fn shaper_idempotent_same_input_same_output() {
 
 #[test]
 fn resolver_new_loads_system_fonts() {
-    let resolver = FontCosmicResolver::new();
+    let resolver = CosmicRenderResources::new();
     assert!(
         resolver.font_count() > 0,
-        "FontCosmicResolver::new() should load system fonts"
+        "CosmicRenderResources::new() should load system fonts"
     );
 }
 
 #[test]
 fn resolver_load_font_data_does_not_panic() {
-    let resolver = FontCosmicResolver::new();
+    let resolver = CosmicRenderResources::new();
     // Empty/invalid data should not panic.
     let id = resolver.load_font_data(vec![]);
     let _ = id;
@@ -89,7 +88,7 @@ fn resolver_load_font_data_does_not_panic() {
 
 #[test]
 fn resolver_resolve_font_common_family() {
-    let resolver = FontCosmicResolver::new();
+    let resolver = CosmicRenderResources::new();
     // Query a commonly available font family. The result is platform-dependent
     // so we accept either Some or None without asserting.
     let _ = resolver.resolve_font("Arial", false, false);
@@ -97,7 +96,7 @@ fn resolver_resolve_font_common_family() {
 
 #[test]
 fn resolver_font_count_nonzero_after_new() {
-    let resolver = FontCosmicResolver::new();
+    let resolver = CosmicRenderResources::new();
     let count = resolver.font_count();
     assert!(
         count > 0,

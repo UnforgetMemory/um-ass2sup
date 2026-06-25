@@ -163,33 +163,8 @@ pub struct RenderContext {
     /// If true, \t animations snap to end state immediately (set by `\!`).
     pub animation_skip: bool,
     // ── New in 2.2: missing 53-tag coverage ──
-    /// Cumulative relative font size delta (set by `\fs+N` / `\fs-N`).
-    pub font_size_relative_delta: f32,
-    /// Whether a current drawing clip (`\clip(@)`) is active.
-    pub clip_drawing_current: bool,
-    /// Current drawing clip commands in ASS drawing format (set by `\clip(@commands)`, `\iclip(@commands)`).
-    pub clip_drawing_current_commands: Option<String>,
-    /// Scale factor for @-variant clip drawing coordinates.
-    pub clip_drawing_current_scale: f32,
-    /// If true, the @-variant clip is inverted (set by `\iclip(@commands)`).
-    pub clip_drawing_inverse_current: bool,
-    /// Font charset encoding (set by `\fe`), 1 = default.
-    pub charset: u8,
     /// Whether a `\pos` or `\move` tag was explicitly applied (for alignment fallback).
     pub has_pos: bool,
-    /// Deferred move animation state for `\move` interpolation.
-    pub move_animation: Option<MoveAnim>,
-}
-
-/// State for deferred `\move` animation interpolation.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MoveAnim {
-    pub x1: f32,
-    pub y1: f32,
-    pub x2: f32,
-    pub y2: f32,
-    pub t1: u64,
-    pub t2: u64,
 }
 
 impl Default for RenderContext {
@@ -244,14 +219,7 @@ impl Default for RenderContext {
             drawing_mode: 0,
             border_style: 1,
             animation_skip: false,
-            font_size_relative_delta: 0.0,
-            clip_drawing_current: false,
-            clip_drawing_current_commands: None,
-            clip_drawing_current_scale: 1.0,
-            clip_drawing_inverse_current: false,
-            charset: 1,
             has_pos: false,
-            move_animation: None,
         }
     }
 }

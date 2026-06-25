@@ -19,8 +19,6 @@ pub enum RendererError {
 
 mod animation;
 mod build_context;
-pub mod compositing;
-pub mod context;
 pub mod cosmic;
 pub mod cosmic_karaoke;
 pub(crate) mod drawing;

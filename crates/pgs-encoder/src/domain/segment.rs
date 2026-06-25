@@ -180,9 +180,10 @@ impl Segment {
                 buf.push(p.palette_id);
                 buf.push(p.version);
                 for entry in &p.entries {
+                    buf.push(entry.index);
                     buf.push(entry.y);
-                    buf.push(entry.cb);
                     buf.push(entry.cr);
+                    buf.push(entry.cb);
                     buf.push(entry.alpha);
                 }
                 buf

@@ -140,7 +140,7 @@ impl ConversionPipeline {
 
         // Load extra font directories
         for dir in &config.font.font_dirs {
-            let added = renderer.cosmic_render().resolver.load_fonts_dir(dir);
+            let added = renderer.cosmic_render().load_fonts_dir(dir);
             if added > 0 {
                 info!("Loaded {added} font face(s) from {}", dir.display());
             } else {
@@ -164,7 +164,7 @@ impl ConversionPipeline {
             .collect();
         let embedded_count = font_data_list.len();
         for (_font_name, font_data) in font_data_list {
-            renderer.cosmic_render().resolver.load_font_data(font_data);
+            renderer.cosmic_render().load_font_data(font_data);
         }
         debug!(embedded_count, "loaded ASS embedded fonts");
 
@@ -194,8 +194,16 @@ impl ConversionPipeline {
             .with_max_colors(config.max_colors)
             .with_dither(dither);
 
-        if config.color_space != color_quantizer::color::ColorSpace::Srgb {
-            pipeline = pipeline.with_color_space(config.color_space);
+        // Auto-select BT.709 for HD content (1080p) per Blu-ray spec.
+        let effective_cs = if config.color_space == color_quantizer::color::ColorSpace::Srgb
+            && config.resolution.height > 576
+        {
+            color_quantizer::color::ColorSpace::Bt709
+        } else {
+            config.color_space
+        };
+        if effective_cs != color_quantizer::color::ColorSpace::Srgb {
+            pipeline = pipeline.with_color_space(effective_cs);
         }
         if let Some(op) = &config.tonemap {
             pipeline = pipeline.with_tonemap(*op);
@@ -208,11 +216,36 @@ impl ConversionPipeline {
             let mut prev_frame: Option<QuantizedFrame> = None;
             doc.events
                 .iter()
-                .filter_map(|event| {
+                .enumerate()
+                .filter_map(|(i, event)| {
                     let render_pts = util::compute_render_pts(event);
-                    let frame = renderer.render_ass(doc, render_pts)?;
-                    let (bmp, x, y, w, h) =
-                        util::crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
+                    let frame = match renderer.render_ass(doc, render_pts) {
+                        Some(f) => f,
+                        None => {
+                            warn!(
+                                "Event {}: render_ass returned no frame (start={}ms, end={}ms, text=\"{}\")",
+                                i,
+                                event.start_ms,
+                                event.end_ms,
+                                event.text_raw.chars().take(60).collect::<String>(),
+                            );
+                            return None;
+                        }
+                    };
+                    let (bmp, x, y, w, h) = match util::crop_to_tight_bbox(
+                        &frame.bitmap,
+                        frame.width,
+                        frame.height,
+                    ) {
+                        Some(c) => c,
+                        None => {
+                            warn!(
+                                "Event {}: crop_to_tight_bbox found no visible pixels (frame {}x{})",
+                                i, frame.width, frame.height,
+                            );
+                            return None;
+                        }
+                    };
                     let mut q = pipeline.quantize_with_prev(&bmp, w, h, prev_frame.as_ref());
                     q.x = x as u16;
                     q.y = y as u16;
@@ -228,11 +261,36 @@ impl ConversionPipeline {
             let frames: Vec<Option<QuantizedFrame>> = doc
                 .events
                 .par_iter()
-                .map(|event| {
+                .enumerate()
+                .map(|(i, event)| {
                     let render_pts = util::compute_render_pts(event);
-                    let frame = renderer.render_ass(doc, render_pts)?;
-                    let (bmp, x, y, w, h) =
-                        util::crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height)?;
+                    let frame = match renderer.render_ass(doc, render_pts) {
+                        Some(f) => f,
+                        None => {
+                            warn!(
+                                "Event {}: render_ass returned no frame (start={}ms, end={}ms, text=\"{}\")",
+                                i,
+                                event.start_ms,
+                                event.end_ms,
+                                event.text_raw.chars().take(60).collect::<String>(),
+                            );
+                            return None;
+                        }
+                    };
+                    let (bmp, x, y, w, h) = match util::crop_to_tight_bbox(
+                        &frame.bitmap,
+                        frame.width,
+                        frame.height,
+                    ) {
+                        Some(c) => c,
+                        None => {
+                            warn!(
+                                "Event {}: crop_to_tight_bbox found no visible pixels (frame {}x{})",
+                                i, frame.width, frame.height,
+                            );
+                            return None;
+                        }
+                    };
                     let mut q = pipeline.quantize(&bmp, w, h);
                     q.x = x as u16;
                     q.y = y as u16;
@@ -329,8 +387,8 @@ impl ConversionPipeline {
                 in_tc,
                 out_tc,
                 graphic: png_filename,
-                x: 0,
-                y: 0,
+                x: q.x as u32,
+                y: q.y as u32,
                 width: q.width,
                 height: q.height,
                 forced: false,

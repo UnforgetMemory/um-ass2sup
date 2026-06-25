@@ -37,7 +37,7 @@ impl PgsEncoder {
 
     pub fn new(display_width: u16, display_height: u16, fps: f64) -> Self {
         Self {
-            composition_number: 0,
+            composition_number: 1,
             object_id: 0,
             palette_id: 0,
             window_id: 0,
@@ -45,7 +45,7 @@ impl PgsEncoder {
             display_width,
             display_height,
             fps,
-            epoch: EpochManager::new(),
+            epoch: EpochManager::new().with_max_frames((2.0 * fps) as u32),
             potplayer_compat: true,
         }
     }
@@ -65,7 +65,7 @@ impl PgsEncoder {
         duration_ms: u64,
     ) -> Vec<Segment> {
         let pts = self.ms_to_90khz(pts_ms);
-        let dts = pts;
+        let dts = pts.saturating_sub(1);
         let pts_end = self.ms_to_90khz(pts_ms + duration_ms);
         let mut segments = Vec::new();
         segments.extend(self.build_display_set(frame, pts, dts));
@@ -75,11 +75,11 @@ impl PgsEncoder {
             dts,
             payload: SegmentPayload::End,
         });
-        segments.extend(self.build_palette_clear_display_set(pts_end, pts_end));
+        segments.extend(self.build_palette_clear_display_set(pts_end, pts_end.saturating_sub(1)));
         segments.push(Segment {
             segment_type: SegmentType::End,
             pts: pts_end,
-            dts: pts_end,
+            dts: pts_end.saturating_sub(1),
             payload: SegmentPayload::End,
         });
         self.composition_number = self.composition_number.wrapping_add(1);
@@ -133,9 +133,15 @@ impl PgsEncoder {
         let fc = self.epoch.frame_count;
         let ov = self.epoch.object_version;
         let segments = match kind {
-            DisplaySetKind::EpochContinue => {
-                ds::build_continue_display_set(cfg, frame, pts, dts, composition_state)
-            }
+            DisplaySetKind::EpochContinue => ds::build_continue_display_set(
+                cfg,
+                frame,
+                pts,
+                dts,
+                composition_state,
+                &palette_entries,
+                fc,
+            ),
             DisplaySetKind::PaletteOnly => ds::build_palette_only_display_set(
                 cfg,
                 frame,
@@ -269,7 +275,34 @@ mod tests {
         let frame = make_test_frame();
         let segments = enc.encode_frame(&frame, 1000, 2000);
         assert_eq!(segments[0].pts, 90000);
+        assert_eq!(segments[0].dts, 89999);
         assert_eq!(segments[7].pts, 270000);
+        assert_eq!(segments[7].dts, 269999);
+    }
+
+    #[test]
+    fn test_dts_strictly_less_than_pts() {
+        let mut enc = PgsEncoder::new(1920, 1080, 24.0);
+        let frame = make_test_frame();
+        let segments = enc.encode_frame(&frame, 1000, 2000);
+        for seg in &segments {
+            assert!(
+                seg.dts < seg.pts,
+                "DTS ({}) must be strictly less than PTS ({})",
+                seg.dts,
+                seg.pts
+            );
+        }
+    }
+
+    #[test]
+    fn test_dts_zero_when_pts_zero() {
+        let mut enc = PgsEncoder::new(1920, 1080, 24.0);
+        let frame = make_test_frame();
+        let segments = enc.encode_frame(&frame, 0, 0);
+        for seg in &segments {
+            assert_eq!(seg.dts, 0, "DTS should be 0 when PTS is 0");
+        }
     }
 
     #[test]
@@ -277,10 +310,10 @@ mod tests {
         let mut enc = PgsEncoder::new(1920, 1080, 24.0);
         let frame = make_test_frame();
         enc.encode_frame(&frame, 0, 1000);
-        assert_eq!(enc.composition_number, 1);
+        assert_eq!(enc.composition_number, 2);
         assert_eq!(enc.object_id, 0);
         enc.encode_frame(&frame, 1000, 1000);
-        assert_eq!(enc.composition_number, 2);
+        assert_eq!(enc.composition_number, 3);
         assert_eq!(enc.object_id, 0);
     }
 
@@ -439,7 +472,10 @@ mod tests {
             .find(|s| matches!(s.payload, SegmentPayload::Pcs(_)))
             .unwrap();
         if let SegmentPayload::Pcs(ref p) = display_pcs.payload {
-            assert!(!p.palette_update, "palette unchanged => false");
+            assert!(
+                p.palette_update,
+                "palette unchanged: expect palette_update following PDS in continue set"
+            );
         }
     }
 

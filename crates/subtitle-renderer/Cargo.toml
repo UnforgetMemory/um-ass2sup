@@ -15,7 +15,7 @@ wide.workspace = true
 parking_lot.workspace = true
 cosmic-text = { workspace = true, features = ["swash"] }
 fontdb = "0.23"
-ttf-parser.workspace = true
+swash.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

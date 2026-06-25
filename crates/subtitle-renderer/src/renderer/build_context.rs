@@ -78,6 +78,9 @@ pub fn build_context(
     for tagged in &event.override_tags {
         match &tagged.tag {
             OverrideTag::FontSize(fs) => ctx.font_size = *fs as f32 * scale_y,
+            OverrideTag::FontSizeRelative(delta) => {
+                ctx.font_size = (ctx.font_size + *delta as f32).max(1.0);
+            }
             OverrideTag::FontName(n) => ctx.font_name = n.clone(),
             OverrideTag::Bold(b) => ctx.bold = *b,
             OverrideTag::BoldWeight(w) => ctx.bold = *w >= 700,
@@ -145,6 +148,7 @@ pub fn build_context(
                 ctx.x = *x as f32 * scale_x;
                 ctx.y = *y as f32 * scale_y;
                 has_pos = true;
+                ctx.has_pos = true;
             }
             OverrideTag::Move {
                 x1,
@@ -162,6 +166,7 @@ pub fn build_context(
                 move_t2 = *t2;
                 has_move = true;
                 has_pos = true;
+                ctx.has_pos = true;
             }
             OverrideTag::Fade {
                 duration_in,

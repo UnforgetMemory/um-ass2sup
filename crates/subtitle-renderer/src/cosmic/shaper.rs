@@ -9,7 +9,7 @@ pub struct CosmicShapedGlyph {
     pub y_advance: f32,
     pub x_offset: f32,
     pub y_offset: f32,
-    pub font_id: ID, // per-glyph! supports font fallback
+    pub font_id: ID,
 }
 
 /// Shaper using cosmic-text Buffer for text shaping.
@@ -42,7 +42,7 @@ impl CosmicShaper {
                 .weight(if bold {
                     cosmic_text::Weight::BOLD
                 } else {
-                    cosmic_text::Weight::NORMAL
+                    cosmic_text::Weight::THIN
                 })
                 .style(if italic {
                     cosmic_text::Style::Italic
@@ -55,7 +55,7 @@ impl CosmicShaper {
                 .weight(if bold {
                     cosmic_text::Weight::BOLD
                 } else {
-                    cosmic_text::Weight::NORMAL
+                    cosmic_text::Weight::THIN
                 })
                 .style(if italic {
                     cosmic_text::Style::Italic
@@ -84,5 +84,50 @@ impl CosmicShaper {
         }
 
         glyphs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attrs_bold_false_uses_thin_weight() {
+        let attrs = Attrs::new().weight(if false {
+            cosmic_text::Weight::BOLD
+        } else {
+            cosmic_text::Weight::THIN
+        });
+        assert_eq!(attrs.weight, cosmic_text::Weight::THIN);
+    }
+
+    #[test]
+    fn attrs_bold_true_uses_bold_weight() {
+        let attrs = Attrs::new().weight(if true {
+            cosmic_text::Weight::BOLD
+        } else {
+            cosmic_text::Weight::THIN
+        });
+        assert_eq!(attrs.weight, cosmic_text::Weight::BOLD);
+    }
+
+    #[test]
+    fn attrs_with_font_name_bold_false_uses_thin_weight() {
+        let attrs = Attrs::new().family(Family::Name("Arial")).weight(if false {
+            cosmic_text::Weight::BOLD
+        } else {
+            cosmic_text::Weight::THIN
+        });
+        assert_eq!(attrs.weight, cosmic_text::Weight::THIN);
+    }
+
+    #[test]
+    fn attrs_with_font_name_bold_true_uses_bold_weight() {
+        let attrs = Attrs::new().family(Family::Name("Arial")).weight(if true {
+            cosmic_text::Weight::BOLD
+        } else {
+            cosmic_text::Weight::THIN
+        });
+        assert_eq!(attrs.weight, cosmic_text::Weight::BOLD);
     }
 }

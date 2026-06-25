@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.7.2] - 2026-06-25
+## [2.7.3] - 2026-06-25
+
+### Fixed
+- **`\pos` + center/right alignment causing off-screen text rendering**: `shape_horizontal` incorrectly applied full-width centering offset on top of `\pos` coordinates, pushing text beyond the display boundary. Events with `\pos` and non-left alignment rendered as fully transparent frames and were silently dropped (28/1988 events lost). `build_context.rs` now propagates `ctx.has_pos = true`; `shape_horizontal` uses `ctx.x - ta/2` (center) or `ctx.x - ta` (right) when `has_pos` is true.
+- **Palette transparent entry contamination during reuse**: `quantize_with_prev` called `find_nearest_index` against the full palette including the transparent `[0,0,0,0]` entry, causing dark opaque pixels to map to index 0 and disappear. Fixed by excluding the transparent entry from the search palette.
+- **Dithering colour corruption**: Floyd-Steinberg and Ordered dithering could map opaque pixels to the transparent palette entry (index 0). Post-processing now remaps any opaque pixel at index 0 to the nearest opaque palette entry.
+- **`composite_over` SIMD premultiplication bug**: The wide-SIMD path (`u32x4`) omitted the `src * sa` premultiplication step, causing colour shifts during alpha blending (fade effects, anti-aliased text edges). Formula corrected to `s * sa / 255 + d * (255 - sa) / 255`.
+- **Default colour space selection**: For HD content (1080p), the default `Srgb` colour space mapped to BT.601 YCbCr coefficients in the PGS encoder, while PotPlayer expects BT.709 for HD video. Now auto-selects BT.709 when resolution height > 576 and no `--color-space` flag is given.
+- **PDS palette entry byte order**: PDS serialization wrote `Y, Cb, Cr, Alpha` per palette entry, but the Blu-ray PGS spec requires `Y, Cr, Cb, Alpha`. This Cr↔Cb swap caused systematic colour shifts (red→blue, green→yellow-green) in player decoding. Also added the missing `palette_entry_id` byte (5 bytes per entry per spec, was 4).
+- **EpochContinue display set invisible after palette-clear**: The palette-clear display set updated the PGS palette to all-transparent entries. Subsequent EpochContinue display sets had `palette_update=false`, so they re-used the transparent palette and the subtitle appeared invisible in players like PotPlayer. Fixed: EpochContinue now sends `palette_update=true` with a full PDS containing the correct frame palette.
+
+### Changed
+- `color-quantizer/pipeline.rs`: `quantize_with_prev` remapping excludes transparent palette entry; dither post-processing handles index-0 contamination.
+- `subtitle-renderer/cosmic/effects/composite.rs`: `composite_over` SIMD path corrected with proper premultiplied alpha formula.
+- `ass2sup-cli/pipeline/convert.rs`: Auto-select BT.709 for HD content in PGS palette encoding.
+- `subtitle-renderer/renderer/build_context.rs`: `\pos`/`\move` set `ctx.has_pos = true`.
+- `subtitle-renderer/renderer/layout.rs`: `shape_horizontal` uses `ctx.has_pos` to anchor alignment offsets around `\pos` coordinates.
 
 ### Fixed
 - **SUP PTS timestamps**: All PGS display sets had PTS=0 due to hardcoded `pts_ms=0, duration_ms=0` in `encode_sup()`, causing players to display no subtitles. Now populated from actual event `start_ms`/`end_ms`.

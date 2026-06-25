@@ -566,6 +566,81 @@ fn test_build_context_font_name_and_size_override() {
 }
 
 #[test]
+fn test_build_context_font_size_relative_positive() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    // Start with base FontSize 48, then add 10
+    event.override_tags = vec![
+        TaggedOverride {
+            tag: OverrideTag::FontSize(48.0),
+            span: None,
+        },
+        TaggedOverride {
+            tag: OverrideTag::FontSizeRelative(10),
+            span: None,
+        },
+    ];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert_eq!(ctx.font_size, 58.0);
+}
+
+#[test]
+fn test_build_context_font_size_relative_negative() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    event.override_tags = vec![
+        TaggedOverride {
+            tag: OverrideTag::FontSize(48.0),
+            span: None,
+        },
+        TaggedOverride {
+            tag: OverrideTag::FontSizeRelative(-5),
+            span: None,
+        },
+    ];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert_eq!(ctx.font_size, 43.0);
+}
+
+#[test]
+fn test_build_context_font_size_relative_clamp_min() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    // Start with FontSize 3, then subtract 10 — should clamp to 1.0
+    event.override_tags = vec![
+        TaggedOverride {
+            tag: OverrideTag::FontSize(3.0),
+            span: None,
+        },
+        TaggedOverride {
+            tag: OverrideTag::FontSizeRelative(-10),
+            span: None,
+        },
+    ];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert!((ctx.font_size - 1.0).abs() < 0.001);
+}
+
+#[test]
+fn test_build_context_font_size_relative_alone() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    // No FontSize override — uses style's 48.0 as baseline
+    event.override_tags = vec![TaggedOverride {
+        tag: OverrideTag::FontSizeRelative(10),
+        span: None,
+    }];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    // With default config (1920x1080 matching script 1920x1080), scale_y=1.0
+    // style font_size = 48.0, so 48.0 + 10 = 58.0
+    assert_eq!(ctx.font_size, 58.0);
+}
+
+#[test]
 fn test_build_context_bold_and_italic_override() {
     let renderer = default_renderer();
     let mut event = default_event();

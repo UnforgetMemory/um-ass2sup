@@ -1370,11 +1370,11 @@ dependencies = [
  "criterion",
  "fontdb",
  "parking_lot",
+ "swash",
  "tempfile",
  "thiserror",
  "tiny-skia",
  "tracing",
- "ttf-parser",
  "wide",
 ]
 

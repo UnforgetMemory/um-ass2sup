@@ -27,6 +27,7 @@ pub struct EpochManager {
     pub prev_object_rle_hash: Option<u64>,
     pub frame_count: u32,
     pub object_version: u8,
+    pub max_frames_per_epoch: u32,
 }
 
 impl EpochManager {
@@ -36,14 +37,26 @@ impl EpochManager {
             prev_object_rle_hash: None,
             frame_count: 0,
             object_version: 0,
+            max_frames_per_epoch: 0,
         }
     }
 
-    /// Decide the display set kind based on hash comparisons.
+    /// Set the maximum frames per epoch before forcing a restart.
+    /// `0` (default) disables the limit.
+    pub fn with_max_frames(mut self, max: u32) -> Self {
+        self.max_frames_per_epoch = max;
+        self
+    }
+
+    /// Decide the display set kind based on hash comparisons and epoch duration.
     ///
     /// Returns [`DisplaySetKind::EpochStart`] when there is no previous frame
-    /// (first frame or explicit reset).
+    /// (first frame or explicit reset) or when the max-frames-per-epoch limit
+    /// has been reached.
     pub fn decide_kind(&self, palette_hash: u64, rle_hash: u64) -> DisplaySetKind {
+        if self.max_frames_per_epoch > 0 && self.frame_count >= self.max_frames_per_epoch {
+            return DisplaySetKind::EpochStart;
+        }
         if self.prev_object_rle_hash.is_none() {
             DisplaySetKind::EpochStart
         } else if rle_hash
@@ -64,11 +77,20 @@ impl EpochManager {
     }
 
     /// Store hashes and advance counters after a frame is processed.
+    ///
+    /// When the max-frames-per-epoch limit is reached, resets epoch state
+    /// so the next call to [`decide_kind`] returns [`DisplaySetKind::EpochStart`].
     pub fn update(&mut self, palette_hash: u64, rle_hash: u64) {
         self.prev_palette_hash = Some(palette_hash);
         self.prev_object_rle_hash = Some(rle_hash);
         self.frame_count += 1;
         self.object_version = self.object_version.wrapping_add(1);
+        if self.max_frames_per_epoch > 0 && self.frame_count >= self.max_frames_per_epoch {
+            self.frame_count = 0;
+            self.prev_palette_hash = None;
+            self.prev_object_rle_hash = None;
+            self.object_version = 0;
+        }
     }
 }
 
@@ -127,5 +149,44 @@ mod tests {
         let mut mgr = EpochManager::new();
         mgr.update(100, 200);
         assert_eq!(mgr.decide_kind(101, 200), DisplaySetKind::PaletteOnly);
+    }
+
+    #[test]
+    fn test_max_frames_forces_epoch_start_with_unchanged_hashes() {
+        let mut mgr = EpochManager::new().with_max_frames(3);
+        // First frame always epoch start
+        assert_eq!(mgr.decide_kind(100, 200), DisplaySetKind::EpochStart);
+        mgr.update(100, 200);
+        // Second frame — unchanged hashes → EpochContinue
+        assert_eq!(mgr.decide_kind(100, 200), DisplaySetKind::EpochContinue);
+        mgr.update(100, 200);
+        // Third frame — unchanged, but frame_count=2 < 3 → still EpochContinue
+        assert_eq!(mgr.decide_kind(100, 200), DisplaySetKind::EpochContinue);
+        mgr.update(100, 200);
+        // Fourth call: frame_count=3 >= 3 → EpochStart despite unchanged hashes
+        assert_eq!(mgr.decide_kind(100, 200), DisplaySetKind::EpochStart);
+    }
+
+    #[test]
+    fn test_max_frames_disabled_zero_still_continues() {
+        let mut mgr = EpochManager::new().with_max_frames(0);
+        mgr.update(100, 200);
+        // Run past 100 frames — still EpochContinue
+        for _ in 0..100 {
+            mgr.update(100, 200);
+        }
+        assert_eq!(mgr.decide_kind(100, 200), DisplaySetKind::EpochContinue);
+    }
+
+    #[test]
+    fn test_max_frames_update_resets_counters() {
+        let mut mgr = EpochManager::new().with_max_frames(2);
+        mgr.update(100, 200); // frame_count → 1
+        mgr.update(100, 200); // frame_count → 2, then reset to 0
+                              // After reset, hashes should be None → EpochStart
+        assert_eq!(mgr.frame_count, 0);
+        assert!(mgr.prev_palette_hash.is_none());
+        assert!(mgr.prev_object_rle_hash.is_none());
+        assert_eq!(mgr.object_version, 0);
     }
 }

@@ -5,8 +5,7 @@
 
 use crate::context::RenderContext;
 use crate::cosmic::shaper::CosmicShapedGlyph;
-use cosmic_text::{CacheKey, CacheKeyFlags, SwashContent};
-use fontdb::Weight;
+use cosmic_text::{CacheKey, CacheKeyFlags, SwashContent, Weight};
 use tiny_skia::Pixmap;
 
 /// Rasterize a cosmic-text glyph onto a pixmap at the given position.

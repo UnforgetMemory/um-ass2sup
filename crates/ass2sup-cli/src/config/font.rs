@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use ass_core::SubtitleDocument;
-use subtitle_renderer::FontCosmicResolver;
+use subtitle_renderer::CosmicRenderResources;
 use tracing::{debug, trace, warn};
 
 /// Per-style font fallback map: style name → ordered list of fallback names.
@@ -37,7 +37,7 @@ pub fn parse_font_map(entries: &[String]) -> Result<FontMap, String> {
 /// Returns an `Err` listing all missing fonts when `no_check` is `false`.
 pub fn check_ass_fonts(
     doc: &SubtitleDocument,
-    resolver: &FontCosmicResolver,
+    resolver: &CosmicRenderResources,
     font_map: &FontMap,
     global_fallback: &str,
     no_check: bool,

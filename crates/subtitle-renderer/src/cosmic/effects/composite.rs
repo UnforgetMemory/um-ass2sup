@@ -7,7 +7,6 @@ pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
         return;
     }
 
-    let one = u32x4::splat(255);
     let chunks = len / 16;
     for i in 0..chunks {
         let off = i * 16;
@@ -24,8 +23,8 @@ pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
             dst[off + 3] as u32,
         ]);
         let sa = u32x4::splat(src[off + 3] as u32);
-        let inv_da = one - sa;
-        let r = s + d * inv_da / u32x4::splat(255);
+        let inv = u32x4::splat(255) - sa;
+        let r = s * sa / u32x4::splat(255) + d * inv / u32x4::splat(255);
         let r: [u32; 4] = r.into();
         dst[off] = r[0] as u8;
         dst[off + 1] = r[1] as u8;

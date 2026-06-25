@@ -39,10 +39,18 @@ pub(crate) fn shape_horizontal(
     }
     let total_h = lines.len() as f32 * lh;
     let ar = ((ctx.alignment - 1) / 3) as usize;
-    let yb = match ar {
-        0 => ctx.y,
-        1 => ctx.y + (config.height as f32 - ctx.margin_v * 2.0 - total_h) / 2.0,
-        _ => ctx.y + config.height as f32 - ctx.margin_v * 2.0 - total_h,
+    let yb = if ctx.has_pos {
+        match ar {
+            0 => ctx.y,
+            1 => ctx.y - total_h / 2.0,
+            _ => ctx.y - total_h,
+        }
+    } else {
+        match ar {
+            0 => ctx.y,
+            1 => ctx.y + (config.height as f32 - ctx.margin_v * 2.0 - total_h) / 2.0,
+            _ => ctx.y + config.height as f32 - ctx.margin_v * 2.0 - total_h,
+        }
     };
     let mut r = Vec::with_capacity(lines.len());
     for (i, line) in lines.iter().enumerate() {
@@ -56,10 +64,18 @@ pub(crate) fn shape_horizontal(
         );
         let ta: f32 = gs.iter().map(|g| g.x_advance).sum();
         let ac = (ctx.alignment - 1) % 3;
-        let xs = match ac {
-            2 => ctx.x + aw - ta,
-            1 => ctx.x + (aw - ta) / 2.0,
-            _ => ctx.x,
+        let xs = if ctx.has_pos {
+            match ac {
+                2 => ctx.x - ta,
+                1 => ctx.x - ta / 2.0,
+                _ => ctx.x,
+            }
+        } else {
+            match ac {
+                2 => ctx.x + aw - ta,
+                1 => ctx.x + (aw - ta) / 2.0,
+                _ => ctx.x,
+            }
         };
         r.push(CosmicShapedLine {
             glyphs: gs,

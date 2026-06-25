@@ -202,10 +202,20 @@ impl ColorPipeline {
                 let raw =
                     dither::floyd_steinberg::dither(&working_rgba, width, height, &full_palette);
                 if has_transparent {
-                    // Ensure transparent pixels keep index 0.
                     raw.into_iter()
                         .zip(working_rgba.chunks_exact(4))
-                        .map(|(i, c)| if c[3] == 0 { 0 } else { i })
+                        .map(|(i, c)| {
+                            if c[3] == 0 {
+                                0
+                            } else if i == 0 {
+                                quantize::nearest::find_nearest_index(
+                                    &[c[0], c[1], c[2], c[3]],
+                                    &full_palette[1..],
+                                ) + 1
+                            } else {
+                                i
+                            }
+                        })
                         .collect()
                 } else {
                     raw
@@ -216,7 +226,18 @@ impl ColorPipeline {
                 if has_transparent {
                     raw.into_iter()
                         .zip(working_rgba.chunks_exact(4))
-                        .map(|(i, c)| if c[3] == 0 { 0 } else { i })
+                        .map(|(i, c)| {
+                            if c[3] == 0 {
+                                0
+                            } else if i == 0 {
+                                quantize::nearest::find_nearest_index(
+                                    &[c[0], c[1], c[2], c[3]],
+                                    &full_palette[1..],
+                                ) + 1
+                            } else {
+                                i
+                            }
+                        })
                         .collect()
                 } else {
                     raw
@@ -261,6 +282,15 @@ impl ColorPipeline {
                 // Convert previous Rgba palette to flat [[u8;4]] for internal use.
                 let flat_pal: Vec<[u8; 4]> =
                     prev.palette.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
+                // The first palette entry is the transparent colour [0,0,0,0].
+                // Exclude it from nearest-neighbour search so dark opaque
+                // pixels do not accidentally match the transparent entry.
+                let has_tr = flat_pal.first().map(|c| c[3] == 0).unwrap_or(false);
+                let pal_for_search = if has_tr {
+                    &flat_pal[1..]
+                } else {
+                    &flat_pal[..]
+                };
                 if quantize::temporal::all_mappable(&pixels, &flat_pal, 30.0) {
                     // Reuse previous palette: just remap.
                     let indices = pixels
@@ -269,7 +299,11 @@ impl ColorPipeline {
                             if p[3] == 0 {
                                 prev.transparent_index
                             } else {
-                                quantize::nearest::find_nearest_index(p, &flat_pal)
+                                if has_tr {
+                                    quantize::nearest::find_nearest_index(p, pal_for_search) + 1
+                                } else {
+                                    quantize::nearest::find_nearest_index(p, pal_for_search)
+                                }
                             }
                         })
                         .collect();

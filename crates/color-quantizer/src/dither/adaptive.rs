@@ -63,23 +63,25 @@ pub fn dither(rgba: &[u8], width: u32, height: u32, palette: &[[u8; 4]]) -> Vec<
                 [rgba[base], rgba[base + 1], rgba[base + 2], rgba[base + 3]]
             } else if grad >= FLAT_THRESHOLD {
                 // Textured region: ordered Bayer is faster.
+                // Centered threshold range (t−0.5)×64 gives [−32,+32] noise,
+                // much gentler than the prior t×255 which added up to ~239.
                 let t = BAYER[y % 4][x % 4];
+                let s = (t - 0.5) * 64.0;
                 [
-                    (rgba[base] as f32 + t * 255.0).min(255.0) as u8,
-                    (rgba[base + 1] as f32 + t * 255.0).min(255.0) as u8,
-                    (rgba[base + 2] as f32 + t * 255.0).min(255.0) as u8,
-                    (rgba[base + 3] as f32 + t * 255.0).min(255.0) as u8,
+                    (rgba[base] as f32 + s).clamp(0.0, 255.0) as u8,
+                    (rgba[base + 1] as f32 + s).clamp(0.0, 255.0) as u8,
+                    (rgba[base + 2] as f32 + s).clamp(0.0, 255.0) as u8,
+                    (rgba[base + 3] as f32 + s).clamp(0.0, 255.0) as u8,
                 ]
             } else {
-                // Flat region: Floyd–Steinberg would be ideal here, but
-                // per-pixel error diffusion is expensive. Use ordered as
-                // a reasonable approximation for the adaptive pass.
+                // Flat region: use milder Bayer threshold for smooth gradients.
                 let t = BAYER[y % 4][x % 4];
+                let s = (t - 0.5) * 64.0;
                 [
-                    (rgba[base] as f32 + t * 255.0).min(255.0) as u8,
-                    (rgba[base + 1] as f32 + t * 255.0).min(255.0) as u8,
-                    (rgba[base + 2] as f32 + t * 255.0).min(255.0) as u8,
-                    (rgba[base + 3] as f32 + t * 255.0).min(255.0) as u8,
+                    (rgba[base] as f32 + s).clamp(0.0, 255.0) as u8,
+                    (rgba[base + 1] as f32 + s).clamp(0.0, 255.0) as u8,
+                    (rgba[base + 2] as f32 + s).clamp(0.0, 255.0) as u8,
+                    (rgba[base + 3] as f32 + s).clamp(0.0, 255.0) as u8,
                 ]
             };
 

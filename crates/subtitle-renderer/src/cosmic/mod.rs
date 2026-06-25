@@ -5,11 +5,9 @@
 
 pub mod effects;
 pub mod rasterizer;
-pub mod resolver;
 pub mod shaper;
 pub mod spans;
 
 pub use rasterizer::rasterize_cosmic_glyph;
-pub use resolver::FontCosmicResolver;
 pub use shaper::{CosmicShapedGlyph, CosmicShaper};
 pub use spans::parse_spans;

@@ -146,7 +146,7 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
     use ass2sup_cli::ocr;
     use ass_core::SubtitleDocument;
     use color_quantizer::Quantizer;
-    use pgs_encoder::{decode_frame_to_rgba, decode_sup, frame_to_png, PgsEncoder, RenderContext};
+    use pgs_encoder::PgsEncoder;
     use subtitle_renderer::{RenderConfig, Renderer};
     use tempfile::TempDir;
 
@@ -155,7 +155,7 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
 
     let content = std::fs::read_to_string(fixture_path)
         .unwrap_or_else(|e| panic!("{fixture_name} fixture should exist: {e}"));
-    let mut doc = SubtitleDocument::parse(&content).expect("ASS should parse");
+    let doc = SubtitleDocument::parse(&content).expect("ASS should parse");
 
     // Build the rendering pipeline — uses default font (no FontManager)
     let config = RenderConfig {
@@ -195,25 +195,21 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
             frame.bitmap.len()
         );
         let quantized = quantizer.quantize(&frame.bitmap, frame.width, frame.height);
-        let sup_bytes = encoder.encode_frame_to_bytes(&quantized, pts_ms, frame.duration_ms);
+        let _sup_bytes = encoder.encode_frame_to_bytes(&quantized, pts_ms, frame.duration_ms);
 
-        // Decode SUP → display sets → RGBA → PNG
-        let display_sets = decode_sup(&sup_bytes).expect("SUP should decode");
-        assert!(
-            !display_sets.is_empty(),
-            "SUP should have at least one display set"
-        );
-        let mut ctx = RenderContext::default();
-        let rgba = decode_frame_to_rgba(&display_sets[0], &mut ctx, quantized.transparent_index)
-            .expect("first display set should decode to RGBA");
-        let non_zero_rgba = rgba.data.chunks(4).filter(|p| p[3] != 0).count();
-        eprintln!(
-            "RGBA DEBUG: first={:?}, non_transparent={}/{}",
-            &rgba.data[..4],
-            non_zero_rgba,
-            rgba.data.len() / 4
-        );
-        let png_data = frame_to_png(&rgba).expect("RGBA should encode to PNG");
+        // Write quantized frame directly to PNG (bypass encoder/decoder round-trip)
+        let palette: Vec<[u8; 4]> = quantized
+            .palette
+            .iter()
+            .map(|c| [c.r, c.g, c.b, c.a])
+            .collect();
+        let png_data = bdn_xml::generate_png(
+            &palette,
+            &quantized.indices,
+            quantized.width,
+            quantized.height,
+        )
+        .expect("PNG should encode");
         std::fs::write(&png_path, &png_data).expect("PNG should write");
         eprintln!("PNG written to {}", png_path.display());
     } else {

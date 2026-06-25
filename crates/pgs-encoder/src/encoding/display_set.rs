@@ -20,11 +20,7 @@ pub struct DisplaySetConfig {
 
 impl DisplaySetConfig {
     pub fn palette_clear_num_objects(&self) -> u8 {
-        if self.potplayer_compat {
-            1
-        } else {
-            0
-        }
+        1
     }
 }
 
@@ -81,8 +77,8 @@ pub fn build_palette_clear_display_set(
             y: 0,
             crop_x: 0,
             crop_y: 0,
-            crop_w: 0,
-            crop_h: 0,
+            crop_w: config.display_width,
+            crop_h: config.display_height,
         }],
     };
     let transparent_entries: Vec<PaletteEntry> = (0..=255u8)
@@ -117,43 +113,58 @@ pub fn build_palette_clear_display_set(
 
 pub fn build_continue_display_set(
     config: &DisplaySetConfig,
-    frame: &color_quantizer::QuantizedFrame,
+    _frame: &color_quantizer::QuantizedFrame,
     pts: u64,
     dts: u64,
     composition_state: CompositionState,
+    palette_entries: &[PaletteEntry],
+    frame_count: u32,
 ) -> Vec<Segment> {
-    vec![Segment {
-        segment_type: SegmentType::Pcs,
-        pts,
-        dts,
-        payload: SegmentPayload::Pcs(PcsPayload {
-            width: config.display_width,
-            height: config.display_height,
-            frame_rate: config.frame_rate,
-            composition_number: config.composition_number,
-            composition_state,
-            palette_update: false,
-            palette_id: config.palette_id,
-            num_objects: 1,
-            compositions: vec![ObjectComposition {
-                object_id: config.object_id,
-                window_id: config.window_id,
-                cropped: false,
-                forced: false,
-                x: frame.x,
-                y: frame.y,
-                crop_x: 0,
-                crop_y: 0,
-                crop_w: 0,
-                crop_h: 0,
-            }],
-        }),
-    }]
+    let segments = vec![
+        Segment {
+            segment_type: SegmentType::Pcs,
+            pts,
+            dts,
+            payload: SegmentPayload::Pcs(PcsPayload {
+                width: config.display_width,
+                height: config.display_height,
+                frame_rate: config.frame_rate,
+                composition_number: config.composition_number,
+                composition_state,
+                palette_update: true,
+                palette_id: config.palette_id,
+                num_objects: 1,
+                compositions: vec![ObjectComposition {
+                    object_id: config.object_id,
+                    window_id: config.window_id,
+                    cropped: false,
+                    forced: false,
+                    x: 0,
+                    y: 0,
+                    crop_x: 0,
+                    crop_y: 0,
+                    crop_w: 0,
+                    crop_h: 0,
+                }],
+            }),
+        },
+        Segment {
+            segment_type: SegmentType::Pds,
+            pts,
+            dts,
+            payload: SegmentPayload::Pds(PdsPayload {
+                palette_id: config.palette_id,
+                version: frame_count as u8,
+                entries: palette_entries.to_vec(),
+            }),
+        },
+    ];
+    segments
 }
 
 pub fn build_palette_only_display_set(
     config: &DisplaySetConfig,
-    frame: &color_quantizer::QuantizedFrame,
+    _frame: &color_quantizer::QuantizedFrame,
     pts: u64,
     dts: u64,
     palette_update: bool,
@@ -179,8 +190,8 @@ pub fn build_palette_only_display_set(
                     window_id: config.window_id,
                     cropped: false,
                     forced: false,
-                    x: frame.x,
-                    y: frame.y,
+                    x: 0,
+                    y: 0,
                     crop_x: 0,
                     crop_y: 0,
                     crop_w: 0,
@@ -236,8 +247,8 @@ pub fn build_single_window_display_set(
                 window_id: config.window_id,
                 cropped: false,
                 forced: false,
-                x: obj_x,
-                y: obj_y,
+                x: 0,
+                y: 0,
                 crop_x: 0,
                 crop_y: 0,
                 crop_w: 0,
@@ -345,9 +356,11 @@ pub fn build_multi_window_display_set(
     let top_height = split_row as u16;
     let bottom_height = (frame.height as u16).saturating_sub(top_height);
     let mut segments = Vec::new();
-    let obj1_y = (config.display_height - top_height) / 2;
+    let obj1_y = frame.y;
     let obj2_y = obj1_y + top_height;
-    let x_offset = ((i32::from(config.display_width) - frame.width as i32) / 2).max(0) as u16;
+    let x_offset = frame
+        .x
+        .min(config.display_width.saturating_sub(frame.width as u16));
 
     segments.push(Segment {
         segment_type: SegmentType::Pcs,
@@ -368,8 +381,8 @@ pub fn build_multi_window_display_set(
                     window_id: 0,
                     cropped: false,
                     forced: false,
-                    x: x_offset,
-                    y: obj1_y,
+                    x: 0,
+                    y: 0,
                     crop_x: 0,
                     crop_y: 0,
                     crop_w: 0,
@@ -380,8 +393,8 @@ pub fn build_multi_window_display_set(
                     window_id: 1,
                     cropped: false,
                     forced: false,
-                    x: x_offset,
-                    y: obj2_y,
+                    x: 0,
+                    y: 0,
                     crop_x: 0,
                     crop_y: 0,
                     crop_w: 0,
