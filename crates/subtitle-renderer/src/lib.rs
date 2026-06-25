@@ -1,3 +1,5 @@
+pub mod font;
+
 mod context;
 pub mod cosmic;
 pub mod effects;
