@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.7.2] - 2026-06-25
+
+### Fixed
+- **SUP PTS timestamps**: All PGS display sets had PTS=0 due to hardcoded `pts_ms=0, duration_ms=0` in `encode_sup()`, causing players to display no subtitles. Now populated from actual event `start_ms`/`end_ms`.
+
+### Changed
+- `color_quantizer::QuantizedFrame` gains `pts_ms` and `duration_ms` fields for carrying presentation timing through the render pipeline.
+
 ## [2.7.1] - 2026-06-24
 
 ### Fixed

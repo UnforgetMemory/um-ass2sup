@@ -216,6 +216,8 @@ impl ConversionPipeline {
                     let mut q = pipeline.quantize_with_prev(&bmp, w, h, prev_frame.as_ref());
                     q.x = x as u16;
                     q.y = y as u16;
+                    q.pts_ms = event.start_ms;
+                    q.duration_ms = event.end_ms.saturating_sub(event.start_ms);
                     prev_frame = Some(q.clone());
                     pb.inc(1);
                     Some(q)
@@ -234,6 +236,8 @@ impl ConversionPipeline {
                     let mut q = pipeline.quantize(&bmp, w, h);
                     q.x = x as u16;
                     q.y = y as u16;
+                    q.pts_ms = event.start_ms;
+                    q.duration_ms = event.end_ms.saturating_sub(event.start_ms);
                     Some(q)
                 })
                 .collect();
@@ -258,9 +262,7 @@ impl ConversionPipeline {
 
         let mut all_segments = Vec::new();
         for (i, q) in frames.iter().enumerate() {
-            let pts_ms = 0u64; // caller should set proper pts
-            let duration_ms = 0u64;
-            let segments = encoder.encode_frame(q, pts_ms, duration_ms);
+            let segments = encoder.encode_frame(q, q.pts_ms, q.duration_ms);
             all_segments.extend(segments);
             if i % 100 == 0 {
                 trace!("encode_sup progress: {}/{} frames", i, frames.len());

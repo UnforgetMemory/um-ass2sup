@@ -115,6 +115,8 @@ pub fn quantize_with_palette(
         x: 0,
         y: 0,
         color_space: crate::color::ColorSpace::Srgb,
+        pts_ms: 0,
+        duration_ms: 0,
     });
     pipe.quantize_with_prev(rgba, width, height, prev.as_ref())
 }

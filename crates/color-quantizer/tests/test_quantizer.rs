@@ -41,6 +41,8 @@ fn test_quantized_frame_palette_size() {
         x: 0,
         y: 0,
         color_space: Default::default(),
+        pts_ms: 0,
+        duration_ms: 0,
     };
     assert_eq!(frame.palette_size(), 2);
 }

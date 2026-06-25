@@ -55,7 +55,9 @@ fn make_sparse_glyph_frame() -> QuantizedFrame {
         x: 0,
         y: 0,
         color_space: Default::default(),
-        }
+        pts_ms: 0,
+        duration_ms: 0,
+    }
 }
 
 fn make_bottom_row_frame() -> QuantizedFrame {
@@ -80,7 +82,9 @@ fn make_bottom_row_frame() -> QuantizedFrame {
         x: 0,
         y: 0,
         color_space: Default::default(),
-        }
+        pts_ms: 0,
+        duration_ms: 0,
+    }
 }
 
 fn make_bottom_row_plus1_frame() -> QuantizedFrame {
@@ -105,7 +109,9 @@ fn make_bottom_row_plus1_frame() -> QuantizedFrame {
         x: 0,
         y: 0,
         color_space: Default::default(),
-        }
+        pts_ms: 0,
+        duration_ms: 0,
+    }
 }
 
 fn run_roundtrip(frame: &QuantizedFrame, label: &str) {

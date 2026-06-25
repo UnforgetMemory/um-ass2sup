@@ -75,6 +75,10 @@ pub struct QuantizedFrame {
     pub y: u16,
     /// Colour space of the frame data.
     pub color_space: ColorSpace,
+    /// Presentation timestamp in milliseconds (PTS for SUP output).
+    pub pts_ms: u64,
+    /// Display duration in milliseconds (how long the subtitle is visible).
+    pub duration_ms: u64,
 }
 
 impl QuantizedFrame {
@@ -95,6 +99,8 @@ impl Default for QuantizedFrame {
             x: 0,
             y: 0,
             color_space: ColorSpace::Srgb,
+            pts_ms: 0,
+            duration_ms: 0,
         }
     }
 }

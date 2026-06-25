@@ -30,6 +30,8 @@ fn make_frame(
         x: 0,
         y: 0,
         color_space: Default::default(),
+        pts_ms: 0,
+        duration_ms: 0,
     }
 }
 
@@ -727,6 +729,8 @@ fn test_multi_window_display_set() {
         x: 0,
         y: 0,
         color_space: Default::default(),
+        pts_ms: 0,
+        duration_ms: 0,
     };
 
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);
@@ -776,6 +780,8 @@ fn test_epoch_split_display_set() {
         x: 0,
         y: 0,
         color_space: Default::default(),
+        pts_ms: 0,
+        duration_ms: 0,
     };
 
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);
@@ -861,6 +867,8 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         x: 0,
         y: 0,
         color_space: Default::default(),
+        pts_ms: 0,
+        duration_ms: 0,
     };
     let frame_red_unchanged = QuantizedFrame {
         width: w,
@@ -871,6 +879,8 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         x: 0,
         y: 0,
         color_space: Default::default(),
+        pts_ms: 0,
+        duration_ms: 0,
     };
     let frame_green_changed = QuantizedFrame {
         width: w,
@@ -881,6 +891,8 @@ fn test_pcs_palette_update_spec_compliance_multi_window() {
         x: 0,
         y: 0,
         color_space: Default::default(),
+        pts_ms: 0,
+        duration_ms: 0,
     };
 
     let mut enc = PgsEncoder::new(1920, 1080, 23.976);

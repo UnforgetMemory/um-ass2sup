@@ -28,6 +28,8 @@ fn arb_quantized_frame() -> impl Strategy<Value = QuantizedFrame> {
                 x: 0,
                 y: 0,
                 color_space: Default::default(),
+                pts_ms: 0,
+                duration_ms: 0,
             },
         )
 }

@@ -103,6 +103,8 @@ impl ColorPipeline {
                 x: 0,
                 y: 0,
                 color_space: self.color_space,
+                pts_ms: 0,
+                duration_ms: 0,
             };
         }
 
@@ -231,6 +233,8 @@ impl ColorPipeline {
             x: 0,
             y: 0,
             color_space: self.color_space,
+            pts_ms: 0,
+            duration_ms: 0,
         }
     }
 
@@ -278,6 +282,8 @@ impl ColorPipeline {
                         x: 0,
                         y: 0,
                         color_space: self.color_space,
+                        pts_ms: 0,
+                        duration_ms: 0,
                     };
                 }
             }

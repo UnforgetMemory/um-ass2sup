@@ -509,6 +509,8 @@ pub fn build_epoch_split_display_set(
             x: 0,
             y: 0,
             color_space: frame.color_space,
+            pts_ms: frame.pts_ms,
+            duration_ms: frame.duration_ms,
         };
         let band_rle = rle_encode(
             &band_frame.indices,
