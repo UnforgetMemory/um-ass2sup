@@ -13,8 +13,6 @@ tiny-skia.workspace = true
 ass_core = { path = "../ass-core" }
 wide.workspace = true
 parking_lot.workspace = true
-cosmic-text = { workspace = true, features = ["swash"] }
-fontdb = "0.23"
 swash.workspace = true
 
 [dev-dependencies]

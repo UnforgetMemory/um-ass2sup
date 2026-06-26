@@ -138,9 +138,13 @@ impl ConversionPipeline {
 
         let renderer = Renderer::new(render_cfg);
 
+        // Load system fonts
+        let system_count = renderer.load_system_fonts();
+        debug!(system_count, "loaded system fonts");
+
         // Load extra font directories
         for dir in &config.font.font_dirs {
-            let added = renderer.cosmic_render().load_fonts_dir(dir);
+            let added = renderer.load_user_fonts_dir(dir);
             if added > 0 {
                 info!("Loaded {added} font face(s) from {}", dir.display());
             } else {
@@ -164,7 +168,7 @@ impl ConversionPipeline {
             .collect();
         let embedded_count = font_data_list.len();
         for (_font_name, font_data) in font_data_list {
-            renderer.cosmic_render().load_font_data(font_data);
+            let _ = renderer.load_user_font_data(font_data);
         }
         debug!(embedded_count, "loaded ASS embedded fonts");
 

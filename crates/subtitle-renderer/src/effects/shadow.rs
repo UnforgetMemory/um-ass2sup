@@ -1,5 +1,5 @@
-use crate::cosmic::effects::blur::apply_gaussian_blur;
-use crate::cosmic::effects::composite::composite_over;
+use crate::effects::blur::apply_gaussian_blur;
+use crate::effects::composite::composite_over;
 use tiny_skia::Pixmap;
 
 /// Render a drop shadow behind subtitle text.

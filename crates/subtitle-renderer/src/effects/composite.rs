@@ -7,9 +7,9 @@ pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
         return;
     }
 
-    let chunks = len / 16;
+    let chunks = len / 4;
     for i in 0..chunks {
-        let off = i * 16;
+        let off = i * 4;
         let s = u32x4::from([
             src[off] as u32,
             src[off + 1] as u32,
@@ -25,14 +25,17 @@ pub fn composite_over(dst: &mut [u8], src: &[u8], width: u32, height: u32) {
         let sa = u32x4::splat(src[off + 3] as u32);
         let inv = u32x4::splat(255) - sa;
         let r = s * sa / u32x4::splat(255) + d * inv / u32x4::splat(255);
-        let r: [u32; 4] = r.into();
+        let mut r: [u32; 4] = r.into();
+        // Porter-Duff "over": alpha_out = src_A + dst_A * (1 - src_A/255)
+        // SIMD computes src_A²/255 for alpha lane; fix to correct formula.
+        r[3] = src[off + 3] as u32 + (dst[off + 3] as u32 * (255 - src[off + 3] as u32)) / 255;
         dst[off] = r[0] as u8;
         dst[off + 1] = r[1] as u8;
         dst[off + 2] = r[2] as u8;
         dst[off + 3] = r[3] as u8;
     }
     // Remaining pixels
-    for i in (chunks * 16..len).step_by(4) {
+    for i in (chunks * 4..len).step_by(4) {
         let sa = src[i + 3] as u32;
         if sa == 0 {
             continue;
@@ -59,6 +62,88 @@ pub fn apply_alpha_multiplier(data: &mut [u8], alpha: f32) {
         .skip(3)
         .step_by(4)
         .for_each(|a| *a = (*a as f32 * factor) as u8);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn composite_over_processes_all_pixels() {
+        // Create a 4x1 image (4 pixels = 16 bytes)
+        let width = 4u32;
+        let height = 1u32;
+        let len = (width * height * 4) as usize;
+
+        // Source: all pixels have alpha=128, color=(255, 0, 0)
+        let mut src = vec![0u8; len];
+        for i in 0..4 {
+            src[i * 4] = 255; // R
+            src[i * 4 + 1] = 0; // G
+            src[i * 4 + 2] = 0; // B
+            src[i * 4 + 3] = 128; // A
+        }
+
+        // Destination: all pixels are (0, 0, 0, 0) (transparent black)
+        let mut dst = vec![0u8; len];
+
+        // Run composite_over
+        composite_over(&mut dst, &src, width, height);
+
+        // Verify ALL pixels are composited (not just every 4th)
+        for i in 0..4 {
+            let pixel = &dst[i * 4..(i + 1) * 4];
+            assert_ne!(pixel, &[0, 0, 0, 0], "Pixel {i} was not composited");
+            // Expected: src(255,0,0,128) over dst(0,0,0,0) = (128,0,0,128)
+            assert_eq!(pixel[0], 128, "Pixel {i} R channel wrong");
+            assert_eq!(pixel[1], 0, "Pixel {i} G channel wrong");
+            assert_eq!(pixel[2], 0, "Pixel {i} B channel wrong");
+            assert_eq!(pixel[3], 128, "Pixel {i} A channel wrong");
+        }
+    }
+
+    #[test]
+    fn composite_over_simd_vs_scalar_parity() {
+        // Test with 8 pixels to exercise both SIMD and scalar paths
+        let width = 8u32;
+        let height = 1u32;
+        let len = (width * height * 4) as usize;
+
+        let mut src = vec![0u8; len];
+        let mut dst_simd = vec![0u8; len];
+        let mut dst_scalar = vec![0u8; len];
+
+        // Fill source with varying alpha values
+        for i in 0..8 {
+            src[i * 4] = 200; // R
+            src[i * 4 + 1] = 100; // G
+            src[i * 4 + 2] = 50; // B
+            src[i * 4 + 3] = (i * 30 + 10) as u8; // Varying alpha
+        }
+
+        // SIMD path (current implementation)
+        composite_over(&mut dst_simd, &src, width, height);
+
+        // Scalar reference (correct implementation)
+        for i in (0..len).step_by(4) {
+            let sa = src[i + 3] as u32;
+            if sa == 0 {
+                continue;
+            }
+            let inv = 255 - sa;
+            dst_scalar[i] = ((src[i] as u32 * sa + dst_scalar[i] as u32 * inv) / 255) as u8;
+            dst_scalar[i + 1] =
+                ((src[i + 1] as u32 * sa + dst_scalar[i + 1] as u32 * inv) / 255) as u8;
+            dst_scalar[i + 2] =
+                ((src[i + 2] as u32 * sa + dst_scalar[i + 2] as u32 * inv) / 255) as u8;
+            dst_scalar[i + 3] = (sa + (dst_scalar[i + 3] as u32 * inv) / 255) as u8;
+        }
+
+        assert_eq!(
+            dst_simd, dst_scalar,
+            "SIMD and scalar paths should produce identical results"
+        );
+    }
 }
 
 /// Composite a sub-region source buffer into a larger destination buffer.

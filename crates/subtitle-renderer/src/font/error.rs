@@ -14,10 +14,7 @@ pub enum FontError {
     /// The requested font could not be found.
     NotFound(FontNotFound),
     /// A font file was found but could not be loaded.
-    Corrupted {
-        path: PathBuf,
-        reason: String,
-    },
+    Corrupted { path: PathBuf, reason: String },
     /// No system fonts are available at all.
     NoSystemFonts,
     /// An I/O error occurred while accessing a font file.
@@ -26,10 +23,7 @@ pub enum FontError {
         source: std::io::Error,
     },
     /// A font file had unparseable content (e.g. bad metadata).
-    Parse {
-        path: PathBuf,
-        detail: String,
-    },
+    Parse { path: PathBuf, detail: String },
 }
 
 /// Detailed font-not-found error with candidates for caller decision.
@@ -63,12 +57,7 @@ impl fmt::Display for FontNotFound {
             write!(f, ".")?;
         }
         if let Some(s) = &self.suggestion {
-            write!(
-                f,
-                " Closest: '{}' weight={}.",
-                s.family,
-                s.weight.as_u16()
-            )?;
+            write!(f, " Closest: '{}' weight={}.", s.family, s.weight.as_u16())?;
         }
         Ok(())
     }
@@ -88,11 +77,7 @@ impl fmt::Display for FontError {
                 write!(f, "I/O error accessing '{}': {source}", path.display())
             }
             FontError::Parse { path, detail } => {
-                write!(
-                    f,
-                    "Failed to parse font '{}': {detail}",
-                    path.display()
-                )
+                write!(f, "Failed to parse font '{}': {detail}", path.display())
             }
         }
     }
@@ -120,7 +105,7 @@ impl From<FontNotFound> for FontError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::{FontId, FontStyle, FontStretch, FontWeight};
+    use crate::font::{FontId, FontStretch, FontStyle, FontWeight};
 
     fn make_face(family: &str, weight: FontWeight) -> FontFace {
         FontFace {

@@ -5,6 +5,7 @@
 //! colour-space selection, and font-map configuration.
 
 pub mod color_space;
+/// Font configuration — per-style fallback maps and availability checks.
 pub mod font;
 pub mod resolution;
 

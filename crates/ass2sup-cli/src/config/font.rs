@@ -1,9 +1,8 @@
-//! Font configuration — per-style fallback maps and availability checks.
-
 use std::collections::HashMap;
 
 use ass_core::SubtitleDocument;
-use subtitle_renderer::CosmicRenderResources;
+use subtitle_renderer::font::registry::FontRegistry;
+use subtitle_renderer::font::types::{FontQuery, FontStyle, FontWeight};
 use tracing::{debug, trace, warn};
 
 /// Per-style font fallback map: style name → ordered list of fallback names.
@@ -37,7 +36,7 @@ pub fn parse_font_map(entries: &[String]) -> Result<FontMap, String> {
 /// Returns an `Err` listing all missing fonts when `no_check` is `false`.
 pub fn check_ass_fonts(
     doc: &SubtitleDocument,
-    resolver: &CosmicRenderResources,
+    registry: &FontRegistry,
     font_map: &FontMap,
     global_fallback: &str,
     no_check: bool,
@@ -61,17 +60,14 @@ pub fn check_ass_fonts(
             &style.font_name
         };
 
-        if resolver.resolve_font(primary, false, false).is_some() {
+        if font_available(registry, primary) {
             trace!(style = ?style.name, font = %primary, "style font OK");
             continue;
         }
 
-        // Try per-style fallback chain from --font-map
         let style_name = style.name.as_str();
         if let Some(fallbacks) = font_map.get(style_name) {
-            let all_missing = fallbacks
-                .iter()
-                .all(|fb| resolver.resolve_font(fb, false, false).is_none());
+            let all_missing = fallbacks.iter().all(|fb| !font_available(registry, fb));
             if !all_missing {
                 trace!(
                     style = ?style.name,
@@ -82,13 +78,10 @@ pub fn check_ass_fonts(
             }
         }
 
-        // Try global fallback (--font)
         if global_fallback != primary
             && !global_fallback.is_empty()
             && global_fallback != "Arial"
-            && resolver
-                .resolve_font(global_fallback, false, false)
-                .is_some()
+            && font_available(registry, global_fallback)
         {
             debug!(
                 style = ?style.name,
@@ -129,4 +122,13 @@ pub fn check_ass_fonts(
         );
         Err(msg)
     }
+}
+
+fn font_available(registry: &FontRegistry, family: &str) -> bool {
+    let q = FontQuery {
+        family: family.to_string(),
+        weight: FontWeight::Normal,
+        style: FontStyle::Normal,
+    };
+    registry.query(&q).found.is_some()
 }

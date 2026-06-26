@@ -4,29 +4,25 @@ use ass_core::{
 use tiny_skia::Pixmap;
 
 use crate::context::{RenderConfig, RenderContext, RenderedFrame};
-use crate::renderer::cosmic::CosmicRenderResources;
+use crate::renderer::font_registry_renderer::FontRegistryRenderResources;
 
 use parking_lot::Mutex;
 
-/// Errors that can occur when constructing a Renderer.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RendererError {
-    /// No system fonts could be loaded. The renderer requires at least
-    /// one font face to rasterize glyphs.
     #[error("no system fonts available — install fonts or pass a font directory")]
     NoFonts,
 }
 
 mod animation;
 mod build_context;
-pub mod cosmic;
-pub mod cosmic_karaoke;
 pub(crate) mod drawing;
-mod layout;
+pub mod font_registry_renderer;
+pub mod font_registry_karaoke;
+pub mod layout_font_registry;
 pub mod text_layout;
 pub use text_layout::{alignment_to_pos, strip_override_blocks};
 
-/// Reusable pixmap buffer pool to reduce allocations across events.
 pub(crate) struct PixmapPool {
     pool: Vec<Pixmap>,
     max_cached: usize,
@@ -60,39 +56,57 @@ impl PixmapPool {
     }
 }
 
-/// ASS subtitle renderer that produces RGBA bitmaps using cosmic-text.
 pub struct Renderer {
     config: RenderConfig,
     pixmap_pool: Mutex<PixmapPool>,
-    cosmic_render: Mutex<CosmicRenderResources>,
+    font_registry_render: Mutex<FontRegistryRenderResources>,
 }
 
 impl Renderer {
-    /// Creates a new renderer with the given configuration.
     pub fn new(config: RenderConfig) -> Self {
         Self {
             config,
             pixmap_pool: Mutex::new(PixmapPool::new(8)),
-            cosmic_render: Mutex::new(CosmicRenderResources::new()),
+            font_registry_render: Mutex::new(FontRegistryRenderResources::new()),
         }
     }
 
-    /// Returns the cosmic render resources for font loading.
-    pub fn cosmic_render(&self) -> parking_lot::MutexGuard<'_, CosmicRenderResources> {
-        self.cosmic_render.lock()
+    pub fn load_system_fonts(&self) -> usize {
+        self.font_registry_render
+            .lock()
+            .registry
+            .lock()
+            .load_system_fonts()
     }
 
-    /// Renders all visible dialogue events at the given timestamp to an RGBA frame.
+    pub fn load_user_fonts_dir(&self, dir: &std::path::Path) -> usize {
+        self.font_registry_render
+            .lock()
+            .registry
+            .lock()
+            .load_user_fonts_dir(dir)
+    }
+
+    pub fn load_user_font_data(
+        &self,
+        data: Vec<u8>,
+    ) -> Result<crate::font::types::FontId, crate::font::error::FontError> {
+        self.font_registry_render
+            .lock()
+            .registry
+            .lock()
+            .load_user_font_data(data)
+    }
+
     pub fn render_ass(&self, doc: &SubtitleDocument, timestamp_ms: u64) -> Option<RenderedFrame> {
-        self.render_ass_cosmic_inner(doc, timestamp_ms, &mut self.cosmic_render.lock())
+        self.render_ass_inner(doc, timestamp_ms, &mut self.font_registry_render.lock())
     }
 
-    /// Cosmic-text render loop.
-    fn render_ass_cosmic_inner(
+    fn render_ass_inner(
         &self,
         doc: &SubtitleDocument,
         timestamp_ms: u64,
-        cosmic: &mut CosmicRenderResources,
+        resources: &mut FontRegistryRenderResources,
     ) -> Option<RenderedFrame> {
         let fn_start = std::time::Instant::now();
         let mut pixmap = self
@@ -114,12 +128,6 @@ impl Renderer {
             .map(|e| e.end_ms.saturating_sub(e.start_ms))
             .max()
             .unwrap_or(0);
-
-        tracing::trace!(
-            timestamp_ms,
-            visible_events = events.len(),
-            "render_ass: events filtered"
-        );
 
         for event in events {
             let event_start = std::time::Instant::now();
@@ -163,14 +171,14 @@ impl Renderer {
                 event_end_ms,
             );
 
-            crate::renderer::cosmic::render_event_cosmic(
+            crate::renderer::font_registry_renderer::render_event_font_registry(
                 &mut pixmap,
                 event,
                 &ctx,
                 &self.config,
                 timestamp_ms,
                 event_start_ms,
-                cosmic,
+                resources,
             );
 
             let elapsed = event_start.elapsed();

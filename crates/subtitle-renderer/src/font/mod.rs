@@ -1,3 +1,11 @@
+pub mod database;
+pub mod discovery;
+pub mod error;
+pub mod index;
+pub mod rasterizer;
+pub mod registry;
+pub mod shaper;
+pub mod telemetry;
 /// Font subsystem for the subtitle renderer.
 ///
 /// This module is responsible for font discovery, indexing, glyph
@@ -14,15 +22,7 @@
 /// * [`rasterizer`]   — Glyph rasterization
 /// * [`registry`]     — Central font registry
 pub mod types;
-pub mod error;
-pub mod discovery;
-pub mod telemetry;
-pub mod index;
-pub mod database;
-pub mod shaper;
-pub mod rasterizer;
-pub mod registry;
 
 // Re-export the most common types at the module level for convenience.
-pub use types::*;
 pub use error::FontError;
+pub use types::*;

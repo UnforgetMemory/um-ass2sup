@@ -1,25 +1,35 @@
-//! Cosmic-text karaoke rendering: syllable-level fill clip sweep, outline highlight.
+//! Font-registry karaoke rendering: syllable-level fill clip sweep, outline highlight.
 
 use ass_core::Event;
 use ass_core::KaraokeStyle;
 use tiny_skia::Pixmap;
 
 use crate::context::{RenderConfig, RenderContext};
-use crate::cosmic::effects::composite_subregion;
-use crate::cosmic::rasterizer::rasterize_cosmic_glyph;
-use crate::cosmic::shaper::{CosmicShapedGlyph, CosmicShaper};
 use crate::effects;
+use crate::effects::composite_subregion;
+use crate::font::rasterizer::GlyphRasterizer;
+use crate::font::registry::FontRegistry;
+use crate::font::types::ShapedGlyph;
+use crate::font::shaper::SimpleShaper;
 use crate::karaoke::{KaraokePhase, KaraokeRenderer};
 
-/// Render karaoke using cosmic-text shaping and rasterization.
+#[allow(dead_code)]
+struct SyllableInfo {
+    glyphs: Vec<ShapedGlyph>,
+    syllable_x: f32,
+    syllable_width: f32,
+    is_active: bool,
+    progress: f32,
+    style: KaraokeStyle,
+}
+
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_karaoke_cosmic(
+pub(crate) fn render_karaoke_font_registry(
     pixmap: &mut Pixmap,
     event: &Event,
     ctx: &RenderContext,
     _config: &RenderConfig,
-    cosmic_fs: &mut cosmic_text::FontSystem,
-    cosmic_cache: &mut cosmic_text::SwashCache,
+    registry: &FontRegistry,
     ts: u64,
     es: u64,
 ) {
@@ -28,7 +38,8 @@ pub(crate) fn render_karaoke_cosmic(
     let segs = &event.karaoke;
     let states = KaraokeRenderer::compute_syllable_states(segs, es, ts);
 
-    // Phase 1: Shape all syllables, build glyph info list
+    let font_data = resolve_font_data(registry, &ctx.font_name, ctx.bold);
+
     let mut syllable_infos: Vec<SyllableInfo> = Vec::new();
     let mut min_x = f32::MAX;
     let mut min_y = f32::MAX;
@@ -40,14 +51,8 @@ pub(crate) fn render_karaoke_cosmic(
         if syllable.text.is_empty() {
             continue;
         }
-        let shaped = CosmicShaper::shape(
-            &syllable.text,
-            cosmic_fs,
-            ctx.font_size,
-            &ctx.font_name,
-            ctx.bold,
-            ctx.italic,
-        );
+        let shaped = SimpleShaper::shape(&syllable.text, &font_data, ctx.font_size)
+            .unwrap_or_default();
         let sx = syllable_infos
             .last()
             .map(|last: &SyllableInfo| last.syllable_x + last.syllable_width + ctx.spacing)
@@ -55,7 +60,7 @@ pub(crate) fn render_karaoke_cosmic(
         let sw: f32 = shaped.iter().map(|g| g.x_advance).sum();
         for g in &shaped {
             min_x = min_x.min(sx + g.x_offset);
-            min_y = min_y.min(ctx.y + g.y_offset);
+            min_y = min_y.min(ctx.y + g.y_offset - g.y_advance);
             max_x = max_x.max(sx + g.x_offset + g.x_advance);
             max_y = max_y.max(ctx.y + g.y_offset);
             any_glyph = true;
@@ -81,7 +86,6 @@ pub(crate) fn render_karaoke_cosmic(
         return;
     }
 
-    // Phase 2: Allocate layers
     let border = ctx
         .outline_width
         .max(ctx.outline_x_width)
@@ -105,52 +109,45 @@ pub(crate) fn render_karaoke_cosmic(
     let oxf = ox as f32;
     let oyf = oy as f32;
 
-    // Phase 3: Render background layer (secondary color)
     for info in &syllable_infos {
         let mut cx = info.syllable_x - oxf;
         for glyph in &info.glyphs {
-            let bc = RenderContext {
-                primary_color: ctx.secondary_color,
-                ..ctx.clone()
-            };
-            rasterize_cosmic_glyph(
-                &mut bg,
-                cosmic_fs,
-                cosmic_cache,
-                glyph,
-                cx + glyph.x_offset,
-                ctx.y + glyph.y_offset - oyf,
-                &bc,
-            );
+            if let Ok(rasterized) =
+                GlyphRasterizer::rasterize(&font_data, glyph.glyph_id, ctx.font_size)
+            {
+                composite_glyph(
+                    &mut bg,
+                    &rasterized,
+                    cx + glyph.x_offset,
+                    ctx.y + glyph.y_offset - oyf,
+                    ctx.secondary_color,
+                );
+            }
             cx += glyph.x_advance;
         }
     }
 
-    // Phase 4: Render foreground layer (primary color for active/done syllables)
     for info in &syllable_infos {
         if !info.is_active {
             continue;
         }
         let mut cx = info.syllable_x - oxf;
         for glyph in &info.glyphs {
-            let fc = RenderContext {
-                primary_color: ctx.primary_color,
-                ..ctx.clone()
-            };
-            rasterize_cosmic_glyph(
-                &mut fg,
-                cosmic_fs,
-                cosmic_cache,
-                glyph,
-                cx + glyph.x_offset,
-                ctx.y + glyph.y_offset - oyf,
-                &fc,
-            );
+            if let Ok(rasterized) =
+                GlyphRasterizer::rasterize(&font_data, glyph.glyph_id, ctx.font_size)
+            {
+                composite_glyph(
+                    &mut fg,
+                    &rasterized,
+                    cx + glyph.x_offset,
+                    ctx.y + glyph.y_offset - oyf,
+                    ctx.primary_color,
+                );
+            }
             cx += glyph.x_advance;
         }
     }
 
-    // Phase 5: Apply effects
     if ctx.blur > 0.0 {
         effects::apply_gaussian_blur(&mut bg, ctx.blur);
         effects::apply_gaussian_blur(&mut fg, ctx.blur);
@@ -166,7 +163,7 @@ pub(crate) fn render_karaoke_cosmic(
         } else {
             ctx.shadow_depth
         };
-        for (layer, _) in [(&mut bg, false), (&mut fg, false)] {
+        for layer in [&mut bg, &mut fg] {
             let ld = layer.data().to_vec();
             let sl = effects::apply_shadow(&ld, lw, lh, sdx, sdy, ctx.blur, ctx.shadow_color);
             let mut sp = match Pixmap::new(lw, lh) {
@@ -179,18 +176,68 @@ pub(crate) fn render_karaoke_cosmic(
         }
     }
 
-    // Phase 6: Composite foreground over background
     effects::composite_over(bg.data_mut(), fg.data(), lw, lh);
     composite_subregion(pixmap.data_mut(), bg.data(), w, h, ox, oy, lw, lh);
 }
 
-/// Internal structure for syllable layout info.
-#[allow(dead_code)]
-struct SyllableInfo {
-    glyphs: Vec<CosmicShapedGlyph>,
-    syllable_x: f32,
-    syllable_width: f32,
-    is_active: bool,
-    progress: f32,
-    style: KaraokeStyle,
+fn composite_glyph(
+    layer: &mut Pixmap,
+    rasterized: &crate::font::types::RasterizedGlyph,
+    x: f32,
+    y: f32,
+    color: [u8; 4],
+) {
+    let lw = layer.width();
+    let lh = layer.height();
+    let pix = layer.data_mut();
+
+    for py in 0..rasterized.height {
+        for px in 0..rasterized.width {
+            let alpha = rasterized.data[(py * rasterized.width + px) as usize];
+            if alpha == 0 {
+                continue;
+            }
+            let tx = x as i32 + rasterized.left + px as i32;
+            let ty = y as i32 - rasterized.top + py as i32;
+            if tx < 0 || ty < 0 || tx >= lw as i32 || ty >= lh as i32 {
+                continue;
+            }
+            let pi = ((ty as u32 * lw + tx as u32) * 4) as usize;
+            let f = alpha as f32 / 255.0;
+            let da = pix[pi + 3] as f32 / 255.0;
+            let ra = f + da * (1.0 - f);
+            for c in 0..3 {
+                pix[pi + c] =
+                    ((color[c] as f32 * f + pix[pi + c] as f32 * (1.0 - f)) / ra) as u8;
+            }
+            pix[pi + 3] = (ra * 255.0) as u8;
+        }
+    }
+}
+
+fn resolve_font_data(registry: &FontRegistry, family: &str, bold: bool) -> Vec<u8> {
+    use crate::font::types::{FontQuery, FontStyle, FontWeight};
+
+    let weight = if bold {
+        FontWeight::Bold
+    } else {
+        FontWeight::Normal
+    };
+    let q = FontQuery {
+        family: family.to_string(),
+        weight,
+        style: FontStyle::Normal,
+    };
+    let result = registry.query(&q);
+    if let Some(id) = result.found {
+        if let Some(data) = registry.get_font_data(id) {
+            return data.to_vec();
+        }
+    }
+    if let Some(sug) = result.suggestion {
+        if let Some(data) = registry.get_font_data(sug.id) {
+            return data.to_vec();
+        }
+    }
+    Vec::new()
 }

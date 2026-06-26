@@ -5,7 +5,7 @@
 //! registry, database, and discovery modules.
 
 /// Opaque font identifier. Maps internally to a font database index.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FontId(pub u32);
 
 impl From<u32> for FontId {
@@ -109,6 +109,7 @@ pub struct Availability {
 pub struct ShapedGlyph {
     pub glyph_id: u16,
     pub x_advance: f32,
+    pub y_advance: f32,
     pub x_offset: f32,
     pub y_offset: f32,
 }
