@@ -17,8 +17,8 @@ pub enum RendererError {
 mod animation;
 mod build_context;
 pub(crate) mod drawing;
-pub mod font_registry_renderer;
 pub mod font_registry_karaoke;
+pub mod font_registry_renderer;
 pub mod layout_font_registry;
 pub mod text_layout;
 pub use text_layout::{alignment_to_pos, strip_override_blocks};

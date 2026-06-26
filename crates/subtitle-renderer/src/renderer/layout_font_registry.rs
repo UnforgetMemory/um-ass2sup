@@ -27,10 +27,7 @@ pub(crate) fn shape_horizontal(
         "resolved font data for layout"
     );
     let lines = wrap_text_lines_simple(text, &font_data, ctx.font_size, ctx.spacing, aw);
-    tracing::debug!(
-        lines = lines.len(),
-        "wrapped text lines"
-    );
+    tracing::debug!(lines = lines.len(), "wrapped text lines");
     if lines.is_empty() {
         return vec![];
     }

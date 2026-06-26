@@ -242,8 +242,8 @@ mod tests {
             ],
             indices: vec![1, 1, 1, 1, 0, 0, 0, 0],
             transparent_index: 0,
-            x: 0,
-            y: 0,
+            x: 100,
+            y: 200,
             color_space: Default::default(),
             pts_ms: 0,
             duration_ms: 0,
@@ -384,6 +384,59 @@ mod tests {
         let s2 = enc.encode_frame(&frame, 1000, 1000);
         assert!(!s1.is_empty());
         assert!(!s2.is_empty());
+    }
+
+    #[test]
+    fn test_pcs_object_position_propagated() {
+        let mut enc = PgsEncoder::new(1920, 1080, 24.0);
+        let frame = make_test_frame();
+        // make_test_frame uses x: 100, y: 200
+        let segments = enc.encode_frame(&frame, 1000, 2000);
+        // Find the first PCS segment
+        let pcs_seg = segments
+            .iter()
+            .find(|s| s.segment_type == SegmentType::Pcs)
+            .expect("PCS segment must exist");
+        if let SegmentPayload::Pcs(ref pcs) = pcs_seg.payload {
+            assert_eq!(
+                pcs.compositions.len(),
+                1,
+                "single-object frame must have 1 composition"
+            );
+            assert_eq!(
+                pcs.compositions[0].x, 100,
+                "PCS object x must match frame.x"
+            );
+            assert_eq!(
+                pcs.compositions[0].y, 200,
+                "PCS object y must match frame.y"
+            );
+        } else {
+            panic!("PCS segment must contain PcsPayload");
+        }
+    }
+
+    #[test]
+    fn test_wds_position_matches_frame() {
+        let mut enc = PgsEncoder::new(1920, 1080, 24.0);
+        let frame = make_test_frame();
+        let segments = enc.encode_frame(&frame, 1000, 2000);
+        // Find the WDS segment
+        let wds_seg = segments
+            .iter()
+            .find(|s| s.segment_type == SegmentType::Wds)
+            .expect("WDS segment must exist");
+        if let SegmentPayload::Wds(ref wds) = wds_seg.payload {
+            assert_eq!(
+                wds.windows.len(),
+                1,
+                "single-window frame must have 1 window"
+            );
+            assert_eq!(wds.windows[0].x, 100, "WDS window x must match frame.x");
+            assert_eq!(wds.windows[0].y, 200, "WDS window y must match frame.y");
+        } else {
+            panic!("WDS segment must contain WdsPayload");
+        }
     }
 
     #[test]

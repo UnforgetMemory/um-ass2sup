@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.7.3] - 2026-06-26
+
+### Fixed
+- **PGS PCS ObjectComposition x/y hardcoded to (0,0) — subtitles stacked in top-left corner**: All display set builders (`build_single_window_display_set`, `build_multi_window_display_set`, `build_continue_display_set`, `build_palette_only_display_set`) set `ObjectComposition.x = 0, y = 0` in the PCS segment, while positioning was only in the WDS (WindowDef). Many players (including PotPlayer) honor PCS object coordinates, causing all subtitle bitmaps to render at screen origin. Fixed: PCS ObjectComposition now carries `frame.x, frame.y` matching the WDS window position.
+- **Epoch-split path loses original subtitle position**: `build_epoch_split_display_set` constructed band frames with `x: 0, y: 0`, discarding the original frame origin. Large subtitles hitting the split threshold rendered at (0,0) regardless of ASS positioning. Fixed: band frames now propagate `frame.x` and `frame.y + band_y_offset`.
+- **`\fsc` (ScaleReset) override tag silently ignored**: `OverrideTag::ScaleReset` was parsed but fell through `_ => {}` in `build_context.rs` and `transform.rs`. Fixed: now resets `ctx.scale_x` and `ctx.scale_y` to 100.0.
+- **`\fe` (Charset) override tag silently ignored**: `OverrideTag::Charset` was parsed but not applied. Added `font_charset: u8` field to `RenderContext` and handling in `build_context.rs` and `transform.rs`.
+- **`\clip(@)` / `\iclip(@)` (ClipDrawingCurrent) override tags silently ignored**: `ClipDrawingCurrent` and `ClipInverseDrawingCurrent` were parsed but not applied. Fixed: now reuses the most recent drawing clip commands from the same event.
+
+### Changed
+- `pgs-encoder/encoding/display_set.rs`: PCS ObjectComposition x/y now propagates `frame.x, frame.y` in all display set builders.
+- `subtitle-renderer/renderer/build_context.rs`: Added handling for `ScaleReset`, `Charset`, `ClipDrawingCurrent`, `ClipInverseDrawingCurrent` override tags.
+- `subtitle-renderer/renderer/animation/transform.rs`: Added handling for `ScaleReset` and `Charset` in `\t()` animation path.
+- `subtitle-renderer/context.rs`: Added `font_charset: u8` field to `RenderContext`.
+
+### Security
+- Security audit completed with 5 findings (0 Critical, 0 High, 3 Medium, 2 Low).
+- Medium: Multi-window y-composition u16 overflow risk, RLE slicing panic on malformed input, window defs not clamped to display bounds.
+- Low: Object ID u16 overflow risk, unvalidated Charset byte.
+- All findings are in safe Rust (no `unsafe`); impact is DoS via panic or data corruption, not memory safety.
+
+### Added
+- `pgs-encoder/encoder.rs`: Regression tests `test_pcs_object_position_propagated` and `test_wds_position_matches_frame` verify PCS/WDS coordinates match `QuantizedFrame.x/y`.
+- `subtitle-renderer/tests/test_context.rs`: Tests for `ScaleReset`, `Charset`, `ClipDrawingCurrent`, `ClipInverseDrawingCurrent` override tags.
+
+---
+
 ## [2.7.2] - 2026-06-26
 
 ### Changed

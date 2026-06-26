@@ -8,10 +8,10 @@ use parking_lot::Mutex;
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform};
 
 use crate::context::{RenderConfig, RenderContext};
+use crate::effects;
 use crate::effects::{
     apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_subregion,
 };
-use crate::effects;
 use crate::font::rasterizer::GlyphRasterizer;
 use crate::font::registry::FontRegistry;
 use crate::font::types::RasterizedGlyph;
@@ -215,10 +215,7 @@ pub fn render_event_font_registry(
     }
 
     let registry = resources.registry.lock();
-    tracing::debug!(
-        shaped_lines = shaped_lines.len(),
-        "rendering shaped lines"
-    );
+    tracing::debug!(shaped_lines = shaped_lines.len(), "rendering shaped lines");
     for sl in &shaped_lines {
         let mut cx = sl.x_start - oxf;
         tracing::debug!(
@@ -388,13 +385,7 @@ fn composite_glyph(
             let tx = x as i32 + rasterized.left + px as i32;
             let ty = y as i32 - rasterized.top + py as i32;
             if tx < 0 || ty < 0 || tx >= lw as i32 || ty >= lh as i32 {
-                tracing::trace!(
-                    px,
-                    py,
-                    tx,
-                    ty,
-                    "pixel out of bounds"
-                );
+                tracing::trace!(px, py, tx, ty, "pixel out of bounds");
                 continue;
             }
             let pi = ((ty as u32 * lw + tx as u32) * 4) as usize;

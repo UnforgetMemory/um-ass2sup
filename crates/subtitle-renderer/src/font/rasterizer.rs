@@ -29,10 +29,7 @@ impl GlyphRasterizer {
         })?;
 
         let mut ctx = ScaleContext::new();
-        let mut scaler = ctx.builder(font)
-            .size(size)
-            .hint(false)
-            .build();
+        let mut scaler = ctx.builder(font).size(size).hint(false).build();
 
         let image = Render::new(&[Source::Outline])
             .format(Format::Alpha)

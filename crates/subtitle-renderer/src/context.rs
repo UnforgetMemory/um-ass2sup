@@ -165,6 +165,8 @@ pub struct RenderContext {
     // ── New in 2.2: missing 53-tag coverage ──
     /// Whether a `\pos` or `\move` tag was explicitly applied (for alignment fallback).
     pub has_pos: bool,
+    /// Font charset/encoding override (set by `\fe`). 0 = default.
+    pub font_charset: u8,
 }
 
 impl Default for RenderContext {
@@ -220,6 +222,7 @@ impl Default for RenderContext {
             border_style: 1,
             animation_skip: false,
             has_pos: false,
+            font_charset: 0,
         }
     }
 }

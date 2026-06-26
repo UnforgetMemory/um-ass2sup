@@ -113,7 +113,7 @@ pub fn build_palette_clear_display_set(
 
 pub fn build_continue_display_set(
     config: &DisplaySetConfig,
-    _frame: &color_quantizer::QuantizedFrame,
+    frame: &color_quantizer::QuantizedFrame,
     pts: u64,
     dts: u64,
     composition_state: CompositionState,
@@ -139,8 +139,8 @@ pub fn build_continue_display_set(
                     window_id: config.window_id,
                     cropped: false,
                     forced: false,
-                    x: 0,
-                    y: 0,
+                    x: frame.x,
+                    y: frame.y,
                     crop_x: 0,
                     crop_y: 0,
                     crop_w: 0,
@@ -164,7 +164,7 @@ pub fn build_continue_display_set(
 
 pub fn build_palette_only_display_set(
     config: &DisplaySetConfig,
-    _frame: &color_quantizer::QuantizedFrame,
+    frame: &color_quantizer::QuantizedFrame,
     pts: u64,
     dts: u64,
     palette_update: bool,
@@ -190,8 +190,8 @@ pub fn build_palette_only_display_set(
                     window_id: config.window_id,
                     cropped: false,
                     forced: false,
-                    x: 0,
-                    y: 0,
+                    x: frame.x,
+                    y: frame.y,
                     crop_x: 0,
                     crop_y: 0,
                     crop_w: 0,
@@ -226,6 +226,8 @@ pub fn build_single_window_display_set(
     object_version: u8,
 ) -> Vec<Segment> {
     let mut segments = Vec::new();
+    // Propagate cropped bitmap origin to PCS object position.
+    // Without this, decoders that honor PCS x/y (not WDS) render at (0,0).
     let obj_x = frame.x;
     let obj_y = frame.y;
 
@@ -247,8 +249,8 @@ pub fn build_single_window_display_set(
                 window_id: config.window_id,
                 cropped: false,
                 forced: false,
-                x: 0,
-                y: 0,
+                x: obj_x,
+                y: obj_y,
                 crop_x: 0,
                 crop_y: 0,
                 crop_w: 0,
@@ -381,8 +383,8 @@ pub fn build_multi_window_display_set(
                     window_id: 0,
                     cropped: false,
                     forced: false,
-                    x: 0,
-                    y: 0,
+                    x: x_offset,
+                    y: obj1_y,
                     crop_x: 0,
                     crop_y: 0,
                     crop_w: 0,
@@ -393,8 +395,8 @@ pub fn build_multi_window_display_set(
                     window_id: 1,
                     cropped: false,
                     forced: false,
-                    x: 0,
-                    y: 0,
+                    x: x_offset,
+                    y: obj2_y,
                     crop_x: 0,
                     crop_y: 0,
                     crop_w: 0,
@@ -513,14 +515,16 @@ pub fn build_epoch_split_display_set(
         let start_offset = (y_start * frame.width) as usize;
         let end_offset = (y_end * frame.width) as usize;
         let band_indices = &frame.indices[start_offset..end_offset];
+        // Propagate original frame origin + band vertical offset.
+        // Without this, all bands render at (0,0) — losing subtitle position.
         let band_frame = color_quantizer::QuantizedFrame {
             width: frame.width,
             height: band_h,
             palette: frame.palette.clone(),
             indices: band_indices.to_vec(),
             transparent_index: frame.transparent_index,
-            x: 0,
-            y: 0,
+            x: frame.x,
+            y: frame.y.saturating_add(y_start as u16),
             color_space: frame.color_space,
             pts_ms: frame.pts_ms,
             duration_ms: frame.duration_ms,

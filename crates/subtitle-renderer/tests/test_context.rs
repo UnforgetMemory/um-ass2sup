@@ -799,3 +799,109 @@ fn test_render_context_debug() {
     assert!(debug_str.contains("underline"));
     assert!(debug_str.contains("strikeout"));
 }
+
+#[test]
+fn test_build_context_charset_tag() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    event.override_tags = vec![TaggedOverride {
+        tag: OverrideTag::Charset(128),
+        span: None,
+    }];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert_eq!(ctx.font_charset, 128);
+}
+
+#[test]
+fn test_build_context_charset_default() {
+    let renderer = default_renderer();
+    let event = default_event();
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert_eq!(ctx.font_charset, 0);
+}
+
+#[test]
+fn test_build_context_scale_reset_tag() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    event.override_tags = vec![
+        TaggedOverride {
+            tag: OverrideTag::Scale { x: 200.0, y: 150.0 },
+            span: None,
+        },
+        TaggedOverride {
+            tag: OverrideTag::ScaleReset,
+            span: None,
+        },
+    ];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert_eq!(ctx.scale_x, 100.0);
+    assert_eq!(ctx.scale_y, 100.0);
+}
+
+#[test]
+fn test_build_context_clip_drawing_current() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    event.override_tags = vec![
+        TaggedOverride {
+            tag: OverrideTag::ClipDrawing {
+                scale: 4.0,
+                commands: "m 0 0 l 100 0 100 100 0 100".to_string(),
+            },
+            span: None,
+        },
+        TaggedOverride {
+            tag: OverrideTag::ClipDrawingCurrent,
+            span: None,
+        },
+    ];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert!(ctx.clip_enabled);
+    assert_eq!(ctx.clip_drawing_scale, 4.0);
+    assert!(!ctx.clip_drawing_inverse);
+    assert!(ctx.clip_drawing_commands.is_some());
+}
+
+#[test]
+fn test_build_context_clip_inverse_drawing_current() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    event.override_tags = vec![
+        TaggedOverride {
+            tag: OverrideTag::ClipDrawing {
+                scale: 2.0,
+                commands: "m 0 0 l 50 0 50 50 0 50".to_string(),
+            },
+            span: None,
+        },
+        TaggedOverride {
+            tag: OverrideTag::ClipInverseDrawingCurrent,
+            span: None,
+        },
+    ];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert!(ctx.clip_enabled);
+    assert_eq!(ctx.clip_drawing_scale, 2.0);
+    assert!(ctx.clip_drawing_inverse);
+    assert!(ctx.clip_drawing_commands.is_some());
+}
+
+#[test]
+fn test_build_context_clip_drawing_current_no_prior() {
+    let renderer = default_renderer();
+    let mut event = default_event();
+    event.override_tags = vec![TaggedOverride {
+        tag: OverrideTag::ClipDrawingCurrent,
+        span: None,
+    }];
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    // Without a prior ClipDrawing, clip should not be enabled
+    assert!(!ctx.clip_enabled);
+}

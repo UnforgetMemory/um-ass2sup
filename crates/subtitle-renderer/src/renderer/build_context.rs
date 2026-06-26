@@ -74,6 +74,7 @@ pub fn build_context(
     let mut fad_out = 0u64;
     let mut has_fade_complex = false;
     let mut fade_params = (0u8, 0u8, 0u8, 0u64, 0u64, 0u64, 0u64);
+    let mut last_clip_drawing: Option<(f32, String, bool)> = None;
 
     for tagged in &event.override_tags {
         match &tagged.tag {
@@ -127,6 +128,10 @@ pub fn build_context(
             OverrideTag::Scale { x, y } => {
                 ctx.scale_x = *x as f32;
                 ctx.scale_y = *y as f32;
+            }
+            OverrideTag::ScaleReset => {
+                ctx.scale_x = 100.0;
+                ctx.scale_y = 100.0;
             }
             OverrideTag::Rotation { x, y, z } => {
                 ctx.rotation = *z as f32;
@@ -206,16 +211,36 @@ pub fn build_context(
                 ctx.clip_drawing_commands = None;
             }
             OverrideTag::ClipDrawing { scale, commands } => {
+                last_clip_drawing = Some((*scale, commands.clone(), false));
                 ctx.clip_drawing_commands = Some(commands.clone());
                 ctx.clip_drawing_scale = *scale;
                 ctx.clip_drawing_inverse = false;
                 ctx.clip_enabled = true;
             }
             OverrideTag::ClipInverseDrawing { scale, commands } => {
+                last_clip_drawing = Some((*scale, commands.clone(), true));
                 ctx.clip_drawing_commands = Some(commands.clone());
                 ctx.clip_drawing_scale = *scale;
                 ctx.clip_drawing_inverse = true;
                 ctx.clip_enabled = true;
+            }
+            OverrideTag::ClipDrawingCurrent => {
+                // Reuse the most recent drawing clip commands (\clip(@)).
+                if let Some((scale, ref cmds, inverse)) = last_clip_drawing {
+                    ctx.clip_drawing_commands = Some(cmds.clone());
+                    ctx.clip_drawing_scale = scale;
+                    ctx.clip_drawing_inverse = inverse;
+                    ctx.clip_enabled = true;
+                }
+            }
+            OverrideTag::ClipInverseDrawingCurrent => {
+                // Reuse the most recent drawing clip as inverted (\iclip(@)).
+                if let Some((scale, ref cmds, _)) = last_clip_drawing {
+                    ctx.clip_drawing_commands = Some(cmds.clone());
+                    ctx.clip_drawing_scale = scale;
+                    ctx.clip_drawing_inverse = true;
+                    ctx.clip_enabled = true;
+                }
             }
             OverrideTag::Transform { tag, t1, t2, accel } => {
                 let parsed_inner = parse_override_block(tag);
@@ -293,6 +318,7 @@ pub fn build_context(
             OverrideTag::BaselineOffset(o) => ctx.baseline_offset = *o,
             OverrideTag::DrawingMode(l) => ctx.drawing_mode = *l,
             OverrideTag::AnimationSkip => ctx.animation_skip = true,
+            OverrideTag::Charset(c) => ctx.font_charset = *c,
             OverrideTag::Unknown(tag) => {
                 tracing::warn!(tag = %tag, "unrecognized override tag ignored")
             }

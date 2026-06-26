@@ -9,8 +9,8 @@ use crate::effects;
 use crate::effects::composite_subregion;
 use crate::font::rasterizer::GlyphRasterizer;
 use crate::font::registry::FontRegistry;
-use crate::font::types::ShapedGlyph;
 use crate::font::shaper::SimpleShaper;
+use crate::font::types::ShapedGlyph;
 use crate::karaoke::{KaraokePhase, KaraokeRenderer};
 
 #[allow(dead_code)]
@@ -51,8 +51,8 @@ pub(crate) fn render_karaoke_font_registry(
         if syllable.text.is_empty() {
             continue;
         }
-        let shaped = SimpleShaper::shape(&syllable.text, &font_data, ctx.font_size)
-            .unwrap_or_default();
+        let shaped =
+            SimpleShaper::shape(&syllable.text, &font_data, ctx.font_size).unwrap_or_default();
         let sx = syllable_infos
             .last()
             .map(|last: &SyllableInfo| last.syllable_x + last.syllable_width + ctx.spacing)
@@ -207,8 +207,7 @@ fn composite_glyph(
             let da = pix[pi + 3] as f32 / 255.0;
             let ra = f + da * (1.0 - f);
             for c in 0..3 {
-                pix[pi + c] =
-                    ((color[c] as f32 * f + pix[pi + c] as f32 * (1.0 - f)) / ra) as u8;
+                pix[pi + c] = ((color[c] as f32 * f + pix[pi + c] as f32 * (1.0 - f)) / ra) as u8;
             }
             pix[pi + 3] = (ra * 255.0) as u8;
         }

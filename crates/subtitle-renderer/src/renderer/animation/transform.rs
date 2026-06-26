@@ -150,6 +150,10 @@ fn apply_tag_state(ctx: &mut RenderContext, tag: &str, is_end: bool, scale_x: f3
                 ctx.scale_x = *x as f32;
                 ctx.scale_y = *y as f32;
             }
+            ScaleReset => {
+                ctx.scale_x = 100.0;
+                ctx.scale_y = 100.0;
+            }
             Rotation { x, y, z } => {
                 ctx.rotation = *z as f32;
                 if is_end {
@@ -172,6 +176,7 @@ fn apply_tag_state(ctx: &mut RenderContext, tag: &str, is_end: bool, scale_x: f3
                 ctx.x = *x as f32 * scale_x;
                 ctx.y = *y as f32 * scale_y;
             }
+            Charset(c) => ctx.font_charset = *c,
             _ => {}
         }
     }
