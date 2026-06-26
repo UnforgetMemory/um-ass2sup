@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.7.2] - 2026-06-26
 
+### Changed
+- **License changed from MIT OR Apache-2.0 to Apache-2.0 only**: Simplified licensing by removing dual-license option and using Apache-2.0 exclusively.
+
 ### Fixed
 - **`composite_over` SIMD stride error causing vertical stripe artifacts**: The SIMD loop used `len/16` stride with `i*16` offset, but only processed 4 bytes per iteration (1 pixel). This skipped 75% of pixels, leaving them uncomposited. Fixed stride to `len/4` with `i*4` offset to process all pixels. Also fixed alpha channel calculation where SIMD computed `src_A²/255` instead of the correct Porter-Duff "over" formula `src_A + dst_A * (1 - src_A/255)`.
 - **`\pos` + center/right alignment causing off-screen text rendering**: `shape_horizontal` incorrectly applied full-width centering offset on top of `\pos` coordinates, pushing text beyond the display boundary. Events with `\pos` and non-left alignment rendered as fully transparent frames and were silently dropped (28/1988 events lost). `build_context.rs` now propagates `ctx.has_pos = true`; `shape_horizontal` uses `ctx.x - ta/2` (center) or `ctx.x - ta` (right) when `has_pos` is true.

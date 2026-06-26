@@ -3,7 +3,7 @@
 [![CI](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml)
 [![Audit](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml)
 [![Release](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 [![Rust 1.75+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
 [![Coverage](https://img.shields.io/badge/coverage-88.13%25-brightgreen.svg)](COVERAGE.md)
@@ -163,7 +163,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 | **`bdn-xml`**           | 蓝光母版 XML + PNG 资源                        | `png`、`quick-xml`                |
 | **`ass2sup-cli`**       | CLI 总线（`ass2sup` 二进制）                   | 上述所有 + `clap` + `rayon`       |
 
-所有 crate 通过 `[workspace.dependencies]` 集中管理依赖版本，许可证统一为 `MIT OR Apache-2.0`。
+所有 crate 通过 `[workspace.dependencies]` 集中管理依赖版本，许可证统一为 `Apache-2.0`。
 
 ---
 
@@ -460,13 +460,13 @@ cargo fmt --all -- --check
 
 ## 许可证
 
-**双许可**：[`MIT`](LICENSE-MIT) **或** [`Apache-2.0`](LICENSE-APACHE)，由用户任选其一。
+**双许可**：[`Apache-2.0`](LICENSE-APACHE)
 
 ```
 Copyright (c) 2024-2026 The um-ass2sup authors
 ```
 
-详细条款见两个 `LICENSE-*` 文件。
+详细条款见 `LICENSE-APACHE` 文件。
 
 ---
 

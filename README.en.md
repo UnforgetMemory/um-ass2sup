@@ -3,7 +3,7 @@
 [![CI](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml)
 [![Audit](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml)
 [![Release](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 [![Rust 1.75+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
 [![Coverage](https://img.shields.io/badge/coverage-88.13%25-brightgreen.svg)](COVERAGE.md)
@@ -170,7 +170,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 | **`bdn-xml`**            | Blu-ray mastering XML + PNG assets                    | `png`, `quick-xml`                |
 | **`ass2sup-cli`**        | CLI binary wiring (`ass2sup`)                         | all of the above + `clap` + `rayon` |
 
-All crates share versions through `[workspace.dependencies]` and use the unified `MIT OR Apache-2.0` license.
+All crates share versions through `[workspace.dependencies]` and use the unified `Apache-2.0` license.
 
 ---
 

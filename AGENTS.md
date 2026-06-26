@@ -73,7 +73,7 @@ cargo clippy -p color-quantizer --all-targets -- -D warnings
 
 ## Style conventions
 
-- Dual license: MIT OR Apache-2.0
+- Dual license: Apache-2.0
 - Workspace dependencies managed in root `Cargo.toml` `[workspace.dependencies]`
 - Fuzz crates excluded from workspace: `exclude = ["crates/*/fuzz"]`
 - Release profile: `opt-level = 3`, `lto = "thin"`, `codegen-units = 1`
