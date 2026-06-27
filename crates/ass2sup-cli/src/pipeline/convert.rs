@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use ass_core::{SubtitleDocument, SubtitleFormat};
+use ass_core::{Effect, Event, OverrideTag, SubtitleDocument, SubtitleFormat};
 use color_quantizer::pipeline::ColorPipeline;
 use color_quantizer::QuantizedFrame;
 use pgs_encoder::PgsEncoder;
@@ -27,6 +27,29 @@ pub struct ConversionStats {
     pub frames_encoded: u64,
     /// Size of the output in bytes.
     pub output_size: usize,
+}
+
+/// Check if an event has frame-level visual effects (Banner, ScrollUp, ScrollDown)
+/// that change position every frame, requiring per-frame rendering.
+fn has_animation_effect(event: &Event) -> bool {
+    matches!(
+        event.effect,
+        Effect::Banner { .. } | Effect::ScrollUp { .. } | Effect::ScrollDown { .. }
+    )
+}
+
+/// Check if an event has override tags that produce different visual output
+/// at every frame within their active range (position moves, alpha fades, transforms).
+fn has_animation_override_tag(event: &Event) -> bool {
+    event.override_tags.iter().any(|t| {
+        matches!(
+            t.tag,
+            OverrideTag::Move { .. }
+                | OverrideTag::Fade { .. }
+                | OverrideTag::FadeComplex { .. }
+                | OverrideTag::Transform { .. }
+        )
+    })
 }
 
 /// Stateless conversion pipeline.
@@ -184,10 +207,17 @@ impl ConversionPipeline {
         Ok(renderer)
     }
 
-    /// Shared render + quantise step, used by both SUP and BDN paths.
+/// Smart render + quantise with frame classification.
     ///
-    /// Uses smart rendering: only renders frames at event boundaries (start/end),
-    /// reuses previous frame for static periods between events.
+    /// Generates render timestamps only at event boundaries (start/end) and
+    /// animation-keyed frame points. Each rendered frame is checked:
+    /// - **Empty** (all-transparent pixels) → discarded, preceding frame extended.
+    /// - **Duplicate** (pixel-identical to the previous unique frame) → merged,
+    ///   the preceding frame's duration extended to cover the duplicate span.
+    /// - **Unique** → kept as a new key frame.
+    ///
+    /// This eliminates the old "pre-generate all 41ms slots then clone" approach,
+    /// producing only visually distinct non-empty frames with correct durations.
     pub fn render_and_quantize(
         doc: &SubtitleDocument,
         renderer: &mut Renderer,
@@ -195,7 +225,6 @@ impl ConversionPipeline {
         args: &Args,
     ) -> Vec<QuantizedFrame> {
         let ms_per_frame = 1000.0 / config.fps;
-        let _total_duration = doc.events.iter().map(|e| e.end_ms).max().unwrap_or(0);
 
         let dither = super::super::config::color_space::parse_dither(&args.dither);
         let mut pipeline = ColorPipeline::new()
@@ -218,99 +247,147 @@ impl ConversionPipeline {
 
         let use_palette_reuse = args.quantizer == "median-cut";
 
-        let mut change_points: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
+        // ── Build render timestamps ─────────────────────────────────────
+        // Only timestamps where rendering is actually needed:
+        // • Event start/end (content appears / disappears)
+        // • For animated events, every frame within the animation period
+        let mut render_ts: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
         for event in &doc.events {
-            change_points.insert(event.start_ms);
-            change_points.insert(event.end_ms);
+            render_ts.insert(event.start_ms);
+            render_ts.insert(event.end_ms);
+            if has_animation_effect(event) || has_animation_override_tag(event) {
+                let mut t = event.start_ms as f64;
+                while t < event.end_ms as f64 {
+                    render_ts.insert(t as u64);
+                    t += ms_per_frame;
+                }
+            }
         }
 
-        let first_event_start = doc.events.iter().map(|e| e.start_ms).min().unwrap_or(0);
+        let _first_event_start = doc.events.iter().map(|e| e.start_ms).min().unwrap_or(0);
         let last_event_end = doc.events.iter().map(|e| e.end_ms).max().unwrap_or(0);
-
-        let mut frame_timestamps: Vec<u64> = Vec::new();
-        let mut ts = first_event_start;
-        while ts < last_event_end {
-            frame_timestamps.push(ts);
-            ts += ms_per_frame as u64;
-        }
 
         let pb = if args.quiet {
             indicatif::ProgressBar::hidden()
         } else {
-            progress::create(frame_timestamps.len() as u64, "Rendering")
+            progress::create(render_ts.len() as u64, "Rendering")
         };
 
-        let mut prev_frame: Option<QuantizedFrame> = None;
-        let mut prev_rendered_bitmap: Option<Vec<u8>> = None;
+        // ── Render loop ─────────────────────────────────────────────────
         let mut quantized: Vec<QuantizedFrame> = Vec::new();
+        let mut prev_data_hash: Option<u64> = None;
+        let mut render_count = 0u64;
+        let mut skip_empty = 0u64;
+        let mut skip_dup = 0u64;
 
-        for (idx, &frame_pts) in frame_timestamps.iter().enumerate() {
-            let is_change_point = change_points.contains(&frame_pts)
-                || change_points
-                    .iter()
-                    .any(|&cp| cp.abs_diff(frame_pts) < ms_per_frame as u64);
+        // Iterate sorted render timestamps; track which timestamps are the
+        // "last in a run" so we can compute durations correctly.
+        let ts_sorted: Vec<u64> = render_ts.into_iter().collect();
+        for window in ts_sorted.windows(2) {
+            let ts = window[0];
+            let next_ts = window[1];
 
-            let duration_ms = if idx + 1 < frame_timestamps.len() {
-                frame_timestamps[idx + 1].saturating_sub(frame_pts)
-            } else {
-                last_event_end.saturating_sub(frame_pts)
-            };
-
-            let has_active = doc
-                .events
-                .iter()
-                .any(|e| e.start_ms <= frame_pts && frame_pts < e.end_ms);
+            let has_active = doc.events.iter().any(|e| e.start_ms <= ts && ts < e.end_ms);
             if !has_active {
                 pb.inc(1);
                 continue;
             }
 
-            if is_change_point || prev_rendered_bitmap.is_none() {
-                let frame = match renderer.render_ass(doc, frame_pts) {
-                    Some(f) => f,
+            render_count += 1;
+            let frame = match renderer.render_ass(doc, ts) {
+                Some(f) => f,
+                None => { pb.inc(1); continue; }
+            };
+
+            // ── Empty-frame detection ───────────────────────────────────
+            let (bmp, x, y, w, h) =
+                match util::crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height) {
+                    Some(c) => c,
                     None => {
+                        // All pixels transparent → empty frame, skip it.
+                        // The previous (or next) unique frame will have its
+                        // duration extended to cover this gap in encode_sup.
+                        skip_empty += 1;
                         pb.inc(1);
                         continue;
                     }
                 };
-                let (bmp, x, y, w, h) =
-                    match util::crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height) {
-                        Some(c) => c,
-                        None => {
-                            pb.inc(1);
-                            continue;
-                        }
-                    };
-                let mut q = if use_palette_reuse {
-                    pipeline.quantize_with_prev(&bmp, w, h, prev_frame.as_ref())
-                } else {
-                    pipeline.quantize(&bmp, w, h)
-                };
-                q.x = x as u16;
-                q.y = y as u16;
-                q.pts_ms = frame_pts;
-                q.duration_ms = duration_ms;
-                prev_frame = Some(q.clone());
-                prev_rendered_bitmap = Some(frame.bitmap.clone());
-                quantized.push(q);
+
+            // ── Quantise / palette-reuse ────────────────────────────────
+            let prev_frame_for_reuse = quantized.last();
+            let mut q = if use_palette_reuse {
+                pipeline.quantize_with_prev(&bmp, w, h, prev_frame_for_reuse)
             } else {
-                if let Some(prev) = prev_frame.clone() {
-                    let mut q = prev;
-                    q.pts_ms = frame_pts;
-                    q.duration_ms = duration_ms;
-                    quantized.push(q);
+                pipeline.quantize(&bmp, w, h)
+            };
+            q.x = x as u16;
+            q.y = y as u16;
+            q.pts_ms = ts;
+            // Duration will be adjusted after the loop; set a placeholder now.
+            q.duration_ms = next_ts.saturating_sub(ts);
+
+            // ── Duplicate-frame detection ───────────────────────────────
+            // Hash quantised payload (indices + palette + transparent_index)
+            // to catch pixel-identical consecutive frames.
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            use std::hash::{Hash, Hasher};
+            q.indices.hash(&mut hasher);
+            q.palette.hash(&mut hasher);
+            q.transparent_index.hash(&mut hasher);
+            q.x.hash(&mut hasher);
+            q.y.hash(&mut hasher);
+            let data_hash = hasher.finish();
+
+            if let Some(prev) = prev_data_hash {
+                if prev == data_hash {
+                    // Same content as the previous unique frame → merge by
+                    // extending the previous frame's duration.
+                    if let Some(last_q) = quantized.last_mut() {
+                        last_q.duration_ms = ts + q.duration_ms - last_q.pts_ms;
+                    }
+                    skip_dup += 1;
+                    pb.inc(1);
+                    continue;
                 }
             }
+
+            prev_data_hash = Some(data_hash);
+            quantized.push(q);
             pb.inc(1);
+        }
+
+        // Fix up durations for the final stretch: extend the last frame
+        // to cover until last_event_end.
+        if let Some(last_q) = quantized.last_mut() {
+            if last_q.pts_ms + last_q.duration_ms < last_event_end {
+                last_q.duration_ms = last_event_end.saturating_sub(last_q.pts_ms);
+            }
         }
 
         pb.finish_and_clear();
         tracing::info!(
-            smart_frames = quantized.len(),
-            change_points = change_points.len(),
+            rendered = render_count,
+            empty_skipped = skip_empty,
+            duplicate_skipped = skip_dup,
+            unique_frames = quantized.len(),
             "smart rendering complete"
         );
         quantized
+    }
+
+    /// Map an ms timestamp to the PTS of the nearest video frame,
+    /// eliminating the sub-frame drift that `ms_to_90khz` accumulates
+    /// at NTSC rates (23.976, 29.97).
+    fn frame_accurate_pts(ms: u64, fps: f64) -> u64 {
+        if pgs_encoder::domain::timing::is_ntsc_fps(fps) {
+            // 23.976 = 24000/1001 → 15015/4 ticks per frame
+            let frame = (ms as f64 * 24.0 / 1001.0).round() as u64;
+            frame * 15015 / 4
+        } else {
+            let ticks_per = 90000.0 / fps;
+            let frame = (ms as f64 * fps / 1000.0).round() as u64;
+            (frame as f64 * ticks_per).round() as u64
+        }
     }
 
     /// Encode quantised frames into SUP binary data.
@@ -326,12 +403,32 @@ impl ConversionPipeline {
 
         let mut all_segments = Vec::new();
         for (i, q) in frames.iter().enumerate() {
-            let segments = encoder.encode_frame(q, q.pts_ms, q.duration_ms);
+            // Detect gap between non-contiguous frame groups (event boundaries).
+            if i > 0 {
+                let prev = &frames[i - 1];
+                let gap_start = prev.pts_ms + prev.duration_ms;
+                if q.pts_ms > gap_start {
+                    let clear_pts = Self::frame_accurate_pts(gap_start, config.fps);
+                    all_segments.extend(encoder.emit_clear(clear_pts));
+                }
+            }
+
+            // Use frame-accurate PTS directly, bypassing the ms → PTS
+            // conversion that drifts at non-integer frame rates.
+            let pts = Self::frame_accurate_pts(q.pts_ms, config.fps);
+            let segments = encoder.encode_frame_at_pts(q, pts, q.duration_ms);
             all_segments.extend(segments);
             if i % 100 == 0 {
                 trace!("encode_sup progress: {}/{} frames", i, frames.len());
             }
         }
+
+        // Final clear at the end of the stream.
+        if let Some(last) = frames.last() {
+            let clear_pts = Self::frame_accurate_pts(last.pts_ms + last.duration_ms, config.fps);
+            all_segments.extend(encoder.emit_clear(clear_pts));
+        }
+
         all_segments
     }
 

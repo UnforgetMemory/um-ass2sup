@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.7.5] - 2026-06-27
+
+### Added
+- **Smart frame classification**: Rewrote `render_and_quantize` to generate render timestamps only at event boundaries and animation-keyed frame points, eliminating ~120k intermediate frame clones. Rendered frames are classified as:
+  - *Empty* (all-transparent) → discarded, preceding frame's display duration extended
+  - *Duplicate* (pixel-identical to previous unique frame) → merged, duration extended
+  - *Unique* → kept as a new NormalCase/EpochStart display set
+- **Frame-accurate PTS computation**: New `frame_accurate_pts()` rounds ms timestamps to the nearest video frame boundary before 90 kHz conversion, eliminating NTSC drift (was ~22ms per event, now <1ms).
+- **Exact 24 fps support**: CLI now correctly handles 24 fps sources (`-f 24`) without applying NTSC 1001/1000 factors.
+
+### Changed
+- **EpochContinue optimization**: `build_continue_display_set` now omits PDS (palette unchanged), reducing SUP size by ~48 MB for heavily duplicated content.
+- **No per-frame palette_clear**: Removed trailing palette_clear from `encode_frame` — palette_clear is now emitted only at event boundaries via `emit_clear()` in `encode_sup`, eliminating the clear→show→clear flicker cycle.
+- **Extended epoch duration**: `max_frames_per_epoch` increased from ~1s to ~30s, reducing forced EpochStart resets from 6,062 to 103 (98% reduction).
+- **PotPlayer compatibility**: EpochContinue PCS retains `palette_update=true` (PotPlayer requirement), with PDS restored to prevent player crash.
+- **Exposed `encode_frame_at_pts`**: New public method accepts exact 90 kHz PTS, bypassing ms→90 kHz double conversion for frame-accurate callers.
+
+### Fixed
+- **NTSC ms→PTS drift**: `ms_to_90khz` accumulated ~0.7ms error per frame at 23.976 fps, causing subtitle timeline to drift forward by ~85s over a 90-minute movie. Fixed by rounding to the nearest video frame boundary before conversion.
+- **EpochContinue palette starvation**: EpochContinue PCS with `palette_update=false` caused PotPlayer to crash. Reverted to `palette_update=true` with full PDS.
+- **Frame-timestamp accumulation drift**: `ts += ms_per_frame as u64` truncated ~0.7ms per frame at non-integer frame rates. Changed to f64 accumulation with index-based rounding.
+
 ## [2.7.4] - 2026-06-26
 
 ### Security

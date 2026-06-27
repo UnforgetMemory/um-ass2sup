@@ -45,7 +45,9 @@ impl PgsEncoder {
             display_width,
             display_height,
             fps,
-            epoch: EpochManager::new().with_max_frames((2.0 * fps) as u32),
+            // frame_count is incremented TWICE per frame (epoch.update() + encode_frame),
+        // so effective max is max_frames/2 ≈ 30s with 60*fps.
+        epoch: EpochManager::new().with_max_frames((60.0 * fps) as u32),
             potplayer_compat: true,
         }
     }
@@ -58,6 +60,47 @@ impl PgsEncoder {
         }
     }
 
+    /// Compute exact PTS for a frame given its 0-based index, using the
+    /// native 90 kHz tick interval. Avoids sub-frame drift from the ms
+    /// → 90 kHz double conversion used in the frame-timestamp path.
+    pub fn pts_at_frame(&self, first_pts: u64, frame_idx: u64) -> u64 {
+        if is_ntsc_fps(self.fps) {
+            // 23.976 (= 24000/1001) fps → 3753.75 ticks/frame = 15015/4
+            first_pts + frame_idx * 15015 / 4
+        } else {
+            // ticks/frame = 90000 / fps
+            let ticks = (90000.0 / self.fps) as u64;
+            first_pts + frame_idx * ticks
+        }
+    }
+
+    /// Encode one frame with exact 90 kHz PTS (frame-index computed).
+    /// Callers that have frame indices should prefer this over `encode_frame`
+    /// to avoid sub-frame drift from ms → 90 kHz double conversion.
+    pub fn encode_frame_at_pts(
+        &mut self,
+        frame: &QuantizedFrame,
+        pts: u64,
+        _duration_ms: u64,
+    ) -> Vec<Segment> {
+        let dts = pts.saturating_sub(1);
+        let mut segments = Vec::new();
+        let (content_segments, _) = self.build_display_set(frame, pts, dts);
+        segments.extend(content_segments);
+        segments.push(Segment {
+            segment_type: SegmentType::End,
+            pts,
+            dts,
+            payload: SegmentPayload::End,
+        });
+        self.composition_number = self.composition_number.wrapping_add(1);
+        self.epoch.frame_count += 1;
+        segments
+    }
+
+    /// Encode one frame from ms-level timestamps.  Internally converts to
+    /// 90 kHz ticks via [`ms_to_90khz`]; callers that need frame-accurate
+    /// timing should use [`encode_frame_at_pts`] instead.
     pub fn encode_frame(
         &mut self,
         frame: &QuantizedFrame,
@@ -65,26 +108,7 @@ impl PgsEncoder {
         duration_ms: u64,
     ) -> Vec<Segment> {
         let pts = self.ms_to_90khz(pts_ms);
-        let dts = pts.saturating_sub(1);
-        let pts_end = self.ms_to_90khz(pts_ms + duration_ms);
-        let mut segments = Vec::new();
-        segments.extend(self.build_display_set(frame, pts, dts));
-        segments.push(Segment {
-            segment_type: SegmentType::End,
-            pts,
-            dts,
-            payload: SegmentPayload::End,
-        });
-        segments.extend(self.build_palette_clear_display_set(pts_end, pts_end.saturating_sub(1)));
-        segments.push(Segment {
-            segment_type: SegmentType::End,
-            pts: pts_end,
-            dts: pts_end.saturating_sub(1),
-            payload: SegmentPayload::End,
-        });
-        self.composition_number = self.composition_number.wrapping_add(1);
-        self.epoch.frame_count += 1;
-        segments
+        self.encode_frame_at_pts(frame, pts, duration_ms)
     }
 
     pub fn encode_frame_to_bytes(
@@ -106,7 +130,7 @@ impl PgsEncoder {
         frame: &QuantizedFrame,
         pts: u64,
         dts: u64,
-    ) -> Vec<Segment> {
+    ) -> (Vec<Segment>, DisplaySetKind) {
         let config = self.make_config();
         let mut palette_entries = build_palette(&frame.palette, frame.color_space);
         let palette_hash = hash_palette(&palette_entries);
@@ -185,24 +209,44 @@ impl PgsEncoder {
 
         let total_size: usize = segments.iter().map(|s| s.to_bytes().len()).sum();
         if total_size > MAX_DECODE_BUFFER * 3 / 4 {
-            ds::build_epoch_split_display_set(
-                cfg,
-                frame,
-                pts,
-                dts,
-                composition_state,
-                palette_update,
-                fc,
-                ov,
+            (
+                ds::build_epoch_split_display_set(
+                    cfg,
+                    frame,
+                    pts,
+                    dts,
+                    composition_state,
+                    palette_update,
+                    fc,
+                    ov,
+                ),
+                kind,
             )
         } else {
             self.epoch.update(palette_hash, rle_hash);
-            segments
+            (segments, kind)
         }
     }
 
-    fn build_palette_clear_display_set(&self, pts: u64, dts: u64) -> Vec<Segment> {
-        ds::build_palette_clear_display_set(&self.make_config(), pts, dts, self.epoch.frame_count)
+    /// Emit a palette_clear display set at the given PTS and advance
+    /// composition_number so the next content PCS doesn't collide.
+    /// Used by the caller to clear subtitles at event boundaries.
+    pub fn emit_clear(&mut self, pts: u64) -> Vec<Segment> {
+        let dts = pts.saturating_sub(1);
+        let mut segs = ds::build_palette_clear_display_set(
+            &self.make_config(),
+            pts,
+            dts,
+            self.epoch.frame_count,
+        );
+        self.composition_number = self.composition_number.wrapping_add(1);
+        segs.push(Segment {
+            segment_type: SegmentType::End,
+            pts,
+            dts,
+            payload: SegmentPayload::End,
+        });
+        segs
     }
 }
 
@@ -263,10 +307,10 @@ mod tests {
         let mut enc = PgsEncoder::new(1920, 1080, 24.0);
         let frame = make_test_frame();
         let segments = enc.encode_frame(&frame, 1000, 2000);
-        assert_eq!(segments.len(), 8);
+        // EpochStart: content display set (PCS+WDS+PDS+ODS) + End = 5
+        assert_eq!(segments.len(), 5);
         assert_eq!(segments[0].segment_type, SegmentType::Pcs);
         assert_eq!(segments[4].segment_type, SegmentType::End);
-        assert_eq!(segments[7].segment_type, SegmentType::End);
     }
 
     #[test]
@@ -276,8 +320,9 @@ mod tests {
         let segments = enc.encode_frame(&frame, 1000, 2000);
         assert_eq!(segments[0].pts, 90000);
         assert_eq!(segments[0].dts, 89999);
-        assert_eq!(segments[7].pts, 270000);
-        assert_eq!(segments[7].dts, 269999);
+        // Ending END segment at pts (no trailing palette_clear)
+        assert_eq!(segments[4].pts, 90000);
+        assert_eq!(segments[4].dts, 89999);
     }
 
     #[test]
@@ -392,7 +437,6 @@ mod tests {
         let frame = make_test_frame();
         // make_test_frame uses x: 100, y: 200
         let segments = enc.encode_frame(&frame, 1000, 2000);
-        // Find the first PCS segment
         let pcs_seg = segments
             .iter()
             .find(|s| s.segment_type == SegmentType::Pcs)
@@ -515,7 +559,7 @@ mod tests {
     }
 
     #[test]
-    fn test_palette_update_false_when_unchanged() {
+    fn test_palette_update_true_in_continue_set() {
         let mut enc = PgsEncoder::new(1920, 1080, 24.0);
         let frame = make_test_frame();
         enc.encode_frame(&frame, 0, 1000);
@@ -525,10 +569,8 @@ mod tests {
             .find(|s| matches!(s.payload, SegmentPayload::Pcs(_)))
             .unwrap();
         if let SegmentPayload::Pcs(ref p) = display_pcs.payload {
-            assert!(
-                p.palette_update,
-                "palette unchanged: expect palette_update following PDS in continue set"
-            );
+            // PotPlayer requires palette_update=true on all PCS.
+            assert!(p.palette_update, "EpochContinue must have palette_update=true for PotPlayer");
         }
     }
 

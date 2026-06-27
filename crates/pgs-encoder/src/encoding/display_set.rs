@@ -63,7 +63,7 @@ pub fn build_palette_clear_display_set(
         width: config.display_width,
         height: config.display_height,
         frame_rate: config.frame_rate,
-        composition_number: config.composition_number.wrapping_add(1),
+        composition_number: config.composition_number,
         composition_state: CompositionState::NormalCase,
         palette_update: true,
         palette_id: config.palette_id,
@@ -120,7 +120,7 @@ pub fn build_continue_display_set(
     palette_entries: &[PaletteEntry],
     frame_count: u32,
 ) -> Vec<Segment> {
-    let segments = vec![
+    vec![
         Segment {
             segment_type: SegmentType::Pcs,
             pts,
@@ -131,7 +131,7 @@ pub fn build_continue_display_set(
                 frame_rate: config.frame_rate,
                 composition_number: config.composition_number,
                 composition_state,
-                palette_update: true,
+                palette_update: true, // PotPlayer requires this on all PCS
                 palette_id: config.palette_id,
                 num_objects: 1,
                 compositions: vec![ObjectComposition {
@@ -148,6 +148,7 @@ pub fn build_continue_display_set(
                 }],
             }),
         },
+        // PotPlayer requires PDS to follow when palette_update=true.
         Segment {
             segment_type: SegmentType::Pds,
             pts,
@@ -158,8 +159,7 @@ pub fn build_continue_display_set(
                 entries: palette_entries.to_vec(),
             }),
         },
-    ];
-    segments
+    ]
 }
 
 pub fn build_palette_only_display_set(

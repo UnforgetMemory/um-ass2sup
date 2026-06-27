@@ -57,12 +57,13 @@ fn test_encode_golden_small_frame() {
     let mut encoder = PgsEncoder::new(1920, 1080, 24.0);
     let segments = encoder.encode_frame(&frame, 0, 1000);
 
+    // Content (PCS + WDS + PDS + ODS) + End, no trailing palette_clear
     assert!(segments.len() >= 5);
     assert_eq!(segments[0].segment_type, SegmentType::Pcs);
     assert_eq!(segments[1].segment_type, SegmentType::Wds);
     assert_eq!(segments[2].segment_type, SegmentType::Pds);
     assert!(matches!(segments[3].segment_type, SegmentType::Ods));
-
+    assert_eq!(segments[4].segment_type, SegmentType::End);
     let last = segments.len() - 1;
     assert_eq!(segments[last].segment_type, SegmentType::End);
 
