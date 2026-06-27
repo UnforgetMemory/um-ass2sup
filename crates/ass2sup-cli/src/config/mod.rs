@@ -104,7 +104,7 @@ impl Config {
             font: FontConfig {
                 default_font: args.font.clone(),
                 default_font_size: args.font_size as f32,
-                font_map: FontMap::new(),
+                font_map: parse_font_map(&args.font_map).unwrap_or_default(),
                 font_dirs: args.font_dir.clone(),
                 no_check: args.no_check_fonts,
             },
@@ -114,7 +114,7 @@ impl Config {
                 dry_run: args.dry_run,
             },
             parallel: ParallelConfig {
-                frames: args.parallel_frames,
+                frames: false,
                 files: args.parallel,
             },
         }

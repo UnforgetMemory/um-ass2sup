@@ -86,6 +86,8 @@ Options:
 
       --parallel-frames
           Render frames in parallel using rayon (single-file mode)
+          
+          ⚠️ DEPRECATED — no-op in frame-driven mode.
 
       --color-space <COLOR_SPACE>
           Output colour space (srgb/bt709/bt2020)

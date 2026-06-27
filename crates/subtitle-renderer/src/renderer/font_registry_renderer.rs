@@ -24,6 +24,7 @@ use crate::renderer::PixmapPool;
 pub struct FontRegistryRenderResources {
     pub registry: Mutex<FontRegistry>,
     pub pixmap_pool: Mutex<PixmapPool>,
+    pub font_map: std::collections::HashMap<String, Vec<String>>,
 }
 
 impl FontRegistryRenderResources {
@@ -31,6 +32,7 @@ impl FontRegistryRenderResources {
         Self {
             registry: Mutex::new(FontRegistry::new()),
             pixmap_pool: Mutex::new(PixmapPool::new(8)),
+            font_map: std::collections::HashMap::new(),
         }
     }
 
@@ -133,6 +135,8 @@ pub fn render_event_font_registry(
             available_width,
             available_height,
             line_height,
+            &resources.font_map,
+            event.style.as_str(),
         )
     } else {
         shape_horizontal(
@@ -142,6 +146,8 @@ pub fn render_event_font_registry(
             &registry,
             available_width,
             line_height,
+            &resources.font_map,
+            event.style.as_str(),
         )
     };
     drop(registry);
@@ -225,7 +231,13 @@ pub fn render_event_font_registry(
             "rendering line"
         );
         for g in &sl.glyphs {
-            let font_data = resolve_glyph_font_data(&registry, &ctx, g.glyph_id);
+            let font_data = resolve_glyph_font_data(
+                &registry,
+                &ctx,
+                g.glyph_id,
+                &resources.font_map,
+                event.style.as_str(),
+            );
             if font_data.is_empty() {
                 tracing::warn!(
                     glyph_id = g.glyph_id,
@@ -404,6 +416,8 @@ fn resolve_glyph_font_data(
     registry: &FontRegistry,
     ctx: &RenderContext,
     _glyph_id: u16,
+    font_map: &std::collections::HashMap<String, Vec<String>>,
+    style_name: &str,
 ) -> Vec<u8> {
     use crate::font::types::{FontQuery, FontStyle, FontWeight};
 
@@ -455,6 +469,43 @@ fn resolve_glyph_font_data(
         if let Some(sug) = pr.suggestion {
             if let Some(data) = registry.get_font_data(sug.id) {
                 return data.to_vec();
+            }
+        }
+    }
+
+    // Font map fallback for glyph rendering
+    if let Some(fallbacks) = font_map.get(style_name).or_else(|| font_map.get("Default")) {
+        for fb_name in fallbacks {
+            if fb_name == ctx.font_name.as_str() {
+                continue;
+            }
+            let fb_query = FontQuery {
+                family: fb_name.to_string(),
+                weight,
+                style: FontStyle::Normal,
+            };
+            let fb_result = registry.query(&fb_query);
+            if let Some(id) = fb_result.found {
+                if let Some(data) = registry.get_font_data(id) {
+                    tracing::warn!(
+                        original = %ctx.font_name,
+                        fallback = %fb_name,
+                        style = %style_name,
+                        "font fallback: using fallback font for glyph"
+                    );
+                    return data.to_vec();
+                }
+            }
+            if let Some(sug) = fb_result.suggestion {
+                if let Some(data) = registry.get_font_data(sug.id) {
+                    tracing::warn!(
+                        original = %ctx.font_name,
+                        fallback = %fb_name,
+                        style = %style_name,
+                        "font fallback: using fallback font suggestion for glyph"
+                    );
+                    return data.to_vec();
+                }
             }
         }
     }

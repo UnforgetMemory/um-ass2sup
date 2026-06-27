@@ -121,16 +121,22 @@ fn parse_font_metadata(
         reason: "swash: could not parse font data".into(),
     })?;
 
-    let mut family = String::new();
+    // Collect ALL family names (primary + typographic/legacy)
+    let mut families: Vec<String> = Vec::new();
     for s in font.localized_strings() {
         if s.id() == swash::StringId::Family {
-            family = s.to_string();
-            break;
+            let name = s.to_string();
+            if !name.is_empty() && !families.contains(&name) {
+                families.push(name);
+            }
         }
     }
-    if family.is_empty() {
-        family = "Unknown".to_string();
+    if families.is_empty() {
+        families.push("Unknown".to_string());
     }
+
+    // Use the FIRST family name as the primary family (for compatibility)
+    let family = families[0].clone();
 
     let weight = FontWeight::from_u16(font.attributes().weight().0);
 

@@ -98,6 +98,24 @@ impl Renderer {
             .load_user_font_data(data)
     }
 
+    /// Check if a font family is available in the registry.
+    pub fn font_available(&self, family: &str) -> bool {
+        use crate::font::types::{FontQuery, FontStyle, FontWeight};
+        let guard = self.font_registry_render.lock();
+        let registry = guard.registry.lock();
+        let q = FontQuery {
+            family: family.to_string(),
+            weight: FontWeight::Normal,
+            style: FontStyle::Normal,
+        };
+        registry.query(&q).found.is_some()
+    }
+
+    /// Set the per-style font fallback map for font resolution.
+    pub fn set_font_map(&self, font_map: std::collections::HashMap<String, Vec<String>>) {
+        self.font_registry_render.lock().font_map = font_map;
+    }
+
     pub fn render_ass(&self, doc: &SubtitleDocument, timestamp_ms: u64) -> Option<RenderedFrame> {
         self.render_ass_inner(doc, timestamp_ms, &mut self.font_registry_render.lock())
     }

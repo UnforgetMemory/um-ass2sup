@@ -125,10 +125,130 @@ pub fn check_ass_fonts(
 }
 
 fn font_available(registry: &FontRegistry, family: &str) -> bool {
+    // Try exact match first
     let q = FontQuery {
         family: family.to_string(),
         weight: FontWeight::Normal,
         style: FontStyle::Normal,
     };
-    registry.query(&q).found.is_some()
+    let result = registry.query(&q);
+    tracing::debug!(
+        family = %family,
+        found = result.found.is_some(),
+        candidates = result.candidates.len(),
+        suggestion = result.suggestion.is_some(),
+        "font_available check"
+    );
+    if result.found.is_some() {
+        return true;
+    }
+
+    // Try with different weights
+    for weight in [FontWeight::Bold, FontWeight::Medium, FontWeight::Semibold] {
+        let q = FontQuery {
+            family: family.to_string(),
+            weight,
+            style: FontStyle::Normal,
+        };
+        if registry.query(&q).found.is_some() {
+            return true;
+        }
+    }
+
+    // Try family-only match (any weight)
+    !result.candidates.is_empty() || result.suggestion.is_some()
+}
+
+/// Check font availability using a closure instead of a direct registry reference.
+///
+/// This variant allows checking fonts through the Renderer's internal font registry
+/// without exposing it publicly.
+pub fn check_ass_fonts_with_fn(
+    doc: &SubtitleDocument,
+    is_available: impl Fn(&str) -> bool,
+    font_map: &FontMap,
+    global_fallback: &str,
+    no_check: bool,
+) -> Result<(), String> {
+    if no_check {
+        trace!("check_ass_fonts skipped (--no-check-fonts)");
+        return Ok(());
+    }
+    debug!(
+        styles = doc.styles.len(),
+        global_fallback = %global_fallback,
+        "checking font availability for all ASS styles"
+    );
+
+    let mut missing: Vec<String> = Vec::new();
+
+    for style in &doc.styles {
+        let primary = if style.font_name.is_empty() {
+            global_fallback
+        } else {
+            &style.font_name
+        };
+
+        if is_available(primary) {
+            trace!(style = ?style.name, font = %primary, "style font OK");
+            continue;
+        }
+
+        let style_name = style.name.as_str();
+        if let Some(fallbacks) = font_map.get(style_name) {
+            let all_missing = fallbacks.iter().all(|fb| !is_available(fb));
+            if !all_missing {
+                trace!(
+                    style = ?style.name,
+                    fallbacks = ?fallbacks,
+                    "at least one --font-map entry is available"
+                );
+                continue;
+            }
+        }
+
+        if global_fallback != primary
+            && !global_fallback.is_empty()
+            && global_fallback != "Arial"
+            && is_available(global_fallback)
+        {
+            debug!(
+                style = ?style.name,
+                primary = %primary,
+                fallback = %global_fallback,
+                "global --font fallback is available; using it"
+            );
+            continue;
+        }
+
+        let fb_chain: Vec<&str> = font_map
+            .get(style_name)
+            .map(|v| v.iter().map(|s| s.as_str()).collect())
+            .unwrap_or_default();
+        let desc = if fb_chain.is_empty() {
+            format!("'{primary}' (no fallback configured)")
+        } else {
+            let fb_str = fb_chain.join(", ");
+            format!("'{primary}' (fallbacks: {fb_str}) not installed")
+        };
+        warn!(style = ?style.name, "{desc}");
+        missing.push(desc);
+    }
+
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        let mut msg = String::from("Font check failed — missing font(s):\n");
+        for m in &missing {
+            msg.push_str(&format!("  • {m}\n"));
+        }
+        msg.push_str(
+            "Install the fonts above or re-run with --no-check-fonts to skip this check.\n",
+        );
+        msg.push_str(
+            "Hint: for CJK subtitles install fonts-noto-cjk (Debian/Ubuntu) or embed \
+             fonts via the ASS [Fonts] section.",
+        );
+        Err(msg)
+    }
 }

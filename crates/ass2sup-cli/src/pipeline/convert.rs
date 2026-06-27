@@ -138,11 +138,9 @@ impl ConversionPipeline {
 
         let renderer = Renderer::new(render_cfg);
 
-        // Load system fonts
         let system_count = renderer.load_system_fonts();
         debug!(system_count, "loaded system fonts");
 
-        // Load extra font directories
         for dir in &config.font.font_dirs {
             let added = renderer.load_user_fonts_dir(dir);
             if added > 0 {
@@ -152,7 +150,6 @@ impl ConversionPipeline {
             }
         }
 
-        // Load embedded fonts from ASS [Fonts] section
         let font_data_list: Vec<(String, Vec<u8>)> = doc
             .fonts
             .iter()
@@ -160,7 +157,19 @@ impl ConversionPipeline {
                 if ef.filename.is_empty() {
                     return None;
                 }
-                let path = input.parent().unwrap_or(Path::new(".")).join(&ef.filename);
+                let base = input.parent().unwrap_or(Path::new("."));
+                let path = base.join(&ef.filename);
+                // Prevent path traversal - reject paths escaping the input directory
+                if path
+                    .components()
+                    .any(|c| c == std::path::Component::ParentDir)
+                {
+                    warn!(
+                        "Rejected path traversal in embedded font filename: {}",
+                        ef.filename
+                    );
+                    return None;
+                }
                 std::fs::read(&path)
                     .ok()
                     .map(|data| (ef.font_name.clone(), data))
@@ -176,29 +185,23 @@ impl ConversionPipeline {
     }
 
     /// Shared render + quantise step, used by both SUP and BDN paths.
+    ///
+    /// Uses smart rendering: only renders frames at event boundaries (start/end),
+    /// reuses previous frame for static periods between events.
     pub fn render_and_quantize(
         doc: &SubtitleDocument,
         renderer: &mut Renderer,
         config: &Config,
         args: &Args,
     ) -> Vec<QuantizedFrame> {
-        use rayon::prelude::*;
-
-        let dialogues: Vec<_> = doc.events.iter().collect();
-        let total = dialogues.len() as u64;
-
-        let pb = if args.quiet {
-            indicatif::ProgressBar::hidden()
-        } else {
-            progress::create(total, "Rendering")
-        };
+        let ms_per_frame = 1000.0 / config.fps;
+        let _total_duration = doc.events.iter().map(|e| e.end_ms).max().unwrap_or(0);
 
         let dither = super::super::config::color_space::parse_dither(&args.dither);
         let mut pipeline = ColorPipeline::new()
             .with_max_colors(config.max_colors)
             .with_dither(dither);
 
-        // Auto-select BT.709 for HD content (1080p) per Blu-ray spec.
         let effective_cs = if config.color_space == color_quantizer::color::ColorSpace::Srgb
             && config.resolution.height > 576
         {
@@ -215,99 +218,98 @@ impl ConversionPipeline {
 
         let use_palette_reuse = args.quantizer == "median-cut";
 
-        let quantized: Vec<QuantizedFrame> = if use_palette_reuse {
-            // Sequential path with palette reuse
-            let mut prev_frame: Option<QuantizedFrame> = None;
-            doc.events
-                .iter()
-                .enumerate()
-                .filter_map(|(i, event)| {
-                    let render_pts = util::compute_render_pts(event);
-                    let frame = match renderer.render_ass(doc, render_pts) {
-                        Some(f) => f,
-                        None => {
-                            warn!(
-                                "Event {}: render_ass returned no frame (start={}ms, end={}ms, text=\"{}\")",
-                                i,
-                                event.start_ms,
-                                event.end_ms,
-                                event.text_raw.chars().take(60).collect::<String>(),
-                            );
-                            return None;
-                        }
-                    };
-                    let (bmp, x, y, w, h) = match util::crop_to_tight_bbox(
-                        &frame.bitmap,
-                        frame.width,
-                        frame.height,
-                    ) {
-                        Some(c) => c,
-                        None => {
-                            warn!(
-                                "Event {}: crop_to_tight_bbox found no visible pixels (frame {}x{})",
-                                i, frame.width, frame.height,
-                            );
-                            return None;
-                        }
-                    };
-                    let mut q = pipeline.quantize_with_prev(&bmp, w, h, prev_frame.as_ref());
-                    q.x = x as u16;
-                    q.y = y as u16;
-                    q.pts_ms = event.start_ms;
-                    q.duration_ms = event.end_ms.saturating_sub(event.start_ms);
-                    prev_frame = Some(q.clone());
-                    pb.inc(1);
-                    Some(q)
-                })
-                .collect()
+        let mut change_points: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
+        for event in &doc.events {
+            change_points.insert(event.start_ms);
+            change_points.insert(event.end_ms);
+        }
+
+        let first_event_start = doc.events.iter().map(|e| e.start_ms).min().unwrap_or(0);
+        let last_event_end = doc.events.iter().map(|e| e.end_ms).max().unwrap_or(0);
+
+        let mut frame_timestamps: Vec<u64> = Vec::new();
+        let mut ts = first_event_start;
+        while ts < last_event_end {
+            frame_timestamps.push(ts);
+            ts += ms_per_frame as u64;
+        }
+
+        let pb = if args.quiet {
+            indicatif::ProgressBar::hidden()
         } else {
-            // Parallel path (no palette reuse)
-            let frames: Vec<Option<QuantizedFrame>> = doc
-                .events
-                .par_iter()
-                .enumerate()
-                .map(|(i, event)| {
-                    let render_pts = util::compute_render_pts(event);
-                    let frame = match renderer.render_ass(doc, render_pts) {
-                        Some(f) => f,
-                        None => {
-                            warn!(
-                                "Event {}: render_ass returned no frame (start={}ms, end={}ms, text=\"{}\")",
-                                i,
-                                event.start_ms,
-                                event.end_ms,
-                                event.text_raw.chars().take(60).collect::<String>(),
-                            );
-                            return None;
-                        }
-                    };
-                    let (bmp, x, y, w, h) = match util::crop_to_tight_bbox(
-                        &frame.bitmap,
-                        frame.width,
-                        frame.height,
-                    ) {
-                        Some(c) => c,
-                        None => {
-                            warn!(
-                                "Event {}: crop_to_tight_bbox found no visible pixels (frame {}x{})",
-                                i, frame.width, frame.height,
-                            );
-                            return None;
-                        }
-                    };
-                    let mut q = pipeline.quantize(&bmp, w, h);
-                    q.x = x as u16;
-                    q.y = y as u16;
-                    q.pts_ms = event.start_ms;
-                    q.duration_ms = event.end_ms.saturating_sub(event.start_ms);
-                    Some(q)
-                })
-                .collect();
-            pb.finish_and_clear();
-            frames.into_iter().flatten().collect()
+            progress::create(frame_timestamps.len() as u64, "Rendering")
         };
 
+        let mut prev_frame: Option<QuantizedFrame> = None;
+        let mut prev_rendered_bitmap: Option<Vec<u8>> = None;
+        let mut quantized: Vec<QuantizedFrame> = Vec::new();
+
+        for (idx, &frame_pts) in frame_timestamps.iter().enumerate() {
+            let is_change_point = change_points.contains(&frame_pts)
+                || change_points
+                    .iter()
+                    .any(|&cp| cp.abs_diff(frame_pts) < ms_per_frame as u64);
+
+            let duration_ms = if idx + 1 < frame_timestamps.len() {
+                frame_timestamps[idx + 1].saturating_sub(frame_pts)
+            } else {
+                last_event_end.saturating_sub(frame_pts)
+            };
+
+            let has_active = doc
+                .events
+                .iter()
+                .any(|e| e.start_ms <= frame_pts && frame_pts < e.end_ms);
+            if !has_active {
+                pb.inc(1);
+                continue;
+            }
+
+            if is_change_point || prev_rendered_bitmap.is_none() {
+                let frame = match renderer.render_ass(doc, frame_pts) {
+                    Some(f) => f,
+                    None => {
+                        pb.inc(1);
+                        continue;
+                    }
+                };
+                let (bmp, x, y, w, h) =
+                    match util::crop_to_tight_bbox(&frame.bitmap, frame.width, frame.height) {
+                        Some(c) => c,
+                        None => {
+                            pb.inc(1);
+                            continue;
+                        }
+                    };
+                let mut q = if use_palette_reuse {
+                    pipeline.quantize_with_prev(&bmp, w, h, prev_frame.as_ref())
+                } else {
+                    pipeline.quantize(&bmp, w, h)
+                };
+                q.x = x as u16;
+                q.y = y as u16;
+                q.pts_ms = frame_pts;
+                q.duration_ms = duration_ms;
+                prev_frame = Some(q.clone());
+                prev_rendered_bitmap = Some(frame.bitmap.clone());
+                quantized.push(q);
+            } else {
+                if let Some(prev) = prev_frame.clone() {
+                    let mut q = prev;
+                    q.pts_ms = frame_pts;
+                    q.duration_ms = duration_ms;
+                    quantized.push(q);
+                }
+            }
+            pb.inc(1);
+        }
+
         pb.finish_and_clear();
+        tracing::info!(
+            smart_frames = quantized.len(),
+            change_points = change_points.len(),
+            "smart rendering complete"
+        );
         quantized
     }
 
@@ -367,11 +369,7 @@ impl ConversionPipeline {
         let mut total_png_bytes: usize = 0;
         let mut frames_encoded = 0u64;
 
-        for (i, event) in doc.events.iter().enumerate() {
-            if i >= frames.len() {
-                break;
-            }
-            let q = &frames[i];
+        for (i, q) in frames.iter().enumerate() {
             let palette: Vec<[u8; 4]> = q.palette.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
 
             let png_filename = format!("{:04}.png", i + 1);
@@ -381,8 +379,8 @@ impl ConversionPipeline {
 
             total_png_bytes += q.indices.len() + palette.len() * 4;
 
-            let display_pts = event.start_ms;
-            let duration_ms = event.end_ms.saturating_sub(event.start_ms);
+            let display_pts = q.pts_ms;
+            let duration_ms = q.duration_ms;
             let in_tc = bdn_xml::ms_to_timecode(display_pts, config.fps);
             let out_tc = bdn_xml::ms_to_timecode(display_pts + duration_ms, config.fps);
 
@@ -436,6 +434,24 @@ pub fn convert_file(
     }
 
     let mut renderer = ConversionPipeline::create_renderer(&doc, config, input, args)?;
+
+    renderer.set_font_map(config.font.font_map.clone());
+
+    let font_check_result = crate::config::font::check_ass_fonts_with_fn(
+        &doc,
+        |family| renderer.font_available(family),
+        &config.font.font_map,
+        &config.font.default_font,
+        config.font.no_check,
+    );
+    if let Err(e) = font_check_result {
+        if args.force {
+            warn!("{e}");
+        } else {
+            return Err(CliError::Conversion(e));
+        }
+    }
+
     let frames = ConversionPipeline::render_and_quantize(&doc, &mut renderer, config, args);
     let segments = ConversionPipeline::encode_sup(&frames, config);
     let output_size = ConversionPipeline::write_sup(segments, output)?;
@@ -465,6 +481,24 @@ pub fn convert_to_bdn(
 
     let doc = ConversionPipeline::parse_input(input)?;
     let mut renderer = ConversionPipeline::create_renderer(&doc, config, input, args)?;
+
+    renderer.set_font_map(config.font.font_map.clone());
+
+    let font_check_result = crate::config::font::check_ass_fonts_with_fn(
+        &doc,
+        |family| renderer.font_available(family),
+        &config.font.font_map,
+        &config.font.default_font,
+        config.font.no_check,
+    );
+    if let Err(e) = font_check_result {
+        if args.force {
+            warn!("{e}");
+        } else {
+            return Err(CliError::Conversion(e));
+        }
+    }
+
     let frames = ConversionPipeline::render_and_quantize(&doc, &mut renderer, config, args);
     let stats = ConversionPipeline::write_bdn(&frames, &doc, config, input, output_dir)?;
 

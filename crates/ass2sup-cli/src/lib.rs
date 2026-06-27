@@ -19,8 +19,7 @@ pub use error::CliError;
 
 use std::path::{Path, PathBuf};
 
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use walkdir::WalkDir;
 
 use cli::args::Args;
@@ -191,22 +190,10 @@ pub fn run(args: Args) -> Result<(), CliError> {
         env!("CARGO_PKG_VERSION")
     );
 
-    // Pre-warm rayon thread pool for parallel frame mode
+    // Warn about deprecated --parallel-frames flag
+    #[allow(deprecated)]
     if args.parallel_frames {
-        let pool_init = std::time::Instant::now();
-        let pool = rayon::ThreadPoolBuilder::new()
-            .thread_name(|i| format!("ass2sup-worker-{i}"))
-            .build()
-            .map_err(|e| CliError::Conversion(format!("Failed to build rayon pool: {e}")))?;
-        let n = pool.current_num_threads();
-        pool.install(|| {
-            (0..n).into_par_iter().for_each(|_i| {});
-        });
-        debug!(
-            elapsed_ms = pool_init.elapsed().as_millis() as u64,
-            workers = n,
-            "rayon thread pool pre-warmed"
-        );
+        warn!("--parallel-frames is deprecated and ignored in frame-driven mode");
     }
 
     // Single file mode

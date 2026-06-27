@@ -104,7 +104,10 @@ pub struct Args {
     pub parallel: bool,
 
     /// Render frames in parallel using rayon (single-file mode)
+    ///
+    /// ⚠️ DEPRECATED — no-op in frame-driven mode.
     #[arg(long)]
+    #[deprecated(since = "0.6.0", note = "use frame-driven pipeline (no-op)")]
     pub parallel_frames: bool,
 
     // ── COLOUR ──

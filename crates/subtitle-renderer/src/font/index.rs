@@ -42,6 +42,7 @@ impl FontIndex {
     /// * its exact (family, weight, style) composite key,
     /// * its family-wide bucket,
     /// * its [`FontId`] for direct metadata lookup.
+    /// * its full name (family + weight) for ASS compatibility.
     pub fn insert(&mut self, face: FontFace) {
         let hash = family_hash(&face.family);
         let id = face.id;
@@ -57,6 +58,19 @@ impl FontIndex {
         self.family_names
             .entry(hash)
             .or_insert_with(|| face.family.clone());
+
+        // Also index by full name (family + weight) for ASS compatibility
+        // e.g., "MiSans Demibold" for family="MiSans", weight=Demibold
+        let full_name = format!("{} {}", face.family, face.weight.as_str());
+        let full_hash = family_hash(&full_name);
+        if full_hash != hash {
+            self.families.entry(full_hash).or_default().push(id);
+            self.family_names
+                .entry(full_hash)
+                .or_insert_with(|| full_name);
+            let full_key = (full_hash, face.weight.as_u16(), face.style);
+            self.exact.entry(full_key).or_default().push(id);
+        }
 
         // Store full metadata
         self.faces.insert(id, face);
@@ -227,7 +241,17 @@ mod tests {
 
         let mut families = idx.list_families();
         families.sort();
-        assert_eq!(families, vec!["Arial", "Times"]);
+        // Now includes full names (family + weight) for ASS compatibility
+        assert_eq!(
+            families,
+            vec![
+                "Arial",
+                "Arial Bold",
+                "Arial Normal",
+                "Times",
+                "Times Normal"
+            ]
+        );
     }
 
     #[test]

@@ -12,6 +12,7 @@ pub(crate) struct ShapedLine {
     pub(crate) x_start: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn shape_horizontal(
     text: &str,
     ctx: &RenderContext,
@@ -19,8 +20,10 @@ pub(crate) fn shape_horizontal(
     registry: &FontRegistry,
     aw: f32,
     lh: f32,
+    font_map: &std::collections::HashMap<String, Vec<String>>,
+    style_name: &str,
 ) -> Vec<ShapedLine> {
-    let font_data = resolve_font_data(registry, &ctx.font_name, ctx.bold);
+    let font_data = resolve_font_data(registry, &ctx.font_name, ctx.bold, font_map, style_name);
     tracing::debug!(
         font = %ctx.font_name,
         font_data_len = font_data.len(),
@@ -73,6 +76,7 @@ pub(crate) fn shape_horizontal(
     r
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn shape_vertical(
     text: &str,
     ctx: &RenderContext,
@@ -80,12 +84,14 @@ pub(crate) fn shape_vertical(
     aw: f32,
     ah: f32,
     lh: f32,
+    font_map: &std::collections::HashMap<String, Vec<String>>,
+    style_name: &str,
 ) -> Vec<ShapedLine> {
     let cols = wrap_text_vertical(text, ah, lh);
     if cols.is_empty() {
         return vec![];
     }
-    let font_data = resolve_font_data(registry, &ctx.font_name, ctx.bold);
+    let font_data = resolve_font_data(registry, &ctx.font_name, ctx.bold, font_map, style_name);
     let rm = remap_alignment_vertical(ctx.alignment, ctx.writing_mode);
     let ac = rm % 3;
     let tw = cols.len() as f32 * lh;
@@ -159,7 +165,13 @@ fn wrap_text_lines_simple(text: &str, font_data: &[u8], fz: f32, _sp: f32, mw: f
     lines
 }
 
-fn resolve_font_data(registry: &FontRegistry, family: &str, bold: bool) -> Vec<u8> {
+fn resolve_font_data(
+    registry: &FontRegistry,
+    family: &str,
+    bold: bool,
+    font_map: &std::collections::HashMap<String, Vec<String>>,
+    style_name: &str,
+) -> Vec<u8> {
     use crate::font::types::{FontQuery, FontStyle, FontWeight};
 
     let weight = if bold {
@@ -223,6 +235,50 @@ fn resolve_font_data(registry: &FontRegistry, family: &str, bold: bool) -> Vec<u
         }
     }
 
+    // Font map fallback: try fallback fonts from the style-specific map
+    if let Some(fallbacks) = font_map.get(style_name).or_else(|| font_map.get("Default")) {
+        for fb_name in fallbacks {
+            if fb_name == family {
+                continue; // Skip the same font we already tried
+            }
+            let fb_query = FontQuery {
+                family: fb_name.to_string(),
+                weight,
+                style: FontStyle::Normal,
+            };
+            let fb_result = registry.query(&fb_query);
+            tracing::debug!(
+                original = %family,
+                fallback = %fb_name,
+                found = fb_result.found.is_some(),
+                "font map fallback query"
+            );
+            if let Some(id) = fb_result.found {
+                if let Some(data) = registry.get_font_data(id) {
+                    tracing::warn!(
+                        original = %family,
+                        fallback = %fb_name,
+                        style = %style_name,
+                        "font fallback: using fallback font"
+                    );
+                    return data.to_vec();
+                }
+            }
+            if let Some(sug) = fb_result.suggestion {
+                if let Some(data) = registry.get_font_data(sug.id) {
+                    tracing::warn!(
+                        original = %family,
+                        fallback = %fb_name,
+                        style = %style_name,
+                        "font fallback: using fallback font suggestion"
+                    );
+                    return data.to_vec();
+                }
+            }
+        }
+    }
+
+    tracing::warn!(family = %family, style = %style_name, "font not found after all fallbacks");
     Vec::new()
 }
 

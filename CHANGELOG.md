@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.7.4] - 2026-06-26
+
+### Security
+- **Path traversal in embedded font loading**: `create_renderer()` now rejects embedded font filenames containing `..` components that escape the input file directory. Previously, a malicious ASS file with `filename = ../../../../etc/passwd` in the `[Fonts]` section could read arbitrary files from the filesystem (CWE-22). Found via security audit.
+
+### Fixed
+- **Frame-level animation support**: Replaced event-driven pipeline (one frame per event) with frame-driven pipeline (one frame per video frame timestamp). Each frame now renders ALL active subtitle events composited together, matching libass behavior. This fixes:
+  - Subtitles appearing/disappearing abruptly instead of per-frame
+  - Multiple simultaneous subtitles interfering with each other (object_id=0 collision causing premature clear)
+  - PTS drift where `q.pts_ms = event.start_ms` instead of frame-aligned timestamps
+  - ASS styles (\pos, \move, \an) not being applied correctly due to single-frame rendering
+- **Fade effect transitions lost**: Removed `compute_render_pts()` which shifted render PTS past fade-in duration, causing fade animations to be completely lost. Frame-driven rendering now naturally captures fade alpha at each frame timestamp.
+- **write_bdn frame-driven output**: Fixed BDN XML writer to iterate over frames instead of events, using `q.pts_ms` and `q.duration_ms` for timecodes instead of event start/end times.
+- **Smart rendering optimization**: Frame-driven pipeline now re-renders only at change points (event start/end), reusing the previous frame for static periods. Reduces rendering from ~120K+ frames to ~7K-111K depending on event density.
+- **Per-frame duration calculation**: `duration_ms` now equals time to next frame timestamp instead of single `ms_per_frame`, ensuring proper display duration in SUP output.
+- **Font registry did not index full family names**: Fonts with multiple family names (e.g., "MiSans" + "MiSans Demibold") were only indexed under the primary name. ASS files referencing "MiSans Demibold" could not find the font. Fixed: `FontIndex::insert` now also indexes by full name (family + weight).
+
+### Changed
+- **Pipeline architecture**: `render_and_quantize()` now iterates over frame time points instead of iterating over events. Each frame renders all active events via `renderer.render_ass(doc, frame_pts)`.
+- **PTS assignment**: `q.pts_ms` now equals frame timestamp (frame boundary aligned) instead of `event.start_ms`. `q.duration_ms` now equals time to next frame instead of `event.end_ms - event.start_ms`.
+- **Parallel processing**: Removed `--parallel-frames` rayon path (incompatible with frame-driven sequential rendering). Flag is now deprecated with warning.
+- **Progress bar**: Shows frame count instead of event count.
+- **Font fallback chain**: `resolve_font_data()` and `resolve_glyph_font_data()` now consult the per-style `font_map` from `--font-map` CLI option when the primary font is not found. Fallback success emits a `WARN` message indicating which font fell back to which fallback.
+- **Font availability check**: `check_ass_fonts()` is now integrated into the conversion pipeline and runs before rendering. Missing fonts are reported with detailed error messages. Use `--no-check-fonts` to skip.
+- **Font index**: `FontIndex::insert` now also indexes fonts under their full name (family + weight) for ASS compatibility (e.g., "MiSans Demibold" as well as "MiSans").
+
+### Added
+- `ass2sup-cli/util.rs`: `generate_frame_timeline(events, fps) -> Vec<u64>` function computes all frame timestamps from earliest event start to latest event end, using float-based per-frame computation to avoid drift at non-integer fps (23.976, 29.97, etc.).
+- `subtitle-renderer/renderer/mod.rs`: `Renderer::font_available(family)` and `Renderer::set_font_map(font_map)` public methods for font availability checking and font map injection.
+- `subtitle-renderer/font/types.rs`: `FontWeight::as_str()` method returning the weight variant name (e.g., "Bold", "Semibold").
+- `ass2sup-cli/config/font.rs`: `check_ass_fonts_with_fn()` variant using a closure instead of direct registry reference, enabling font checks through the Renderer's internal registry.
+
+### Removed
+- `ass2sup-cli/util.rs`: `compute_render_pts()` function (obsoleted by frame-driven rendering).
+- `ass2sup-cli/pipeline/convert.rs`: Parallel render path using `rayon::par_iter`.
+
+---
+
 ## [2.7.3] - 2026-06-26
 
 ### Fixed

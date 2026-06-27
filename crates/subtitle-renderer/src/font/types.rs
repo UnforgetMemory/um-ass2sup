@@ -49,6 +49,21 @@ impl FontWeight {
     pub fn as_u16(self) -> u16 {
         self as u16
     }
+
+    /// Return the weight name as a string.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Thin => "Thin",
+            Self::ExtraLight => "ExtraLight",
+            Self::Light => "Light",
+            Self::Normal => "Normal",
+            Self::Medium => "Medium",
+            Self::Semibold => "Semibold",
+            Self::Bold => "Bold",
+            Self::ExtraBold => "ExtraBold",
+            Self::Black => "Black",
+        }
+    }
 }
 
 /// Font style (slant).

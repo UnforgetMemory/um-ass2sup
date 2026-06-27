@@ -1,65 +1,8 @@
 //! Utility functions shared across the conversion pipeline.
 
-use ass_core::{Event, OverrideTag};
+use std::collections::BTreeSet;
 
-/// Compute the optimal render timestamp for an event, adjusted for fade effects.
-///
-/// PGS subtitles are static — they cannot animate alpha.  For `\fad(in, out)`
-/// we shift the render point to `start + in` so the fade-in has completed.
-pub fn compute_render_pts(event: &Event) -> u64 {
-    const VISIBLE_ALPHA: u8 = 128;
-
-    let start_ms = event.start_ms;
-    let end_ms = event.end_ms;
-
-    let mut fade_render_pt: Option<u64> = None;
-
-    for to in &event.override_tags {
-        match &to.tag {
-            OverrideTag::Fade { duration_in, .. } => {
-                if *duration_in > 0 {
-                    fade_render_pt = Some(start_ms.saturating_add(*duration_in).min(end_ms));
-                }
-            }
-            OverrideTag::FadeComplex {
-                alpha_start,
-                alpha_mid,
-                alpha_end,
-                t1,
-                t2,
-                t3,
-                ..
-            } => {
-                let a1 = *alpha_start;
-                let a2 = *alpha_mid;
-                if a1 <= VISIBLE_ALPHA {
-                    fade_render_pt = Some(start_ms);
-                } else if *t1 > 0 && a2 <= VISIBLE_ALPHA {
-                    let t =
-                        ((VISIBLE_ALPHA as f32 - a1 as f32) / (a2 as f32 - a1 as f32)) * *t1 as f32;
-                    if t >= 0.0 {
-                        fade_render_pt = Some(start_ms.saturating_add(t as u64).min(end_ms));
-                    }
-                } else if a2 <= VISIBLE_ALPHA {
-                    fade_render_pt = Some(start_ms.saturating_add(*t1).min(end_ms));
-                } else if *t3 > 0 {
-                    let a3 = *alpha_end;
-                    if a3 < a2 {
-                        let t = ((VISIBLE_ALPHA as f32 - a2 as f32) / (a3 as f32 - a2 as f32))
-                            * *t3 as f32;
-                        if t >= 0.0 {
-                            fade_render_pt =
-                                Some(start_ms.saturating_add(*t1 + *t2 + t as u64).min(end_ms));
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fade_render_pt.unwrap_or(start_ms)
-}
+use ass_core::Event;
 
 /// Crop a rendered RGBA bitmap to the tight bounding box of non-transparent pixels.
 ///
@@ -114,4 +57,149 @@ pub fn crop_to_tight_bbox(
     }
 
     Some((out, min_x, min_y, w, h))
+}
+
+/// Generate frame timeline timestamps from events and fps.
+///
+/// Returns a sorted `Vec<u64>` of millisecond timestamps only for time ranges
+/// where at least one event is active. Skips gaps between events to avoid
+/// generating frames for empty periods.
+/// Uses float-based per-frame computation to avoid drift at non-integer fps.
+pub fn generate_frame_timeline(events: &[Event], fps: f64) -> Vec<u64> {
+    if events.is_empty() || fps <= 0.0 {
+        return Vec::new();
+    }
+
+    let ms_per_frame = 1000.0 / fps;
+
+    // Merge overlapping event time ranges
+    let mut ranges: Vec<(u64, u64)> = events.iter().map(|e| (e.start_ms, e.end_ms)).collect();
+    ranges.sort_by_key(|r| r.0);
+
+    let mut merged: Vec<(u64, u64)> = Vec::new();
+    for (start, end) in ranges {
+        if let Some(last) = merged.last_mut() {
+            if start <= last.1 {
+                last.1 = last.1.max(end);
+                continue;
+            }
+        }
+        merged.push((start, end));
+    }
+
+    // Generate frames only for merged ranges
+    let mut timestamps: BTreeSet<u64> = BTreeSet::new();
+    for (range_start, range_end) in merged {
+        let mut frame_index = 0u64;
+        loop {
+            let pts = range_start as f64 + frame_index as f64 * ms_per_frame;
+            if pts >= range_end as f64 {
+                break;
+            }
+            timestamps.insert(pts as u64);
+            frame_index += 1;
+        }
+    }
+
+    timestamps.into_iter().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ass_core::{Effect, Event, EventType, StyleRef};
+
+    fn make_event(start_ms: u64, end_ms: u64) -> Event {
+        Event {
+            source_line: 1,
+            event_type: EventType::Dialogue,
+            layer: 0,
+            start_ms,
+            end_ms,
+            style: StyleRef::new("Default"),
+            actor: String::new(),
+            margin_l: None,
+            margin_r: None,
+            margin_v: None,
+            effect: Effect::None,
+            text_raw: "Hello".into(),
+            override_tags: Vec::new(),
+            karaoke: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_empty_events() {
+        let result = generate_frame_timeline(&[], 23.976);
+        assert!(
+            result.is_empty(),
+            "empty events should produce empty timeline"
+        );
+    }
+
+    #[test]
+    fn test_single_event() {
+        let events = vec![make_event(0, 1000)];
+        let result = generate_frame_timeline(&events, 23.976);
+        assert!(!result.is_empty());
+        assert_eq!(result.len(), 24);
+        assert_eq!(result[0], 0);
+    }
+
+    #[test]
+    fn test_ntsc_frame_rate() {
+        let events = vec![make_event(0, 2002)];
+        let result = generate_frame_timeline(&events, 24000.0 / 1001.0);
+        // ~48 frames expected; float boundary may produce 48 or 49
+        assert!(!result.is_empty());
+        assert!(result.len() == 48 || result.len() == 49);
+        assert_eq!(result[0], 0);
+    }
+
+    #[test]
+    fn test_gap_between_events() {
+        let events = vec![make_event(0, 500), make_event(2000, 3000)];
+        let result = generate_frame_timeline(&events, 23.976);
+        assert!(!result.is_empty());
+        assert_eq!(result[0], 0);
+        assert!(*result.last().unwrap() < 3000);
+        assert!(result.len() > 24);
+    }
+
+    #[test]
+    fn test_sorted_and_unique() {
+        let events = vec![make_event(0, 5000)];
+        let result = generate_frame_timeline(&events, 23.976);
+        for w in result.windows(2) {
+            assert!(
+                w[0] < w[1],
+                "timestamps must be strictly increasing and unique"
+            );
+        }
+    }
+
+    #[test]
+    fn test_single_frame_duration() {
+        let events = vec![make_event(0, 1)];
+        let result = generate_frame_timeline(&events, 23.976);
+        assert!(!result.is_empty());
+        assert_eq!(result[0], 0);
+    }
+
+    #[test]
+    fn test_zero_fps() {
+        let events = vec![make_event(0, 1000)];
+        let result = generate_frame_timeline(&events, 0.0);
+        assert!(result.is_empty(), "zero fps should return empty timeline");
+    }
+
+    #[test]
+    fn test_negative_fps() {
+        let events = vec![make_event(0, 1000)];
+        let result = generate_frame_timeline(&events, -1.0);
+        assert!(
+            result.is_empty(),
+            "negative fps should return empty timeline"
+        );
+    }
 }
