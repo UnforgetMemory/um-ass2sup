@@ -37,22 +37,36 @@ pub(crate) fn shape_horizontal(
     let total_h = lines.len() as f32 * lh;
     let ar = ((ctx.alignment - 1) / 3) as usize;
     let yb = if ctx.has_pos {
+        // \pos(x,y): anchor the text block according to alignment.
+        // With line_y = yb + i*lh (lines go down):
+        //   top    → first line at anchor  → yb = ctx.y
+        //   center → block centre at anchor → yb = ctx.y - total_h/2 + lh/2
+        //   bottom → last  line at anchor  → yb = ctx.y - total_h + lh
         match ar {
-            0 => ctx.y,
-            1 => ctx.y - total_h / 2.0,
-            _ => ctx.y - total_h,
+            0 => ctx.y - total_h + lh,
+            1 => ctx.y - total_h / 2.0 + lh / 2.0,
+            _ => ctx.y,
         }
     } else {
+        // Compute y base from alignment and margins only.
+        // In !has_pos mode, ctx.y has already been set by build_context alignment; do NOT
+        // double-apply it.  Instead compute yb from scratch using the safe area.
+        let safe_top = ctx.margin_v;
+        let safe_h = config.height as f32 - ctx.margin_v * 2.0;
         match ar {
-            0 => ctx.y,
-            1 => ctx.y + (config.height as f32 - ctx.margin_v * 2.0 - total_h) / 2.0,
-            _ => ctx.y + config.height as f32 - ctx.margin_v * 2.0 - total_h,
+            // Bottom: last line's baseline at safe area bottom
+            0 => safe_top + safe_h - total_h + lh,
+            // Center: text block centre at safe area centre
+            1 => safe_top + (safe_h - total_h) / 2.0 + lh / 2.0,
+            // Top: first line's baseline just below safe area top
+            _ => safe_top + ctx.font_size,
         }
     };
     let mut r = Vec::with_capacity(lines.len());
     for (i, line) in lines.iter().enumerate() {
         let gs = SimpleShaper::shape(line, &font_data, ctx.font_size).unwrap_or_default();
-        let ta: f32 = gs.iter().map(|g| g.x_advance).sum();
+        let glyph_count = gs.len() as f32;
+        let ta: f32 = gs.iter().map(|g| g.x_advance).sum::<f32>() + glyph_count * ctx.spacing;
         let ac = (ctx.alignment - 1) % 3;
         let xs = if ctx.has_pos {
             match ac {
@@ -122,7 +136,7 @@ pub(crate) fn shape_vertical(
     r
 }
 
-fn wrap_text_lines_simple(text: &str, font_data: &[u8], fz: f32, _sp: f32, mw: f32) -> Vec<String> {
+fn wrap_text_lines_simple(text: &str, font_data: &[u8], fz: f32, sp: f32, mw: f32) -> Vec<String> {
     if text.is_empty() || mw <= 0.0 {
         return vec![text.to_string()];
     }
@@ -136,19 +150,15 @@ fn wrap_text_lines_simple(text: &str, font_data: &[u8], fz: f32, _sp: f32, mw: f
             } else {
                 format!(" {word}")
             };
-            let ww: f32 = SimpleShaper::shape(&wt, font_data, fz)
-                .unwrap_or_default()
-                .iter()
-                .map(|g| g.x_advance)
-                .sum();
+            let shaped = SimpleShaper::shape(&wt, font_data, fz).unwrap_or_default();
+            let glyph_count = shaped.len() as f32;
+            let ww: f32 = shaped.iter().map(|g| g.x_advance).sum::<f32>() + glyph_count * sp;
             if cw + ww > mw && !cl.is_empty() {
                 lines.push(cl);
                 cl = word.to_string();
-                cw = SimpleShaper::shape(&cl, font_data, fz)
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|g| g.x_advance)
-                    .sum();
+                let shaped_cl = SimpleShaper::shape(&cl, font_data, fz).unwrap_or_default();
+                let glyph_count_cl = shaped_cl.len() as f32;
+                cw = shaped_cl.iter().map(|g| g.x_advance).sum::<f32>() + glyph_count_cl * sp;
             } else {
                 cl = if cl.is_empty() {
                     word.to_string()
@@ -223,6 +233,28 @@ fn resolve_font_data(
             "parsed font query result"
         );
 
+        // When bold is requested AND parse_font_name found a weight lighter than Bold,
+        // also try the parsed family at Bold weight.  This matches libass behaviour:
+        // "MiSans Demibold" with bold=true should render at Bold(700), not Semibold(600).
+        if bold && parsed_weight < FontWeight::Bold {
+            let bq = FontQuery {
+                family: parsed_family.to_string(),
+                weight: FontWeight::Bold,
+                style: FontStyle::Normal,
+            };
+            let br = registry.query(&bq);
+            if let Some(id) = br.found {
+                if let Some(data) = registry.get_font_data(id) {
+                    tracing::debug!(
+                        original = %family,
+                        parsed_family = %parsed_family,
+                        "font fallback: using bold variant of parsed family"
+                    );
+                    return data.to_vec();
+                }
+            }
+        }
+
         if let Some(id) = pr.found {
             if let Some(data) = registry.get_font_data(id) {
                 return data.to_vec();
@@ -282,50 +314,6 @@ fn resolve_font_data(
     Vec::new()
 }
 
-/// Parse font family name to extract weight/style information.
-/// For example, "MiSans Demibold" -> ("MiSans", Demibold)
-fn parse_font_name(family: &str) -> Option<(String, crate::font::types::FontWeight)> {
-    use crate::font::types::FontWeight;
-    let parts: Vec<&str> = family.split_whitespace().collect();
-    if parts.len() < 2 {
-        return None;
-    }
-
-    // Try to find weight keyword in the last part(s)
-    let weight_keywords = [
-        ("Thin", FontWeight::Thin),
-        ("ExtraLight", FontWeight::ExtraLight),
-        ("Light", FontWeight::Light),
-        ("Regular", FontWeight::Normal),
-        ("Normal", FontWeight::Normal),
-        ("Medium", FontWeight::Medium),
-        ("Demibold", FontWeight::Semibold),
-        ("SemiBold", FontWeight::Semibold),
-        ("Bold", FontWeight::Bold),
-        ("ExtraBold", FontWeight::ExtraBold),
-        ("Black", FontWeight::Black),
-        ("Heavy", FontWeight::Black),
-    ];
-
-    // Check if last part is a weight keyword
-    let last = parts.last().unwrap();
-    for (keyword, weight) in &weight_keywords {
-        if last.eq_ignore_ascii_case(keyword) {
-            let family_part = parts[..parts.len() - 1].join(" ");
-            return Some((family_part, *weight));
-        }
-    }
-
-    // Check if last two parts form a weight keyword (e.g., "Extra Bold")
-    if parts.len() >= 3 {
-        let last_two = format!("{} {}", parts[parts.len() - 2], parts[parts.len() - 1]);
-        for (keyword, weight) in &weight_keywords {
-            if last_two.eq_ignore_ascii_case(keyword) {
-                let family_part = parts[..parts.len() - 2].join(" ");
-                return Some((family_part, *weight));
-            }
-        }
-    }
-
-    None
-}
+// parse_font_name lives in font_registry_renderer.rs, re-exported via
+// renderer/mod.rs as pub(crate) — use that instead of duplicating.
+use super::parse_font_name;

@@ -21,6 +21,7 @@ pub mod font_registry_karaoke;
 pub mod font_registry_renderer;
 pub mod layout_font_registry;
 pub mod text_layout;
+pub use font_registry_renderer::parse_font_name;
 pub use text_layout::{alignment_to_pos, strip_override_blocks};
 
 pub(crate) struct PixmapPool {
@@ -99,16 +100,57 @@ impl Renderer {
     }
 
     /// Check if a font family is available in the registry.
+    /// Uses the same resolution logic as `resolve_font_data`: exact match,
+    /// suggestion, then parsed family+weight decomposition.
     pub fn font_available(&self, family: &str) -> bool {
         use crate::font::types::{FontQuery, FontStyle, FontWeight};
         let guard = self.font_registry_render.lock();
         let registry = guard.registry.lock();
+
+        // Step 1: try Normal weight
         let q = FontQuery {
             family: family.to_string(),
             weight: FontWeight::Normal,
             style: FontStyle::Normal,
         };
-        registry.query(&q).found.is_some()
+        let result = registry.query(&q);
+        if result.found.is_some() {
+            return true;
+        }
+        if let Some(sug) = &result.suggestion {
+            if registry.get_font_data(sug.id).is_some() {
+                return true;
+            }
+        }
+
+        // Step 2: try parse_font_name decomposition (e.g., "MiSans Demibold"
+        // → family="MiSans", weight=Semibold) matching resolve_font_data.
+        let (parsed_family, parsed_weight) = match parse_font_name(family) {
+            Some(v) => v,
+            None => {
+                // Step 3: fallback: try alternative weights
+                return [FontWeight::Bold, FontWeight::Medium, FontWeight::Semibold]
+                    .iter()
+                    .any(|w| {
+                        let q = FontQuery {
+                            family: family.to_string(),
+                            weight: *w,
+                            style: FontStyle::Normal,
+                        };
+                        registry.query(&q).found.is_some()
+                    });
+            }
+        };
+        let pq = FontQuery {
+            family: parsed_family.to_string(),
+            weight: parsed_weight,
+            style: FontStyle::Normal,
+        };
+        let pr = registry.query(&pq);
+        pr.found.is_some()
+            || pr
+                .suggestion
+                .is_some_and(|s| registry.get_font_data(s.id).is_some())
     }
 
     /// Set the per-style font fallback map for font resolution.

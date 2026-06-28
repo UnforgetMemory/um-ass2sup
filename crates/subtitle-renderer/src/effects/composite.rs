@@ -64,6 +64,52 @@ pub fn apply_alpha_multiplier(data: &mut [u8], alpha: f32) {
         .for_each(|a| *a = (*a as f32 * factor) as u8);
 }
 
+/// Composite a sub-region source buffer into a larger destination buffer.
+#[allow(clippy::too_many_arguments)]
+pub fn composite_subregion(
+    dst: &mut [u8],
+    src: &[u8],
+    dw: u32,
+    dh: u32,
+    sx: i32,
+    sy: i32,
+    sw: u32,
+    sh: u32,
+) {
+    for dy in sy.max(0)..(sy + sh as i32).min(dh as i32) {
+        if dy < 0 {
+            continue;
+        }
+        let src_y = (dy - sy) as u32;
+        if src_y >= sh {
+            continue;
+        }
+        for dx in sx.max(0)..(sx + sw as i32).min(dw as i32) {
+            if dx < 0 {
+                continue;
+            }
+            let src_x = (dx - sx) as u32;
+            if src_x >= sw {
+                continue;
+            }
+            let di = (dy as u32 * dw + dx as u32) * 4;
+            let si = (src_y * sw + src_x) * 4;
+            let sa = src[si as usize + 3] as u32;
+            if sa == 0 {
+                continue;
+            }
+            let inv = 255 - sa;
+            let d = 255;
+            let di = di as usize;
+            let si = si as usize;
+            dst[di] = ((src[si] as u32 * sa + dst[di] as u32 * inv) / d) as u8;
+            dst[di + 1] = ((src[si + 1] as u32 * sa + dst[di + 1] as u32 * inv) / d) as u8;
+            dst[di + 2] = ((src[si + 2] as u32 * sa + dst[di + 2] as u32 * inv) / d) as u8;
+            dst[di + 3] = (sa + (dst[di + 3] as u32 * inv) / d) as u8;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,51 +189,5 @@ mod tests {
             dst_simd, dst_scalar,
             "SIMD and scalar paths should produce identical results"
         );
-    }
-}
-
-/// Composite a sub-region source buffer into a larger destination buffer.
-#[allow(clippy::too_many_arguments)]
-pub fn composite_subregion(
-    dst: &mut [u8],
-    src: &[u8],
-    dw: u32,
-    dh: u32,
-    sx: i32,
-    sy: i32,
-    sw: u32,
-    sh: u32,
-) {
-    for dy in sy.max(0)..(sy + sh as i32).min(dh as i32) {
-        if dy < 0 {
-            continue;
-        }
-        let src_y = (dy - sy) as u32;
-        if src_y >= sh {
-            continue;
-        }
-        for dx in sx.max(0)..(sx + sw as i32).min(dw as i32) {
-            if dx < 0 {
-                continue;
-            }
-            let src_x = (dx - sx) as u32;
-            if src_x >= sw {
-                continue;
-            }
-            let di = (dy as u32 * dw + dx as u32) * 4;
-            let si = (src_y * sw + src_x) * 4;
-            let sa = src[si as usize + 3] as u32;
-            if sa == 0 {
-                continue;
-            }
-            let inv = 255 - sa;
-            let d = 255;
-            let di = di as usize;
-            let si = si as usize;
-            dst[di] = ((src[si] as u32 * sa + dst[di] as u32 * inv) / d) as u8;
-            dst[di + 1] = ((src[si + 1] as u32 * sa + dst[di + 1] as u32 * inv) / d) as u8;
-            dst[di + 2] = ((src[si + 2] as u32 * sa + dst[di + 2] as u32 * inv) / d) as u8;
-            dst[di + 3] = (sa + (dst[di + 3] as u32 * inv) / d) as u8;
-        }
     }
 }

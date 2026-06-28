@@ -28,6 +28,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **NTSC ms→PTS drift**: `ms_to_90khz` accumulated ~0.7ms error per frame at 23.976 fps, causing subtitle timeline to drift forward by ~85s over a 90-minute movie. Fixed by rounding to the nearest video frame boundary before conversion.
 - **EpochContinue palette starvation**: EpochContinue PCS with `palette_update=false` caused PotPlayer to crash. Reverted to `palette_update=true` with full PDS.
 - **Frame-timestamp accumulation drift**: `ts += ms_per_frame as u64` truncated ~0.7ms per frame at non-integer frame rates. Changed to f64 accumulation with index-based rounding.
+- **Override tag rendering**: Fixed multiple ASS override tags not being applied in the FontRegistry-based renderer:
+  - `\fscx`/`\fscy` (ScaleX/ScaleY): `transform_layer` now builds a real affine transform from RenderContext values instead of calling with identity matrix.
+  - `\frz`/`\fr` (Angle/Rotation): Incorporated into the composite transform chain (scale → shear → rotate around layer centre).
+  - `\fax`/`\fay` (Shear): Now properly transformed via `AffineTransform::shear`.
+  - `\bord` (Outline): Added outline rendering pass — tints fill glyph mask with outline_color, applies gaussian blur for expansion, then composites fill over the blurred outline.
+  - `\fsp` (Spacing): Now accounted for in word-wrap width calculation (`wrap_text_lines_simple`), preventing premature line breaks when spacing > 0.
+- **Alignment anchoring for `\pos`/`\move`**: `has_pos` branch in `shape_horizontal` now correctly places bottom/centre/top-aligned text at the anchor point. Previously bottom-aligned multi-line text extended below `\pos` instead of above it.
+- **Alignment without explicit positioning**: `!has_pos` branch uses safe-area margins instead of double-applying `ctx.y` from `build_context`, fixing severe text drift at centre/top alignments.
+- **Font weight resolution**: When `bold=true` and `parse_font_name` yields a weight lighter than Bold, also queries the parsed family at Bold weight — matches libass behaviour for font names like "MiSans Demibold" with bold flag set.
+- **ASS text escapes**: `process_ass_text_escapes` now converts `\N`/`\n` to newlines, `\h` to non-breaking space, and `\\` to escaped backslash (previously all were passed through as literal text).
+- **Alignment with spacing**: `shape_horizontal` now includes `glyph_count * spacing` in per-line total advance (`ta`), preventing text misalignment when `\fsp>0`.
+- **`font_available` consistency**: Both `Renderer::font_available()` and the standalone `font.rs` version now use `parse_font_name` decomposition, matching `resolve_font_data` logic for compound font names like "MiSans Demibold".
+- **`--no-check-fonts` partial mode**: When `--no-check-fonts` is active, fonts with an explicit `--font-map` entry are skipped; fonts without any fallback are still checked and reported as missing, preventing silent 0-frame output.
+- **Font check disambiguation**: `check_ass_fonts_with_fn` no longer returns `Ok` unconditionally when `no_check=true`. Fonts without a `--font-fallback-map` entry are still validated.
+- **Cleanup**: Removed duplicate `parse_font_name` from `layout_font_registry.rs` — uses the re-exported version via `renderer/mod.rs` (DRY).
+
+### Security
+- **Security audit**: External review of 6 changed files found no CRITICAL/HIGH vulnerabilities. Identified 3 theoretical LOW-severity items (extreme coordinate f32→u32 cast, CPU DoS via unbounded blur/shadow radii, unbounded `apply_to_pixmap` allocation) — none actionable in current CLI usage context.
+
+### Tests
+- **ASS text escape coverage**: Added 7 unit tests for `process_ass_text_escapes` (`\N`, `\n`, `\h`, `\\`, mixed, empty, no-escape cases) and 4 tests for `strip_override_blocks`.
+- **Clippy fix**: Moved `composite_subregion` before `mod tests` in `composite.rs` to resolve `items_after_test_module`.
+- **Stale doctest fix**: Updated `karaoke.rs` doc example from `ass_parser` to `ass_core` (pre-existing reference to renamed crate).
 
 ## [2.7.4] - 2026-06-26
 

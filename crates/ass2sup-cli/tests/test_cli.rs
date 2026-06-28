@@ -148,6 +148,8 @@ fn test_cli_batch_mode() {
         .arg("-d")
         .arg(&out_dir)
         .arg("--no-check-fonts")
+        .arg("--font-map")
+        .arg("Default:DejaVu Sans")
         .arg("--quiet")
         .assert()
         .success();
@@ -178,6 +180,8 @@ fn test_cli_parallel_flag() {
         .arg("-d")
         .arg(&out_dir)
         .arg("--no-check-fonts")
+        .arg("--font-map")
+        .arg("Default:DejaVu Sans")
         .arg("--quiet")
         .assert()
         .success();

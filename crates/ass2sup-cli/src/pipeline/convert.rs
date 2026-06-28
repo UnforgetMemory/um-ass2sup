@@ -207,7 +207,7 @@ impl ConversionPipeline {
         Ok(renderer)
     }
 
-/// Smart render + quantise with frame classification.
+    /// Smart render + quantise with frame classification.
     ///
     /// Generates render timestamps only at event boundaries (start/end) and
     /// animation-keyed frame points. Each rendered frame is checked:
@@ -296,7 +296,10 @@ impl ConversionPipeline {
             render_count += 1;
             let frame = match renderer.render_ass(doc, ts) {
                 Some(f) => f,
-                None => { pb.inc(1); continue; }
+                None => {
+                    pb.inc(1);
+                    continue;
+                }
             };
 
             // ── Empty-frame detection ───────────────────────────────────

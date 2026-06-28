@@ -59,6 +59,40 @@ pub fn strip_override_blocks(text: &str) -> String {
     result
 }
 
+/// Process ASS text escape sequences after `strip_override_blocks`.
+///
+/// Converts:
+/// - `\N` → `\n` (forced newline)
+/// - `\n` → `\n` (soft newline)
+/// - `\\` → `\` (escaped backslash)
+/// - `\h` → non-breaking space (U+00A0)
+pub fn process_ass_text_escapes(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut it = text.chars().peekable();
+    while let Some(ch) = it.next() {
+        if ch == '\\' {
+            match it.peek().copied() {
+                Some('N') | Some('n') => {
+                    it.next();
+                    result.push('\n');
+                }
+                Some('\\') => {
+                    it.next();
+                    result.push('\\');
+                }
+                Some('h') => {
+                    it.next();
+                    result.push('\u{00a0}');
+                }
+                _ => result.push(ch),
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
 pub(super) fn wrap_text_vertical(
     text: &str,
     available_height: f32,
@@ -94,4 +128,72 @@ pub(super) fn wrap_text_vertical(
         columns.push(current_column);
     }
     columns
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_escape_hard_newline() {
+        assert_eq!(process_ass_text_escapes("line1\\Nline2"), "line1\nline2");
+    }
+
+    #[test]
+    fn process_escape_soft_newline() {
+        assert_eq!(process_ass_text_escapes("line1\\nline2"), "line1\nline2");
+    }
+
+    #[test]
+    fn process_escape_hard_space() {
+        assert_eq!(process_ass_text_escapes("a\\hb"), "a\u{00a0}b");
+    }
+
+    #[test]
+    fn process_escape_backslash_preserved() {
+        // \\ → single backslash, so the text "a\b" produces "a\b"
+        // In Rust source, "a\\\\b" = two backslashes, "a\\b" = one backslash
+        assert_eq!(process_ass_text_escapes("a\\\\b"), "a\\b");
+    }
+
+    #[test]
+    fn process_escape_no_escapes() {
+        assert_eq!(process_ass_text_escapes("hello world"), "hello world");
+    }
+
+    #[test]
+    fn process_escape_mixed() {
+        assert_eq!(
+            process_ass_text_escapes("line1\\Nline2\\hmore"),
+            "line1\nline2\u{00a0}more"
+        );
+    }
+
+    #[test]
+    fn process_escape_empty() {
+        assert_eq!(process_ass_text_escapes(""), "");
+    }
+
+    #[test]
+    fn strip_override_blocks_no_blocks() {
+        assert_eq!(strip_override_blocks("hello world"), "hello world");
+    }
+
+    #[test]
+    fn strip_override_blocks_simple() {
+        assert_eq!(strip_override_blocks("{\\b1}bold"), "bold");
+    }
+
+    #[test]
+    fn strip_override_blocks_nested() {
+        assert_eq!(strip_override_blocks("a{\\b1{\\i1}}b"), "ab");
+    }
+
+    #[test]
+    fn strip_override_blocks_escape_sequences_preserved() {
+        assert_eq!(
+            strip_override_blocks("{\\b1}line1\\Nline2"),
+            "line1\\Nline2"
+        );
+    }
 }

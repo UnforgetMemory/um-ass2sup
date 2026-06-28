@@ -46,8 +46,8 @@ impl PgsEncoder {
             display_height,
             fps,
             // frame_count is incremented TWICE per frame (epoch.update() + encode_frame),
-        // so effective max is max_frames/2 ≈ 30s with 60*fps.
-        epoch: EpochManager::new().with_max_frames((60.0 * fps) as u32),
+            // so effective max is max_frames/2 ≈ 30s with 60*fps.
+            epoch: EpochManager::new().with_max_frames((60.0 * fps) as u32),
             potplayer_compat: true,
         }
     }
@@ -570,7 +570,10 @@ mod tests {
             .unwrap();
         if let SegmentPayload::Pcs(ref p) = display_pcs.payload {
             // PotPlayer requires palette_update=true on all PCS.
-            assert!(p.palette_update, "EpochContinue must have palette_update=true for PotPlayer");
+            assert!(
+                p.palette_update,
+                "EpochContinue must have palette_update=true for PotPlayer"
+            );
         }
     }
 

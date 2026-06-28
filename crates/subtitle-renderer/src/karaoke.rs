@@ -70,8 +70,9 @@ impl KaraokeRenderer {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use ass_parser::karaoke::{KaraokeSegment, KaraokeStyle};
+    /// ```ignore
+    /// // Karaoke types live in ass_core crate
+    /// use ass_core::karaoke::{KaraokeSegment, KaraokeStyle};
     /// use subtitle_renderer::karaoke::{KaraokeRenderer, KaraokePhase};
     ///
     /// let segs = vec![KaraokeSegment::new(KaraokeStyle::Instant, 1000, "Hi".into(), 0)];

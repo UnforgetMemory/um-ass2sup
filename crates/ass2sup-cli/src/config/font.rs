@@ -143,6 +143,19 @@ fn font_available(registry: &FontRegistry, family: &str) -> bool {
         return true;
     }
 
+    // Try parse_font_name decomposition (e.g., "MiSans Demibold"
+    // → family="MiSans", weight=Semibold) matching resolve_font_data.
+    if let Some((parsed_family, parsed_weight)) = subtitle_renderer::parse_font_name(family) {
+        let pq = FontQuery {
+            family: parsed_family.to_string(),
+            weight: parsed_weight,
+            style: FontStyle::Normal,
+        };
+        if registry.query(&pq).found.is_some() {
+            return true;
+        }
+    }
+
     // Try with different weights
     for weight in [FontWeight::Bold, FontWeight::Medium, FontWeight::Semibold] {
         let q = FontQuery {
@@ -170,15 +183,12 @@ pub fn check_ass_fonts_with_fn(
     global_fallback: &str,
     no_check: bool,
 ) -> Result<(), String> {
-    if no_check {
-        trace!("check_ass_fonts skipped (--no-check-fonts)");
-        return Ok(());
-    }
-    debug!(
-        styles = doc.styles.len(),
-        global_fallback = %global_fallback,
-        "checking font availability for all ASS styles"
-    );
+    // When --no-check-fonts is set, only skip fonts that have a font_map
+    // fallback (the user has configured an explicit fallback chain).
+    // Fonts with NO font_map entry are still checked — if they're missing
+    // on the system, they WILL fail, forcing the user to either install
+    // the font or configure --font-fallback-map.
+    let full_check = !no_check;
 
     let mut missing: Vec<String> = Vec::new();
 
@@ -195,16 +205,28 @@ pub fn check_ass_fonts_with_fn(
         }
 
         let style_name = style.name.as_str();
-        if let Some(fallbacks) = font_map.get(style_name) {
-            let all_missing = fallbacks.iter().all(|fb| !is_available(fb));
-            if !all_missing {
-                trace!(
-                    style = ?style.name,
-                    fallbacks = ?fallbacks,
-                    "at least one --font-map entry is available"
-                );
-                continue;
-            }
+        let has_fallback = font_map.get(style_name);
+
+        // In partial-check mode (--no-check-fonts), skip fonts that have
+        // an explicit --font-fallback-map entry (trust the render-time fallback).
+        if !full_check && has_fallback.is_some() {
+            trace!(
+                style = ?style.name,
+                font = %primary,
+                "skipped (has --font-map fallback, --no-check-fonts)"
+            );
+            continue;
+        }
+
+        let all_missing =
+            has_fallback.is_none_or(|fallbacks| fallbacks.iter().all(|fb| !is_available(fb)));
+        if !all_missing {
+            trace!(
+                style = ?style.name,
+                fallbacks = ?has_fallback,
+                "at least one --font-map entry is available"
+            );
+            continue;
         }
 
         if global_fallback != primary

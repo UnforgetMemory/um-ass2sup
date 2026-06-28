@@ -10,13 +10,14 @@ use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform
 use crate::context::{RenderConfig, RenderContext};
 use crate::effects;
 use crate::effects::{
-    apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_subregion,
+    apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_over,
+    composite_subregion,
 };
 use crate::font::rasterizer::GlyphRasterizer;
 use crate::font::registry::FontRegistry;
 use crate::font::types::RasterizedGlyph;
 use crate::renderer::layout_font_registry::{shape_horizontal, shape_vertical};
-use crate::renderer::text_layout::strip_override_blocks;
+use crate::renderer::text_layout::{process_ass_text_escapes, strip_override_blocks};
 use crate::transform::AffineTransform;
 
 use crate::renderer::PixmapPool;
@@ -90,7 +91,7 @@ pub fn render_event_font_registry(
         _ => {}
     }
 
-    let plain_text = strip_override_blocks(&event.text_raw);
+    let plain_text = process_ass_text_escapes(&strip_override_blocks(&event.text_raw));
     if plain_text.is_empty() {
         return;
     }
@@ -302,11 +303,47 @@ pub fn render_event_font_registry(
     }
     drop(registry);
 
+    // Save pre-outline fill data for shadow creation (shadow must not include outline).
+    let fill_data = layer.data().to_vec();
+
+    // ── Outline / border pass ──
+    // Tint fill with outline_color, blur to expand, then place under fill.
+    // Only for border_style != 3 (OpaqueBox) and outline_width > 0.
+    let has_outline = ctx.border_style != 3 && ctx.outline_width > 0.1;
+    if has_outline {
+        let mut o_px = match resources.pool_get(lw, lh) {
+            Some(p) => p,
+            None => return,
+        };
+        o_px.data_mut().copy_from_slice(&fill_data);
+        // Tint any visible pixel with outline_color, preserving alpha coverage
+        for px in o_px.data_mut().chunks_exact_mut(4) {
+            if px[3] > 0 {
+                px[0] = ctx.outline_color[0];
+                px[1] = ctx.outline_color[1];
+                px[2] = ctx.outline_color[2];
+            }
+        }
+        // Blur expands the tinted mask, creating the border thickness
+        if ctx.outline_width > 0.5 {
+            effects::apply_gaussian_blur(&mut o_px, ctx.outline_width);
+        }
+        // Place fill over outline: outline below, fill above
+        composite_over(o_px.data_mut(), layer.data(), lw, lh);
+        layer.data_mut().copy_from_slice(o_px.data());
+        resources.pool_put(o_px);
+    }
+
     if ctx.border_style != 3 && ctx.blur > 0.0 {
         effects::apply_gaussian_blur(&mut layer, ctx.blur);
     }
     if ctx.border_style != 3 && ctx.shadow_depth > 0.0 {
-        let ld = layer.data().to_vec();
+        // Use pre-outline fill data for shadow, so outline isn't shadowed twice
+        let shadow_src: &[u8] = if has_outline {
+            &fill_data
+        } else {
+            layer.data()
+        };
         let sdx = if ctx.shadow_x != 0.0 {
             ctx.shadow_x
         } else {
@@ -317,13 +354,14 @@ pub fn render_event_font_registry(
         } else {
             ctx.shadow_depth
         };
-        let sl = effects::apply_shadow(&ld, lw, lh, sdx, sdy, ctx.blur, ctx.shadow_color);
+        let sl = effects::apply_shadow(shadow_src, lw, lh, sdx, sdy, ctx.blur, ctx.shadow_color);
         let mut sp = match resources.pool_get(lw, lh) {
             Some(p) => p,
             None => return,
         };
         sp.data_mut().copy_from_slice(&sl);
-        effects::composite_over(sp.data_mut(), layer.data(), lw, lh);
+        // Place shadow under the full layer (outline+fill or fill-only)
+        composite_over(sp.data_mut(), layer.data(), lw, lh);
         layer.data_mut().copy_from_slice(sp.data());
         resources.pool_put(sp);
     }
@@ -331,6 +369,8 @@ pub fn render_event_font_registry(
     let simple = ctx.rotation == 0.0
         && ctx.shear_x == 0.0
         && ctx.shear_y == 0.0
+        && (ctx.scale_x - 100.0).abs() < 0.01
+        && (ctx.scale_y - 100.0).abs() < 0.01
         && ctx.perspective_x == 0.0
         && ctx.perspective_y == 0.0
         && !ctx.clip_enabled
@@ -536,9 +576,38 @@ fn draw_decoration(
     }
 }
 
+/// Build a 2D affine transform from RenderContext values (scale, shear, rotation)
+/// for transforming a pixmap around its centre.
+fn build_layer_transform(lw: u32, lh: u32, ctx: &RenderContext) -> AffineTransform {
+    let cx = lw as f32 / 2.0;
+    let cy = lh as f32 / 2.0;
+    let sx = ctx.scale_x / 100.0;
+    let sy = ctx.scale_y / 100.0;
+
+    // Order: translate to origin → scale → shear → rotate → translate back
+    // This matches ASS convention where \fscx/\fscy scale the rendered bitmap,
+    // \fax/\fay shear it, and \frz/\fr rotates it, all around the bitmap centre.
+    AffineTransform::translate(cx, cy)
+        .then(&AffineTransform::scale(sx, sy))
+        .then(&AffineTransform::shear(ctx.shear_x, ctx.shear_y))
+        .then(&AffineTransform::rotate(ctx.rotation))
+        .then(&AffineTransform::translate(-cx, -cy))
+}
+
 fn transform_layer(data: &[u8], lw: u32, lh: u32, w: u32, h: u32, ctx: &RenderContext) -> Vec<u8> {
+    let needs_transform = ctx.rotation != 0.0
+        || ctx.shear_x != 0.0
+        || ctx.shear_y != 0.0
+        || (ctx.scale_x - 100.0).abs() > 0.01
+        || (ctx.scale_y - 100.0).abs() > 0.01;
+
     if ctx.perspective_x != 0.0 || ctx.perspective_y != 0.0 {
-        AffineTransform::identity().apply_with_perspective(
+        let t = if needs_transform {
+            build_layer_transform(lw, lh, ctx)
+        } else {
+            AffineTransform::identity()
+        };
+        t.apply_with_perspective(
             data,
             lw,
             lh,
@@ -549,8 +618,9 @@ fn transform_layer(data: &[u8], lw: u32, lh: u32, w: u32, h: u32, ctx: &RenderCo
             ctx.origin_x,
             ctx.origin_y,
         )
-    } else if ctx.rotation != 0.0 || ctx.shear_x != 0.0 || ctx.shear_y != 0.0 {
-        AffineTransform::identity().apply_to_pixmap(data, lw, lh, w, h)
+    } else if needs_transform {
+        let t = build_layer_transform(lw, lh, ctx);
+        t.apply_to_pixmap(data, lw, lh, w, h)
     } else {
         data.to_vec()
     }
@@ -610,7 +680,7 @@ fn render_drawing(pixmap: &mut Pixmap, text: &str, ctx: &RenderContext) {
 
 /// Parse font family name to extract weight/style information.
 /// For example, "MiSans Demibold" -> ("MiSans", Demibold)
-fn parse_font_name(family: &str) -> Option<(String, crate::font::types::FontWeight)> {
+pub fn parse_font_name(family: &str) -> Option<(String, crate::font::types::FontWeight)> {
     use crate::font::types::FontWeight;
 
     let parts: Vec<&str> = family.split_whitespace().collect();
