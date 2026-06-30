@@ -97,6 +97,16 @@ Options:
       --tonemap <TONEMAP>
           HDR-to-SDR tone mapping operator (hable/reinhard/aces)
 
+      --compat-vsfilter
+          Enable VSFilter compatibility mode (experimental).
+          
+          Compensates for font advance-width differences between swash and GDI/VSFilter by scaling font_size by ~0.764×, matching easyavs2bdnxml output dimensions more closely. This is an approximation — exact results depend on the specific font.
+
+      --backend <BACKEND>
+          Render backend to use (native, libass).  Only available when both backends are compiled in (--features native-backend,libass-backend)
+          
+          [default: native]
+
       --to-srt
           Convert to SRT format instead of SUP/PGS
 

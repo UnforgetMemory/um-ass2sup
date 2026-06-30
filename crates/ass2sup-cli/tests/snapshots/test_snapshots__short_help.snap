@@ -32,6 +32,8 @@ Options:
       --parallel-frames              Render frames in parallel using rayon (single-file mode)
       --color-space <COLOR_SPACE>    Output colour space (srgb/bt709/bt2020) [default: srgb]
       --tonemap <TONEMAP>            HDR-to-SDR tone mapping operator (hable/reinhard/aces)
+      --compat-vsfilter              Enable VSFilter compatibility mode (experimental)
+      --backend <BACKEND>            Render backend to use (native, libass).  Only available when both backends are compiled in (--features native-backend,libass-backend) [default: native]
       --to-srt                       Convert to SRT format instead of SUP/PGS
       --to-bdn                       Convert to BDN XML + PNG format (Blu-ray authoring)
       --check                        Parse and validate only, don't convert (exit 0 if OK, 1 if errors)

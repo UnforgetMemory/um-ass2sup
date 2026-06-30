@@ -49,6 +49,8 @@ pub struct FontConfig {
     pub font_dirs: Vec<std::path::PathBuf>,
     /// Skip the font availability check.
     pub no_check: bool,
+    /// VSFilter compatibility mode (experimental).
+    pub vsfilter_compat: bool,
 }
 
 /// Output path / format configuration.
@@ -107,6 +109,7 @@ impl Config {
                 font_map: parse_font_map(&args.font_map).unwrap_or_default(),
                 font_dirs: args.font_dir.clone(),
                 no_check: args.no_check_fonts,
+                vsfilter_compat: args.compat_vsfilter,
             },
             output: OutputConfig {
                 output: args.output.clone(),

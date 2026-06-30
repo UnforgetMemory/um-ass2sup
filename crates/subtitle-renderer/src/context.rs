@@ -30,6 +30,10 @@ pub struct RenderConfig {
     pub default_font: String,
     /// Font size in points used when the ASS style does not specify one.
     pub default_font_size: f32,
+    /// VSFilter compatibility mode (experimental).
+    /// When enabled, font_size is scaled by ~0.764× to match GDI/VSFilter
+    /// advance widths, producing text dimensions similar to easyavs2bdnxml.
+    pub vsfilter_compat: bool,
 }
 
 impl Default for RenderConfig {
@@ -41,6 +45,7 @@ impl Default for RenderConfig {
             script_height: 1080,
             default_font: "Arial".into(),
             default_font_size: 48.0,
+            vsfilter_compat: false,
         }
     }
 }

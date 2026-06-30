@@ -4,6 +4,7 @@
 //! rendering, quantisation, and PGS / BDN / SRT encoding into a single
 //! callable unit.
 
+pub mod backend;
 pub mod batch;
 pub mod check;
 pub mod convert;

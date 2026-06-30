@@ -119,6 +119,21 @@ pub struct Args {
     #[arg(long)]
     pub tonemap: Option<String>,
 
+    /// Enable VSFilter compatibility mode (experimental).
+    ///
+    /// Compensates for font advance-width differences between swash and
+    /// GDI/VSFilter by scaling font_size by ~0.764×, matching easyavs2bdnxml
+    /// output dimensions more closely. This is an approximation — exact
+    /// results depend on the specific font.
+    #[arg(long)]
+    pub compat_vsfilter: bool,
+
+    // -- BACKEND SELECTION --
+    /// Render backend to use (native, libass).  Only available when both
+    /// backends are compiled in (--features native-backend,libass-backend).
+    #[arg(long, default_value = "native")]
+    pub backend: Option<String>,
+
     // ── FORMAT SELECTION ──
     /// Convert to SRT format instead of SUP/PGS.
     #[arg(long)]

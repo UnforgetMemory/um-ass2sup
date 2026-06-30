@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use ass_core::SubtitleDocument;
+#[cfg(feature = "native-backend")]
 use subtitle_renderer::font::registry::FontRegistry;
+#[cfg(feature = "native-backend")]
 use subtitle_renderer::font::types::{FontQuery, FontStyle, FontWeight};
 use tracing::{debug, trace, warn};
 
@@ -34,6 +36,7 @@ pub fn parse_font_map(entries: &[String]) -> Result<FontMap, String> {
 /// Check that every font family used in the ASS document is available.
 ///
 /// Returns an `Err` listing all missing fonts when `no_check` is `false`.
+#[cfg(feature = "native-backend")]
 pub fn check_ass_fonts(
     doc: &SubtitleDocument,
     registry: &FontRegistry,
@@ -124,6 +127,7 @@ pub fn check_ass_fonts(
     }
 }
 
+#[cfg(feature = "native-backend")]
 fn font_available(registry: &FontRegistry, family: &str) -> bool {
     // Try exact match first
     let q = FontQuery {

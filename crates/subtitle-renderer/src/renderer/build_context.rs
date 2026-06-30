@@ -62,6 +62,13 @@ pub fn build_context(
     ctx.margin_r *= scale_x;
     ctx.margin_v *= scale_y;
     ctx.font_size = ctx.font_size * config.height as f32 / config.script_height as f32;
+    if config.vsfilter_compat {
+        // Experimental: scale font_size by ~0.764× to match GDI/VSFilter
+        // advance widths (GetTextExtentPoint32W). Derived from comparing
+        // swash vs easyavs2bdnxml output for MiSans/Microsoft YaHei at 1080p.
+        // Exact factor depends on font; 0.764 is a per-CJK-font average.
+        ctx.font_size *= 0.764;
+    }
 
     let mut has_pos = false;
     let mut has_move = false;

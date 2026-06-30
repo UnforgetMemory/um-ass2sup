@@ -5,18 +5,28 @@
 
 use std::path::Path;
 
-use ass_core::{Effect, Event, OverrideTag, SubtitleDocument, SubtitleFormat};
-use color_quantizer::pipeline::ColorPipeline;
+#[cfg(feature = "native-backend")]
+use ass_core::{Effect, Event, OverrideTag};
+use ass_core::{SubtitleDocument, SubtitleFormat};
 use color_quantizer::QuantizedFrame;
 use pgs_encoder::PgsEncoder;
-use subtitle_renderer::{RenderConfig, Renderer};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 
 use crate::cli::args::Args;
-use crate::cli::progress;
 use crate::config::Config;
 use crate::error::CliError;
+use crate::pipeline::backend;
+
+#[cfg(feature = "native-backend")]
+use crate::cli::progress;
+#[cfg(feature = "native-backend")]
 use crate::util;
+#[cfg(feature = "native-backend")]
+use color_quantizer::pipeline::ColorPipeline;
+#[cfg(feature = "native-backend")]
+use subtitle_renderer::{RenderConfig, Renderer};
+#[cfg(feature = "native-backend")]
+use tracing::debug;
 
 /// Per-file conversion statistics.
 #[derive(Debug, Clone, Default)]
@@ -31,6 +41,7 @@ pub struct ConversionStats {
 
 /// Check if an event has frame-level visual effects (Banner, ScrollUp, ScrollDown)
 /// that change position every frame, requiring per-frame rendering.
+#[cfg(feature = "native-backend")]
 fn has_animation_effect(event: &Event) -> bool {
     matches!(
         event.effect,
@@ -40,6 +51,7 @@ fn has_animation_effect(event: &Event) -> bool {
 
 /// Check if an event has override tags that produce different visual output
 /// at every frame within their active range (position moves, alpha fades, transforms).
+#[cfg(feature = "native-backend")]
 fn has_animation_override_tag(event: &Event) -> bool {
     event.override_tags.iter().any(|t| {
         matches!(
@@ -138,6 +150,7 @@ impl ConversionPipeline {
     }
 
     /// Build a [`Renderer`] and load fonts for the given document and config.
+    #[cfg(feature = "native-backend")]
     pub fn create_renderer(
         doc: &SubtitleDocument,
         config: &Config,
@@ -157,6 +170,7 @@ impl ConversionPipeline {
             script_height: doc.metadata.play_res_y,
             default_font: config.font.default_font.clone(),
             default_font_size: config.font.default_font_size,
+            vsfilter_compat: config.font.vsfilter_compat,
         };
 
         let renderer = Renderer::new(render_cfg);
@@ -218,6 +232,7 @@ impl ConversionPipeline {
     ///
     /// This eliminates the old "pre-generate all 41ms slots then clone" approach,
     /// producing only visually distinct non-empty frames with correct durations.
+    #[cfg(feature = "native-backend")]
     pub fn render_and_quantize(
         doc: &SubtitleDocument,
         renderer: &mut Renderer,
@@ -522,37 +537,20 @@ pub fn convert_file(
     info!("Processing: {}", input.display());
     trace!(input = %input.display(), "convert_file entry");
 
+    let content = std::fs::read_to_string(input)
+        .map_err(|e| CliError::ReadError(input.display().to_string(), e.to_string()))?;
     let doc = ConversionPipeline::parse_input(input)?;
     ConversionPipeline::validate(&doc, args)?;
 
     if config.output.dry_run {
-        info!("Dry run complete — skipping render/encode");
+        info!("Dry run complete -- skipping render/encode");
         return Ok(ConversionStats {
             events_processed: doc.events.len() as u64,
             ..Default::default()
         });
     }
 
-    let mut renderer = ConversionPipeline::create_renderer(&doc, config, input, args)?;
-
-    renderer.set_font_map(config.font.font_map.clone());
-
-    let font_check_result = crate::config::font::check_ass_fonts_with_fn(
-        &doc,
-        |family| renderer.font_available(family),
-        &config.font.font_map,
-        &config.font.default_font,
-        config.font.no_check,
-    );
-    if let Err(e) = font_check_result {
-        if args.force {
-            warn!("{e}");
-        } else {
-            return Err(CliError::Conversion(e));
-        }
-    }
-
-    let frames = ConversionPipeline::render_and_quantize(&doc, &mut renderer, config, args);
+    let frames = backend::render_and_quantize(&content, &doc, config, args)?;
     let segments = ConversionPipeline::encode_sup(&frames, config);
     let output_size = ConversionPipeline::write_sup(segments, output)?;
 
@@ -579,27 +577,11 @@ pub fn convert_to_bdn(
 ) -> Result<ConversionStats, CliError> {
     info!("Processing for BDN: {}", input.display());
 
+    let content = std::fs::read_to_string(input)
+        .map_err(|e| CliError::ReadError(input.display().to_string(), e.to_string()))?;
     let doc = ConversionPipeline::parse_input(input)?;
-    let mut renderer = ConversionPipeline::create_renderer(&doc, config, input, args)?;
 
-    renderer.set_font_map(config.font.font_map.clone());
-
-    let font_check_result = crate::config::font::check_ass_fonts_with_fn(
-        &doc,
-        |family| renderer.font_available(family),
-        &config.font.font_map,
-        &config.font.default_font,
-        config.font.no_check,
-    );
-    if let Err(e) = font_check_result {
-        if args.force {
-            warn!("{e}");
-        } else {
-            return Err(CliError::Conversion(e));
-        }
-    }
-
-    let frames = ConversionPipeline::render_and_quantize(&doc, &mut renderer, config, args);
+    let frames = backend::render_and_quantize(&content, &doc, config, args)?;
     let stats = ConversionPipeline::write_bdn(&frames, &doc, config, input, output_dir)?;
 
     info!(

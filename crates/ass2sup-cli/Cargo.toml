@@ -10,10 +10,17 @@ description = "CLI tool for converting ASS/SRT subtitles to SUP/PGS format"
 name = "ass2sup"
 path = "src/main.rs"
 
+[features]
+default = ["native-backend"]
+native-backend = ["dep:subtitle-renderer"]
+libass-backend = ["dep:subtitle-renderer-libass", "dep:libass-sys"]
+
 [dependencies]
 ass-core.workspace = true
 subtitle-validator.workspace = true
-subtitle-renderer.workspace = true
+subtitle-renderer = { workspace = true, optional = true }
+subtitle-renderer-libass = { workspace = true, optional = true }
+libass-sys = { workspace = true, optional = true }
 color-quantizer.workspace = true
 bdn-xml.workspace = true
 pgs-encoder.workspace = true
@@ -28,9 +35,6 @@ walkdir.workspace = true
 serde.workspace = true
 strsim.workspace = true
 serde_json.workspace = true
-
-
-
 
 [dev-dependencies]
 assert_cmd.workspace = true
