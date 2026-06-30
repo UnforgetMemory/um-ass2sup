@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.7.5] - 2026-06-27
+## [2.7.6] - 2026-06-30
+
+### Added
+- **Dual rendering backend architecture**: Workspace expanded with feature-gated crate structure supporting two rendering backends:
+  - `native-backend` (default) — Rust-native swash + tiny-skia pipeline
+  - `libass-backend` — libass C library rendering via FFI
+  - Both can be combined at build time for runtime `--backend native|libass` selection
+- **`crates/subtitle-renderer-libass/`**: New crate (migrated from `ass2sup-libass/ass2sup-core`) wrapping libass rendering pipeline
+- **`crates/libass-sys/`**: Manual FFI bindings for libass v0.17 (migrated from `ass2sup-libass/`)
+- **Unified CLI dispatch**: `ass2sup-cli` now routes rendering through `pipeline/backend/` modules based on feature flags
+
+### Changed
+- **AGENTS.md**: Updated workspace structure (7→9 crates), new build modes documented
+- **Integration test gating**: OCR E2E tests conditionally compiled under `native-backend` feature
+
+### Build
+```bash
+# Default (native only)
+cargo build --release
+
+# libass only
+cargo build --release --no-default-features -F libass-backend
+
+# Both backends
+cargo build --release --no-default-features -F native-backend,libass-backend
+```
 
 ### Added
 - **Smart frame classification**: Rewrote `render_and_quantize` to generate render timestamps only at event boundaries and animation-keyed frame points, eliminating ~120k intermediate frame clones. Rendered frames are classified as:

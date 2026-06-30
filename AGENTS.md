@@ -2,23 +2,40 @@
 
 ## Project
 
-ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter. Rust workspace, 7 crates.
-**Zero external font/shaper dependencies** — self-built `FontRegistry` + `SimpleShaper` + `GlyphRasterizer` on swash.
+ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter. Rust workspace, 9+ crates.
+**Two rendering backends**, selectable at build time via Cargo features:
+
+- **`native-backend`** (default): self-built `FontRegistry` + `SimpleShaper` + `GlyphRasterizer` on swash — zero external font/shaper deps
+- **`libass-backend`**: libass C library via FFI — delegates shaping/rasterization to libass
+
+Build modes:
+```bash
+# Default (native only)
+cargo build --release
+
+# libass only
+cargo build --release --no-default-features -F libass-backend
+
+# Both (runtime --backend flag)
+cargo build --release --no-default-features -F native-backend,libass-backend
+```
 
 ## Workspace layout
 
 ```
 crates/
-  ass-core/            # ASS/SSA/SRT parser → strong AST (hand-written, 0 external deps)
-  subtitle-validator/  # Syntax/overlap checks (depends on ass-core)
-  subtitle-renderer/   # RGBA bitmap rendering — FontRegistry + swash + tiny-skia
-  color-quantizer/     # RGBA → indexed color (k-d tree accelerated, Floyd-Steinberg dither)
-  pgs-encoder/         # Indexed frames → PGS/SUP binary segments
-  bdn-xml/             # Blu-ray mastering XML + PNG output
-  ass2sup-cli/         # CLI binary (clap), wires everything together
+  ass-core/                       # ASS/SSA/SRT parser → strong AST (hand-written, 0 external deps)
+  subtitle-validator/             # Syntax/overlap checks (depends on ass-core)
+  subtitle-renderer/              # [feature=native-backend] RGBA bitmap rendering — FontRegistry + swash + tiny-skia
+  libass-sys/                     # [feature=libass-backend] Manual FFI bindings for libass v0.17
+  subtitle-renderer-libass/       # [feature=libass-backend] libass-based rendering pipeline
+  color-quantizer/                # RGBA → indexed color (k-d tree accelerated, Floyd-Steinberg dither)
+  pgs-encoder/                    # Indexed frames → PGS/SUP binary segments
+  bdn-xml/                        # Blu-ray mastering XML + PNG output
+  ass2sup-cli/                    # CLI binary (clap), feature-gated backend dispatch
 ```
 
-## Rendering stack (NO fontdb / NO cosmic-text / NO rustybuzz)
+## Rendering stack (native-backend — NO fontdb / NO cosmic-text / NO rustybuzz)
 
 ```
 Trace: ass-core parse → RenderContext (build_context) → shape_horizontal/vertical (SimpleShaper/swash)
@@ -28,13 +45,22 @@ Trace: ass-core parse → RenderContext (build_context) → shape_horizontal/ver
 
 ## System dependency
 
-Linux requires `libfontconfig1-dev` and `fonts-dejavu-core` for tests:
+Linux requires `libfontconfig1-dev` and `fonts-dejavu-core` for native-backend tests:
 
 ```bash
 sudo apt-get install -y libfontconfig1-dev fonts-dejavu-core
 ```
 
-macOS/Windows: no extra setup needed.
+libass-backend additionally requires `libass.so` at link time (v0.17+). The
+`links/` directory at the repo root contains a pre-built copy for CI; for
+production use, install via system package manager:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install libass9
+# macOS
+brew install libass
+```
 
 ## Build & verify commands
 
