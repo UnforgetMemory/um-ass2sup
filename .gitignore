@@ -94,5 +94,8 @@ __pycache__/
 .xwin-cache/
 output/
 
+# ── ass2sup-libass local build files ──────────────────────────────
+ass2sup-libass/links/
+
 # Performance test artifacts
 .perf_test/

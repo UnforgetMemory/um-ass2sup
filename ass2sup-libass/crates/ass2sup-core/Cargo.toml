@@ -1,0 +1,14 @@
+[package]
+name = "ass2sup-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Domain core for libass-based ASS to SUP conversion"
+
+[dependencies]
+libass-sys = { path = "../libass-sys" }
+color-quantizer = { path = "../../../crates/color-quantizer" }
+pgs-encoder = { path = "../../../crates/pgs-encoder" }
+bdn-xml = { path = "../../../crates/bdn-xml" }
+thiserror = "2"
+tracing = "0.1"

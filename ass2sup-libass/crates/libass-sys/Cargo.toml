@@ -1,0 +1,9 @@
+[package]
+name = "libass-sys"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Manual FFI bindings for libass (v0.17)"
+
+[lib]
+doctest = false

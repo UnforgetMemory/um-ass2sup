@@ -1,0 +1,17 @@
+[package]
+name = "ass2sup-cli"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "CLI for libass-based ASS to SUP conversion"
+
+[[bin]]
+name = "ass2sup"
+path = "src/main.rs"
+
+[dependencies]
+ass2sup-core = { path = "../ass2sup-core" }
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
