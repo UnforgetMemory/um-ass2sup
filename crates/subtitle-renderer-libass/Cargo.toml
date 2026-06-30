@@ -1,0 +1,15 @@
+[package]
+name = "subtitle-renderer-libass"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "libass-based subtitle rendering backend for ASS to SUP/PGS conversion"
+
+[dependencies]
+libass-sys = { path = "../libass-sys" }
+color-quantizer.workspace = true
+pgs-encoder.workspace = true
+bdn-xml.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

@@ -1,0 +1,10 @@
+[package]
+name = "libass-sys"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Manual FFI bindings for libass (v0.17)"
+
+[lib]
+doctest = false
