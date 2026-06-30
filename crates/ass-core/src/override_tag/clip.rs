@@ -2,6 +2,7 @@
 use super::util::{nums_f64, paren_body};
 use crate::OverrideTag;
 
+/// Parse \clip tag with vector or rectangle coordinates.
 pub fn parse(s: &str) -> Option<OverrideTag> {
     if s.starts_with("clip(") {
         let inner = paren_body(s, "clip(");
@@ -26,10 +27,7 @@ pub fn parse(s: &str) -> Option<OverrideTag> {
             }
         }
     }
-    None
-}
 
-pub fn parse_inverse(s: &str) -> Option<OverrideTag> {
     if s.starts_with("iclip(") {
         let inner = paren_body(s, "iclip(");
         if inner.trim() == "@" {

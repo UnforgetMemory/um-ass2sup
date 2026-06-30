@@ -17,6 +17,7 @@ pub enum Effect {
     Karaoke,
 }
 
+/// Parse an ASS effect string (e.g. "fade(255,0,0,255,255,255)") into an Effect enum.
 pub fn parse_effect(s: &str) -> Effect {
     let s = s.trim();
     if s.is_empty() {

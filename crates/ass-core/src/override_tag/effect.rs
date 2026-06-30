@@ -2,6 +2,7 @@
 use super::util::{nums_u64, paren_body, split_args};
 use crate::OverrideTag;
 
+/// Parse \fad (fade in/out) or \fade (fade in/out with alpha) tag.
 pub fn parse(s: &str) -> Option<OverrideTag> {
     // Fade
     if s.starts_with("fad(") || s.starts_with("fade(") {

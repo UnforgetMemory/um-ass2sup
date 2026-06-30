@@ -41,9 +41,6 @@ pub fn parse_one_tag(s: &str) -> Option<OverrideTag> {
     if let Some(tag) = clip::parse(s) {
         return Some(tag);
     }
-    if let Some(tag) = clip::parse_inverse(s) {
-        return Some(tag);
-    }
     if let Some(tag) = effect::parse(s) {
         return Some(tag);
     }

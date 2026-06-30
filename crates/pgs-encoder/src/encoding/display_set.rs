@@ -7,6 +7,7 @@ use crate::domain::segment::{
 
 const MAX_ODS_CHUNK: usize = 0xFFE0;
 
+/// Configuration for building a single PGS display set (PCS/WDS/PDS/ODS).
 pub struct DisplaySetConfig {
     pub display_width: u16,
     pub display_height: u16,
@@ -19,11 +20,13 @@ pub struct DisplaySetConfig {
 }
 
 impl DisplaySetConfig {
+    /// Number of objects to reference in a palette_clear display set.
     pub fn palette_clear_num_objects(&self) -> u8 {
         1
     }
 }
 
+/// Prepare RLE data and compute its hash for ODS encoding.
 pub fn prepare_rle_and_hash(
     palette_entries: &mut [PaletteEntry],
     indices: &[u8],
@@ -52,6 +55,7 @@ pub fn prepare_rle_and_hash(
     }
 }
 
+/// Build a palette-only clear display set (removes all objects from composition).
 pub fn build_palette_clear_display_set(
     config: &DisplaySetConfig,
     pts: u64,
@@ -111,6 +115,7 @@ pub fn build_palette_clear_display_set(
     ]
 }
 
+/// Build an EpochContinue display set when palette is unchanged.
 pub fn build_continue_display_set(
     config: &DisplaySetConfig,
     frame: &color_quantizer::QuantizedFrame,
@@ -162,6 +167,7 @@ pub fn build_continue_display_set(
     ]
 }
 
+/// Build a palette-only display set for fade animation (no ODS).
 pub fn build_palette_only_display_set(
     config: &DisplaySetConfig,
     frame: &color_quantizer::QuantizedFrame,
@@ -213,6 +219,7 @@ pub fn build_palette_only_display_set(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Build an EpochStart display set with one window containing one or two objects.
 pub fn build_single_window_display_set(
     config: &DisplaySetConfig,
     frame: &color_quantizer::QuantizedFrame,
@@ -313,6 +320,7 @@ pub fn build_single_window_display_set(
     segments
 }
 
+/// Find the optimal transparent row to split the frame for multi-window display.
 pub fn find_split_row(indices: &[u8], width: u32, height: u32, transparent_index: u8) -> u32 {
     let mid = height / 2;
     let mut best_row = mid;
@@ -338,6 +346,7 @@ pub fn find_split_row(indices: &[u8], width: u32, height: u32, transparent_index
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Build an EpochStart display set with two windows (top/bottom split).
 pub fn build_multi_window_display_set(
     config: &DisplaySetConfig,
     frame: &color_quantizer::QuantizedFrame,
@@ -490,6 +499,7 @@ pub fn build_multi_window_display_set(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Build an epoch-split display set (3 bands) for frames exceeding decoder buffer limit.
 pub fn build_epoch_split_display_set(
     config: &DisplaySetConfig,
     frame: &color_quantizer::QuantizedFrame,

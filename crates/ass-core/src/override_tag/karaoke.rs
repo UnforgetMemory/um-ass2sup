@@ -1,6 +1,7 @@
 //! Karaoke tags: `\k`, `\kf`, `\K` (uppercase = \kf), `\ko`, `\kt`.
 use crate::{KaraokeStyle, OverrideTag};
 
+/// Parse karaoke tags: \k, \kf, \ko, \kt.
 pub fn parse(s: &str) -> Option<OverrideTag> {
     let lower = s.to_lowercase();
     if let Some(rest) = lower.strip_prefix("k") {

@@ -22,6 +22,7 @@ use crate::transform::AffineTransform;
 
 use crate::renderer::PixmapPool;
 
+/// Shared rendering resources: font registry, pixmap pool, and font fallback map.
 pub struct FontRegistryRenderResources {
     pub registry: Mutex<FontRegistry>,
     pub pixmap_pool: Mutex<PixmapPool>,
@@ -29,6 +30,7 @@ pub struct FontRegistryRenderResources {
 }
 
 impl FontRegistryRenderResources {
+    /// Create a new FontRegistryRenderResources with an empty font registry and 8-slot pixmap pool.
     pub fn new() -> Self {
         Self {
             registry: Mutex::new(FontRegistry::new()),
@@ -37,10 +39,12 @@ impl FontRegistryRenderResources {
         }
     }
 
+    /// Borrow a cached Pixmap of at least w×h from the pool, or None.
     pub fn pool_get(&self, w: u32, h: u32) -> Option<Pixmap> {
         self.pixmap_pool.lock().get(w, h)
     }
 
+    /// Return a Pixmap to the pool for reuse.
     pub fn pool_put(&self, p: Pixmap) {
         self.pixmap_pool.lock().put(p);
     }
@@ -53,6 +57,7 @@ impl Default for FontRegistryRenderResources {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Render a single ASS event into a RGBA Pixmap bitmap using the font registry.
 pub fn render_event_font_registry(
     pixmap: &mut Pixmap,
     event: &Event,

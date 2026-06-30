@@ -2,6 +2,7 @@
 use super::util::{parse_ass_color, parse_hex_u8};
 use crate::OverrideTag;
 
+/// Parse \c (primary color) or \3c (outline color) tag.
 pub fn parse(s: &str) -> Option<OverrideTag> {
     // Colour aliases (with \c as alias for \1c)
     for (prefix, variant) in [

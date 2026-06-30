@@ -31,6 +31,7 @@ pub struct EpochManager {
 }
 
 impl EpochManager {
+    /// Create a new epoch manager.
     pub fn new() -> Self {
         Self {
             prev_palette_hash: None,

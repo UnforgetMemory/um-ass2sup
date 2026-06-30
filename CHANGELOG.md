@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0] - 2026-06-30
+
+### Major
+
+- **Version bump 2.7.5 → 3.0.0**: Project-wide version synchronisation reflecting the stabilized dual-backend architecture and documentation overhaul.
+
+### Changed
+
+- **AGENTS.md**: Full rewrite — accurate workspace layout (8 crates), dual-backend build modes, pgs-encoder DDD structure, color-quantizer subsystems, CI workflow details, missing_docs coverage, font pipeline, memory model.
+- **README.md / README.en.md**: Complete rewrite — dual rendering backend introduction, updated architecture diagram, accurate crate names (ass-core, not ass-parser), actual dependency list (swash, not fontdb/rustybuzz), 700+ test count, version badge to 3.0.0, proper acknowledgments.
+- **README.md / README.en.md**: Added "Differences from Traditional Toolchains" section explaining architectural distinction from easyavs2bnxml/libass pipelines, with measured glyph size comparison data and `--compat-vsfilter` guidance.
+- **.gitignore**: Removed redundant `/*.sup` entry (covered by `*.sup`).
+
+### Added
+
+- **Public API doc comments**: Added concise English `///` doc comments to 35+ public items across three crates:
+  - `ass-core`: All override tag sub-parsers (`border`, `clip`, `color`, `effect`, `font`, `geometry`, `karaoke`, `position`, `util`), `parse_effect`
+  - `pgs-encoder`: `PgsEncoder` struct and methods, `DisplaySetConfig`, all 9 `build_*_display_set` functions, `rgba_to_ycbcr`, `rle_decode`, `SupFile`, `EpochManager`
+  - `subtitle-renderer`: `Renderer` struct/enum/methods, `FontRegistryRenderResources`, `render_event_font_registry`, `SimpleShaper::shape`, font registry methods
+- **RLE round-trip tests** (`pgs-encoder/tests/test_rle_roundtrip.rs`): Proptest-based random image encode/decode round-trip + 14 edge-case tests (all-transparent/opaque, single row/column/pixel, checkerboard, ti swap, chunk reassembly, 0x40-0xBF color range, zero-size frame)
+
+### Fixed
+
+- **`clip::parse_inverse` removed**: Function was merged into `clip::parse` (both `\clip` and `\iclip` handled in one function), but `parse.rs` still referenced the removed symbol. Removed dead call.
+
 ## [2.7.6] - 2026-06-30
 
 ### Added

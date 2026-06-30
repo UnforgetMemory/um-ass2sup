@@ -2,6 +2,7 @@
 use super::util::strip_parens;
 use crate::OverrideTag;
 
+/// Parse geometry tags: \pos, \move, \org, \fscx, \fscy, \frx, \fry, \frz, \fax, \fay.
 pub fn parse(s: &str) -> Option<OverrideTag> {
     // Scale X
     if let Some(x) = s

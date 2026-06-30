@@ -101,6 +101,7 @@ pub fn chunk_rle_data(data: &[u8], max_chunk_size: usize) -> Vec<Vec<u8>> {
     chunks
 }
 
+/// Decode PGS RLE-compressed bitmap data into raw palette indices.
 pub fn rle_decode(
     data: &[u8],
     width: u32,

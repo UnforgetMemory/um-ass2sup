@@ -4,34 +4,29 @@
 [![Audit](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml)
 [![Release](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
-[![Rust 1.75+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
-[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
-[![Coverage](https://img.shields.io/badge/coverage-88.13%25-brightgreen.svg)](COVERAGE.md)
+[![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
 
 [English](README.en.md) | **简体中文**
 
-> 一款用 Rust 编写的字幕转换器，将 **ASS / SSA / SRT** 字幕转换为蓝光 **SUP / PGS** 图文流，并支持 **BDN XML** 蓝光母版输出。
+> Rust 编写的 ASS/SSA/SRT → Blu-ray SUP/PGS 字幕转换器，附带 BDN XML 母版输出。
 
 ---
 
 ## 目录
 
-- [这是什么](#这是什么)
+- [是什么](#是什么)
+- [双渲染后端](#双渲染后端)
 - [核心特性](#核心特性)
 - [快速开始](#快速开始)
 - [架构总览](#架构总览)
 - [工作区结构](#工作区结构)
 - [安装](#安装)
 - [使用方式](#使用方式)
-  - [单文件转换](#单文件转换)
-  - [批量转换](#批量转换)
-  - [校验与降级](#校验与降级)
-  - [蓝光母版（BDN XML）](#蓝光母版bdn-xml)
-  - [多核加速](#多核加速)
 - [命令行选项](#命令行选项)
 - [作为 Rust 库使用](#作为-rust-库使用)
 - [性能与基准](#性能与基准)
-- [测试与质量保障](#测试与质量保障)
+- [测试与质量](#测试与质量)
 - [安全](#安全)
 - [贡献](#贡献)
 - [许可证](#许可证)
@@ -39,74 +34,138 @@
 
 ---
 
-## 这是什么
+## 是什么
 
-`ass2sup` 是一个**模块化 Rust 工作区**，专注于把开源字幕（ASS / SSA / SRT）转换为蓝光播放所需的位图字幕流（PGS / SUP）以及蓝光母版（BDN XML）格式。
+`ass2sup` 将开源字幕格式（ASS/SSA/SRT）转换为蓝光播放器原生支持的位图字幕流（PGS/SUP），同时支持 BDN XML 母版输出。
 
-**典型应用场景：**
-- 给家庭蓝光原盘（BDMV）烧录字模替换后的多语字幕轨
-- 自动化流水线中处理成百上千集番剧字幕
-- 对 ASS 特效（卡拉 OK、`\move`、`\fad`、`\t` 等）做精准的时间轴再现
-- 需要 23.976 / 29.97 等非整数帧率下的逐帧 PTS 校准
+**典型场景：**
+- 自制 BDMV 时替换或追加多语字幕轨
+- 批量处理整季番剧的字幕自动化流水线
+- 保留 ASS 特效（`\move`、`\fad`、`\t`、卡拉 OK）的时序精度
+- 23.976/29.97 等非整数帧率下的逐帧 PTS 校准
 
-**与同类工具的差异：**
-- **真·Rust 原生**：无 Python / Node 依赖，**单二进制**即可部署
-- **模块化工作区**：6 个独立 crate，渲染、量化、编码可单独复用
-- **k-d 树加速**：1080p 量化从 908 ms 降至 353 ms（2.57×）
-- **蓝光合规**：精确处理 NTSC 1001/1000 因子、多窗口分割、EPG 显示集拆分
-- **测试与模糊一应俱全**：350+ 单元/集成测试、proptest、insta 快照、cargo-fuzz
+---
+
+## 与传统工具链的差异
+
+### 背景
+
+传统的 ASS→SUP 转换链路通常为：
+
+```
+ASS → AviSynth (avs2pipe) → easyavs2bdnxml/easyavs2sup → SUP
+```
+
+这类工具依赖 **libass**（通过 VSFilter 兼容层）进行字幕渲染，生成的 SUP 字幕尺寸、字形外观以 libass 的输出为基准。**`um-ass2sup` 并非上述链路中任一工具的 Rust 替代品，而是一条根本不同的技术路径。**
+
+### 根本差异
+
+| 维度 | 传统链路（easyavs2bnxml 等） | um-ass2sup native-backend |
+|---|---|---|
+| 渲染引擎 | libass（通过 VSFilter/AviSynth） | **swash**（纯 Rust 字形引擎） |
+| 字形度量 | FreeType hinted advance | **swash 无 hinting 的原始字形度量** |
+| 渲染结果 | 较小的字形尺寸、较窄的字距 | **字形更大更宽**（实测 +18% 宽 / +27% 高）¹ |
+| 部署形态 | Python / AviSynth / VSFilter 依赖链 | **单二进制，零运行时依赖** |
+| 着色 | 依赖系统的 FreeType + fontconfig | **自建 FontRegistry，纯 Rust 光栅化** |
+| 合成粗体 | `FT_Outline_Embolden()` VSFilter 语义 | **swash 内建 embolden 合成**（参数不兼容） |
+| 目标 | VSFilter 兼容性至上 | 蓝光合规 + 性能至上 |
+
+¹ 实测数据：DejaVu Sans 60px / Outline=2 / Shadow=2，native-backend 渲染边界框 274×42 px，libass 渲染边界框 232×33 px。
+
+### 含义
+
+- **native-backend 输出的 SUP 字幕在播放时看起来比 libass 渲染的字更大、更粗**。这是 swash 字形引擎与 FreeType hinting 之间的固有差异，并非 bug。
+- 如果追求与 libass（ffmpeg、mpv、VLC）完全一致的渲染结果，应使用 **libass-backend** 构建模式（`--no-default-features -F libass-backend`）。
+- 项目提供一个实验性的 `--compat-vsfilter` 标志，对字号施加约 0.764× 缩放因子，使 swash 输出在尺寸上更接近 VSFilter 传统值——但字形轮廓和间距的差异依然存在。
+- **`um-ass2sup` 与 easyavs2bnxml 之间没有直接的 SUP 兼容性承诺**：两者使用不同的量化器、不同的调色板策略、不同的显示集分段逻辑。同一个 ASS 输入产生的 SUP 在字节级别必然不同。
+
+---
+
+## 双渲染后端
+
+`ass2sup` 提供两种渲染路径，编译时通过 Cargo features 选择：
+
+### native-backend（默认）
+
+纯 Rust 实现，零 C/C++ 依赖：
+
+```
+swash (字形塑形 + 光栅化) → tiny-skia (位图合成)
+```
+
+- `FontRegistry` + `SimpleShaper` + `GlyphRasterizer`，基于 swash
+- 8 级字体回退链（精确匹配 → 后缀剥离 → 别名 → 硬编码 CJK → 跨平台扫描 → 泛型 → SansSerif → 任意）
+- SIMD 加速（`wide` crate）：Porter-Duff 合成、仿射变换双线性插值
+- 适合不需要 libass 兼容性的轻量部署
+
+### libass-backend
+
+通过 FFI 调用系统 libass（v0.17+）：
+
+```
+libass.so (字形塑形 + 光栅化) → 量化 → PGS 编码
+```
+
+- 完美的 ASS 规范兼容性
+- 渲染结果与其他 libass 工具（ffmpeg、mpv、VLC）一致
+- 适合需要 ASS 精确匹配的场景
+
+### 构建
+
+```bash
+# 默认（native 后端）
+cargo build --release
+
+# 仅 libass 后端
+cargo build --release --no-default-features -F libass-backend
+
+# 双后端（运行时 --backend 切换）
+cargo build --release --no-default-features -F native-backend,libass-backend
+```
 
 ---
 
 ## 核心特性
 
 ### 输入与解析
-- **多格式**：ASS v4+、SSA v4、SubRip（`.srt`）自动识别（`SubtitleFormat::detect`）
-- **完整 AST**：保留 Style、Dialogue、Font、Embedded Font 全部信息
-- **SRT 自检**：`ass2sup in.srt --to-srt -o out.srt && diff in.srt out.srt` 即可验证解析器+序列化器无损
+- ASS v4+、SSA v4、SubRip（`.srt`）自动识别（`SubtitleFormat::detect`）
+- 手写解析器，零外部解析依赖
+- 完整 AST，保留 Style/Dialogue/Font 全部信息
+- SRT 自检：`ass2sup in.srt --to-srt -o out.srt && diff in.srt out.srt`
 
 ### 渲染
-- **字形塑形**：基于 `fontdb` + `rustybuzz`（HarfBuzz 的 Rust 绑定），完整支持复杂文字（中日韩、阿拉伯、印度等）
-- **6 级字体回退链**：用户指定 → ASS `[Fonts]` 嵌入字体 → 系统 fontconfig
-- **ASS 特效**：卡拉 OK（`\k` / `\kf` / `\ko` / `\kt`）、运动（`\move`）、淡入淡出（`\fad` / `\fade`）、变换（`\t`）、3D 旋转（`\frx` / `\fry`）、各向异性边框、矢量裁剪（`\clip` / `\iclip`）、滚动横幅
-- **小调色板去重**：`HashSet<u32>` 优化，O(n²) → O(n)
+- **native-backend**：swash 字形塑形，8 级字体回退，全面 ASS 特效支持
+- **libass-backend**：libass 原生渲染，完美规范兼容
+- ASS 特效：卡拉 OK、`\move`、`\fad`/`\fade`、`\t`、3D 旋转、各向异性边框、矢量裁剪、滚动横幅
 
 ### 量化与编码
-- **Median-Cut 量化器**：内建 k-d 树查找（`find_nearest_index`）
-- **三种抖动**：None / Floyd-Steinberg / Ordered
-- **调色板复用**：相邻帧使用同一调色板，减少 PGS 段头开销
-- **PGS 编码**：完整 PCS / WDS / PDS / ODS 显示集，NTSC 1001/1000 因子精确处理
-- **多窗口模式**：自动在透明行边界拆分大显示集
-- **并行量化**（可选）：rayon 多核，1.36× 加速（30 事件 1080p 压测：366 ms → 270 ms）
+- Median-Cut 量化，k-d 树最近色查找
+- 三种抖动：None / Floyd-Steinberg / Ordered
+- 相邻帧调色板复用，减少 PDS 开销
+- 完整 PGS 显示集（PCS/WDS/PDS/ODS），NTSC 1001/1000 因子
+- `PotPlayer MAX_OBJECT_REFS=2` 兼容：chunks(2) 自动拆分多对象显示集
+- 淡入淡出 PDS-only 优化（无 ODS 重绘）
+- 并行量化（rayon，opt-in）
 
-### 输出与发布
-- **SUP（`.sup`）**：蓝光原盘字幕流
-- **BDN XML + PNG**：蓝光母版 XML 描述符（`<Event InTC="..." />` 等）
-- **SRT 降级**：ASS → SRT，便于调试与无蓝光设备预览
-
-### 工程化
-- **CI / Audit / Release 三个工作流**（`ci.yml` / `audit.yml` / `release.yml`）
-- **cargo-deny**：依赖白名单、许可证、来源审计
-- **`#![warn(missing_docs)]`** 强制公开项文档
-- **clippy `cast_lossless`** 强制无损类型转换
-- **88.13% 行覆盖率**（tarpaulin xml 下界）
+### 输出
+- SUP（`.sup`）：蓝光原盘字幕流
+- BDN XML + PNG：蓝光母版 XML 描述符
+- SRT 降级：ASS → SRT 调试输出
 
 ---
 
 ## 快速开始
 
 ```bash
-# 1. 转换一个字幕文件
+# 单文件转换
 ass2sup input.ass -o output.sup
 
-# 2. 转换时做语法校验
+# 转换时校验
 ass2sup input.ass -o output.sup --validate --overlap-warn
 
-# 3. 批量转换整季
+# 批量转换整季
 ass2sup s01/*.ass -d ./sup_output/ --parallel
 ```
-
-> 想看更多 → [使用方式](#使用方式)
 
 ---
 
@@ -116,54 +175,65 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
             ┌────────────┐
             │  输入文件   │  ASS / SSA / SRT
             └─────┬──────┘
-                  │ SubtitleFormat::detect
-                  ▼
-        ┌────────────────────┐
-        │     ass-parser     │  → 强类型 AST（事件、样式、字体）
-        └─────────┬──────────┘
-                  │ （可选）
-                  ▼
-        ┌──────────────────────┐
-        │  subtitle-validator  │  语法检查 / 事件重叠检测
-        └─────────┬────────────┘
                   │
                   ▼
-        ┌──────────────────────┐
-        │   subtitle-renderer  │  fontdb + rustybuzz → 每帧 RGBA 位图
-        └─────────┬────────────┘
-                  │ （可选并行：rayon）
+         ┌─────────────────┐
+         │    ass-core     │  → 强类型 AST
+         └────────┬───────-┘
+                  │ 可选
                   ▼
-        ┌──────────────────────┐
-        │    color-quantizer   │  RGBA → 索引色（≤255 色 + alpha）
-        └─────────┬────────────┘
-                  │ 调色板可复用
-                  ▼
-        ┌──────────────────────┐
-        │     pgs-encoder      │  PGS / SUP 段（PCS / WDS / PDS / ODS）
-        └─────────┬────────────┘
-                  │
-        ┌─────────┴──────────┐
-        ▼                    ▼
-  ┌──────────┐        ┌────────────┐
-  │  .sup    │        │   BDN XML  │  + 0001.png、0002.png……
-  └──────────┘        └────────────┘
+         ┌──────────────────────[ 渲染后端 ]──────────────────────┐
+         │                                                       │
+         ▼                                                       ▼
+   ┌──────────────────┐                               ┌──────────────────────┐
+   │  native-backend  │                               │   libass-backend     │
+   │  swash +         │                               │   libass FFI         │
+   │  tiny-skia       │                               │   (libass-sys)       │
+   └────────┬─────────┘                               └──────────┬───────────┘
+            │                                                     │
+            ▼                                                     ▼
+         ┌───────────────────────────────────────────────────────────┐
+         │                color-quantizer                           │
+         │  RGBA → 索引色（≤255 + alpha），k-d 树加速                │
+         │  调色板复用 · Floyd-Steinberg/Ordered/None 抖动           │
+         └────────────────────────┬─────────────────────────────────-┘
+                                  │
+                                  ▼
+         ┌───────────────────────────────────────────────────────────┐
+         │                    pgs-encoder                           │
+         │  量化帧 → PGS 段（PCS/WDS/PDS/ODS）                      │
+         │  DDD 架构：domain/（纯模型）+ encoding/（序列化）          │
+         └──────────────────┬──────────────────────────────────────-┘
+                            │
+                  ┌─────────┴──────────┐
+                  ▼                    ▼
+            ┌──────────┐        ┌────────────┐
+            │  .sup    │        │  BDN XML   │
+            │  SUP/PGS │        │  + PNG 序列 │
+            └──────────┘        └────────────┘
 ```
 
 ---
 
 ## 工作区结构
 
-| Crate                | 职责                                          | 关键依赖                          |
-| -------------------- | --------------------------------------------- | --------------------------------- |
-| **`ass-parser`**       | 解析 ASS / SSA / SRT，产出强类型 AST          | —                                 |
-| **`subtitle-validator`** | 语法校验、样式检查、事件重叠检测              | `ass-parser`                      |
-| **`subtitle-renderer`** | 把字幕渲染为 RGBA 位图（含字形塑形、特效）    | `fontdb`、`rustybuzz`、`tiny-skia` |
-| **`color-quantizer`**   | RGBA → 索引色（k-d 树加速）                    | `tiny-skia`                       |
-| **`pgs-encoder`**       | 量化帧 → PGS / SUP 二进制段                    | —                                 |
-| **`bdn-xml`**           | 蓝光母版 XML + PNG 资源                        | `png`、`quick-xml`                |
-| **`ass2sup-cli`**       | CLI 总线（`ass2sup` 二进制）                   | 上述所有 + `clap` + `rayon`       |
+### 主要工作区（8 crates）
 
-所有 crate 通过 `[workspace.dependencies]` 集中管理依赖版本，许可证统一为 `Apache-2.0`。
+| Crate | 职责 | 关键依赖 | 文档检查 |
+|---|---|---|---|
+| **`ass-core`** | ASS/SSA/SRT 解析，强类型 AST | thiserror, tracing | `unsafe_code = "deny"` |
+| **`subtitle-validator`** | 语法校验、事件重叠检测 | ass-core, thiserror | `#![warn(missing_docs)]` |
+| **`subtitle-renderer`** | [native] RGBA 位图渲染 | swash, tiny-skia, wide, parking_lot | — |
+| **`libass-sys`** | [libass] libass v0.17 FFI 绑定（纯头文件） | — | — |
+| **`subtitle-renderer-libass`** | [libass] libass 渲染管线 | libass-sys, color-quantizer, pgs-encoder, bdn-xml | `#![warn(missing_docs)]` |
+| **`color-quantizer`** | RGBA → 索引色，k-d 树加速 | thiserror, tracing | `#![warn(missing_docs)]` |
+| **`pgs-encoder`** | 量化帧 → PGS/SUP（DDD：domain/ + encoding/） | color-quantizer, png | — |
+| **`bdn-xml`** | 蓝光母版 XML + PNG | quick-xml, png | — |
+| **`ass2sup-cli`** | `ass2sup` 二进制，feature-gated 后端分发 | clap, rayon, indicatif, serde | `#![warn(missing_docs)]` |
+
+### 独立工作区
+
+- `ass2sup-libass/` — libass-only 构建的独立 Cargo 工作区（不与主工作区共享）
 
 ---
 
@@ -171,11 +241,10 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 
 ### 前置依赖
 
-- **Rust 1.75+**（[rustup](https://rustup.rs/)）
-- **fontconfig**（Linux 系统库；macOS / Windows 已内建）
-  - Debian / Ubuntu: `sudo apt install libfontconfig1-dev`
-  - Fedora: `sudo dnf install fontconfig-devel`
-  - macOS: `brew install fontconfig`（Homebrew 已默认带）
+- **Rust 1.85+**（[rustup](https://rustup.rs/)）
+- Linux native-backend：`sudo apt install libfontconfig1-dev fonts-dejavu-core`
+- Linux libass-backend：`sudo apt install libass9`
+- macOS：`brew install libass`
 
 ### 从源码构建
 
@@ -185,7 +254,7 @@ cd um-ass2sup
 cargo build --release
 ```
 
-产物：`target/release/ass2sup`（约 3.5 MB，strip 后更小）。
+产物：`target/release/ass2sup`。
 
 ### 安装到 `$PATH`
 
@@ -201,47 +270,37 @@ cargo install --path crates/ass2sup-cli --locked
 
 ```bash
 ass2sup input.ass -o output.sup
-```
-
-默认 1920×1080 @ 23.976 fps；可自定义：
-
-```bash
+# 自定义分辨率和帧率
 ass2sup input.ass -o output.sup -r 1280x720 -f 25.0
+# 指定渲染后端（双后端构建时）
+ass2sup input.ass -o output.sup --backend libass
 ```
 
 ### 批量转换
 
 ```bash
-# 显式列出（shell 通配）
 ass2sup *.srt -d ./out/
-
-# 使用 --glob（更安全，支持跨平台）
 ass2sup --glob "subs/**/*.ass" --recursive -d ./out/
-
-# 多核并发处理
 ass2sup --glob "subs/**/*.ass" --recursive --parallel -d ./out/
 ```
 
 ### 校验与降级
 
 ```bash
-# 仅校验，不写文件（CI 友好，退出码 0=OK / 1=错误）
+# 仅校验（CI 友好，退出码 0/1）
 ass2sup input.ass --check
-
-# 校验并显示事件重叠警告
+# 校验 + 重叠警告
 ass2sup input.ass --check --validate --overlap-warn --overlap-mode strict
-
-# ASS → SRT 降级
+# ASS → SRT
 ass2sup input.ass --to-srt -o output.srt
-
-# SRT 自检：diff 应当为空
+# SRT 自检
 ass2sup input.srt --to-srt -o out.srt && diff input.srt out.srt
 ```
 
 ### 蓝光母版（BDN XML）
 
 ```bash
-ass2sup input.srt --to-bdn -d ./bdn_out/
+ass2sup input.ass --to-bdn -d ./bdn_out/
 ```
 
 产出：
@@ -255,101 +314,79 @@ bdn_out/
     └── ...
 ```
 
-`BDN.xml` 形如：
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<BDN Version="0.93">
-  <Description>
-    <Name>input</Name>
-    <Language>eng</Language>
-    <Format VideoFormat="NTSC">
-      <Events>
-        <Event InTC="00:00:01:01" OutTC="00:00:03:03" Forced="false">
-          <Graphic File="0001.png" Area="0,0,1920,1080" />
-        </Event>
-        …
-      </Events>
-    </Format>
-  </Description>
-</BDN>
-```
-
 ### 多核加速
 
 ```bash
-# 单文件：并行量化（默认关闭，显式启用）
+# 单文件内并行量化
 ass2sup input.ass -o output.sup --parallel-frames
-
-# 批量：并行文件
-ass2sup --glob "subs/**/*.srt" --parallel -d ./out/
+# 批量文件并行
+ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 ```
-
-两个加速独立可叠加：批量并行 + 单文件内并行量化。
 
 ---
 
 ## 命令行选项
 
-| 选项                              | 说明                                       | 默认          |
-| --------------------------------- | ------------------------------------------ | ------------- |
-| `-o, --output <OUTPUT>`           | 输出 SUP 路径（单文件）                    | —             |
-| `-d, --output-dir <DIR>`          | 输出目录（批量）                           | —             |
-| `-r, --resolution <WxH>`          | 显示分辨率                                 | `1920x1080`   |
-| `-f, --fps <FLOAT>`                | 帧率                                       | `23.976`      |
-| `--validate`                       | 转换前运行校验                             | off           |
-| `--overlap-warn`                   | 启用事件重叠检测                           | off           |
-| `--overlap-mode <MODE>`            | 重叠模式 `strict` / `lenient`              | `lenient`     |
-| `--quantizer <ALGO>`              | 量化算法（当前 `median-cut`）              | `median-cut`  |
-| `--max-colors <1-255>`            | 调色板最大颜色数                           | `255`         |
-| `--dither <METHOD>`               | 抖动 `none` / `floyd-steinberg` / `ordered`| `floyd-steinberg` |
-| `--check`                          | 仅解析校验，不写文件（退出码 0/1）         | off           |
-| `--to-srt`                         | 输出 SRT 格式（ASS→SRT 降级 / SRT 自检）   | off           |
-| `--to-bdn`                         | 输出 BDN XML + PNG（蓝光母版）             | off           |
-| `--parallel-frames`               | 并行量化（单文件，rayon）                  | off           |
-| `--parallel`                      | 并行文件处理（批量）                       | off           |
-| `--dry-run`                       | 仅解析校验，不写                           | off           |
-| `--force`                          | 校验失败仍继续转换                         | off           |
-| `--font <NAME>`                   | SRT 输入默认字体                           | `Arial`       |
-| `--font-size <PT>`                | SRT 输入默认字号                           | `48.0`        |
-| `--glob <PATTERN>`                | 输入文件通配模式                           | —             |
-| `--recursive`                      | `--glob` 模式下递归目录                    | off           |
-| `--max-files <N>`                  | `--glob` 模式最大处理文件数                 | 无限          |
-| `--quiet`                          | 禁用进度条                                 | off           |
-| `--color <MODE>`                  | 颜色输出 `auto` / `always` / `never`        | `auto`        |
-| `-v, --verbose`                    | 启用详细日志                               | off           |
-| `-h, --help`                       | 打印帮助                                   | —             |
-| `-V, --version`                    | 打印版本                                   | —             |
+| 选项 | 说明 | 默认 |
+|---|---|---|
+| `-o, --output <OUTPUT>` | 输出 SUP 路径（单文件） | — |
+| `-d, --output-dir <DIR>` | 输出目录（批量） | — |
+| `-r, --resolution <WxH>` | 显示分辨率 | `1920x1080` |
+| `-f, --fps <FLOAT>` | 帧率 | `23.976` |
+| `--backend <BACKEND>` | 渲染后端（双后端构建时）`native` / `libass` | `native` |
+| `--validate` | 转换前校验 | off |
+| `--overlap-warn` | 事件重叠检测 | off |
+| `--overlap-mode <MODE>` | 重叠模式 `strict` / `lenient` | `lenient` |
+| `--quantizer <ALGO>` | 量化算法 | `median-cut` |
+| `--max-colors <1-255>` | 调色板最大颜色数 | `255` |
+| `--dither <METHOD>` | 抖动算法 | `floyd-steinberg` |
+| `--check` | 仅校验，不写文件（退出码 0/1） | off |
+| `--to-srt` | 输出 SRT | off |
+| `--to-bdn` | 输出 BDN XML + PNG | off |
+| `--parallel-frames` | 单文件并行量化 | off |
+| `--parallel` | 批量文件并行 | off |
+| `--dry-run` | 仅校验，不写 | off |
+| `--force` | 校验失败仍转换 | off |
+| `--font <NAME>` | SRT 输入默认字体 | `Arial` |
+| `--font-size <PT>` | SRT 输入默认字号 | `48.0` |
+| `--glob <PATTERN>` | 输入通配符 | — |
+| `--recursive` | `--glob` 模式递归 | off |
+| `--max-files <N>` | glob 最大文件数 | 不限 |
+| `--quiet` | 禁用进度条 | off |
+| `--color <MODE>` | 颜色输出 `auto` / `always` / `never` | `auto` |
+| `-v, --verbose` | 详细日志 | off |
+| `-h, --help` | 帮助 | — |
+| `-V, --version` | 版本 | — |
 
-输入文件**超过 100 MiB 会被拒绝**（`MAX_INPUT_SIZE_BYTES`），防止误传视频等大文件。如确需调整请改源码。
+输入文件超过 **100 MiB** 会被拒绝（`MAX_INPUT_SIZE_BYTES`），防止误传视频文件。
 
 ---
 
 ## 作为 Rust 库使用
 
-工作区每个 crate 都是**独立可复用的库**。`Cargo.toml`：
+每个 crate 可独立复用。`Cargo.toml`：
 
 ```toml
 [dependencies]
-ass-parser        = "0.5"
-subtitle-validator = "0.5"
-subtitle-renderer = { version = "0.5", features = ["..."] }
-color-quantizer   = "0.5"
-pgs-encoder       = "0.5"
-bdn-xml           = "0.5"
+ass-core            = "2.7"
+subtitle-validator  = "2.7"
+subtitle-renderer   = { version = "2.7", features = ["..."] }
+color-quantizer     = "2.7"
+pgs-encoder         = "2.7"
+bdn-xml             = "2.7"
 ```
 
 或 path 依赖：
 
 ```toml
 [dependencies]
-ass-parser = { path = "../ass2sup/crates/ass-parser" }
+ass-core = { path = "../ass2sup/crates/ass-core" }
 ```
 
-简单示例：解析 + 校验
+解析 + 校验示例：
 
 ```rust
-use ass_parser::AssFile;
+use ass_core::AssFile;
 use subtitle_validator::{validate, ValidationStage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -365,10 +402,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-更多范例见 `crates/*/examples/`：
+更多示例：
 
 ```bash
-cargo run --example parse_ass       -p ass-parser
+cargo run --example parse_ass       -p ass-core
 cargo run --example quantize_image  -p color-quantizer
 cargo run --example encode_sup      -p pgs-encoder
 ```
@@ -377,18 +414,16 @@ cargo run --example encode_sup      -p pgs-encoder
 
 ## 性能与基准
 
-详细数据见 [BENCHMARKS.md](BENCHMARKS.md)。代表性数据（Linux WSL2 / Rust 1.77）：
+完整数据见 [BENCHMARKS.md](BENCHMARKS.md)。代表值（Linux / Rust 1.85）：
 
-| 基准                       | 规模      | 中位耗时     | 备注                       |
-| -------------------------- | --------- | ------------ | -------------------------- |
-| `rle_small_64x32`            | 64×32     | 2.84 µs      | 单段 RLE                   |
-| `rle_large_1920x1080`        | 1080p     | 2.45 ms      | 单段 RLE                   |
-| `quantizer_medium_320x180`   | 320×180   | 13.1 ms      | 量化（抖动+调色板）        |
-| `quantizer_large_1920x1080`  | 1080p     | 908 ms       | k-d 树加速后 353 ms（2.57×） |
-| `pgs_encode_medium_320x180`  | 320×180   | 90.3 µs      | PGS 编码                   |
-| `pgs_encode_ntsc_320x180`    | 320×180   | 91.1 µs      | NTSC 1001/1000 因子         |
-
-复现：
+| 基准 | 规模 | 中位耗时 | 备注 |
+|---|---|---|---|
+| `rle_small_64x32` | 64×32 | 2.84 µs | 单段 RLE |
+| `rle_large_1920x1080` | 1080p | 2.45 ms | 单段 RLE |
+| `quantizer_medium_320x180` | 320×180 | 13.1 ms | 量化 + 抖动 + 调色板 |
+| `quantizer_large_1920x1080` | 1080p | 353 ms | k-d 树加速后（2.57×） |
+| `pgs_encode_medium_320x180` | 320×180 | 90.3 µs | PGS 编码 |
+| `pgs_encode_ntsc_320x180` | 320×180 | 91.1 µs | NTSC 1001/1000 因子 |
 
 ```bash
 cargo bench --workspace
@@ -396,34 +431,36 @@ cargo bench --workspace
 
 ---
 
-## 测试与质量保障
+## 测试与质量
 
-- **350+ 单元/集成测试**（`cargo test --workspace`）
-- **proptest** 属性测试（ass-parser 解析确定性、SRT 往返、ASS 宽松模式恢复等）
-- **insta 快照**（`crates/ass2sup-cli/tests/snapshots/`）覆盖 CLI 输出
-- **cargo-fuzz** 两个目标（`decode_pgs`、`quantize_rgba`）—— P26 通过 fuzz 找到 2 个 PGS 解码 OOB bug 已修
-- **88.13% 行覆盖率**（cargo-tarpaulin）
-
-运行全部：
+- **700+ 单元/集成测试**（`cargo test --workspace`，全部通过）
+- **proptest**：ass-core（解析确定性、SRT 往返、ASS 宽松恢复）、color-quantizer、pgs-encoder、bdn-xml
+- **insta 快照**：`crates/ass2sup-cli/tests/snapshots/`
+- **cargo-fuzz**：ass-core（3 目标）、color-quantizer（1）、pgs-encoder（1）
+- **criterion 基准**：`cargo bench --workspace`（HTML 报告）
+- **clippy `-D warnings`** 零警告
+- **`cargo fmt --all -- --check`** 无漂移
+- **`#[expect(clippy::*)]`** 优先于 `#[allow(clippy::*)]`
 
 ```bash
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo doc --workspace --no-deps
+# 完备验证
+cargo check --workspace --all-targets
 cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-targets
+cargo test --workspace --doc
+cargo bench --workspace --no-run
+cargo doc --workspace --no-deps
 ```
-
-> 详细见 [COVERAGE.md](COVERAGE.md)。架构决策见 [`docs/adr/`](docs/adr/)。
 
 ---
 
 ## 安全
 
-- **`SECURITY.md`**：漏洞上报流程（请走 GitHub Security Advisories 而**非**公开 issue）
-- **`deny.toml`**：cargo-deny 审计（advisories / bans / licenses / sources）
-- **`.github/workflows/audit.yml`**：每周一 06:00 UTC + push/PR 自动审计
-
-当前已知警告：忽略 `RUSTSEC-2025-0119`（`number_prefix` 无维护，间接经 `indicatif 0.17.11` 引入，等上游修）。
+- **SECURITY.md**：漏洞上报（GitHub Security Advisories，勿开公开 issue）
+- **deny.toml**：cargo-deny（advisories / bans / licenses / sources）
+- **audit.yml**：每周一 06:00 UTC + push/PR 自动审计
+- 已知忽略：`RUSTSEC-2025-0119`（`number_prefix` 无人维护，通过 `indicatif` 间接引入）
 
 详见 [SECURITY.md](SECURITY.md)。
 
@@ -431,60 +468,57 @@ cargo fmt --all -- --check
 
 ## 贡献
 
-欢迎 PR 与 Issue。开发流程建议：
+PR 和 Issue 欢迎。提交前：
 
-```bash
-# 1. 克隆与构建
-git clone https://github.com/UnforgetMemory/um-ass2sup.git
-cd um-ass2sup
-cargo build
-
-# 2. 跑全部门
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo doc --workspace --no-deps
-cargo fmt --all -- --check
-
-# 3. 新增 crate / 文件请同步更新根 README 与 CHANGELOG
-```
-
-提交前请确保：
-- [ ] 所有测试通过
-- [ ] clippy 零警告（`-- -D warnings`）
-- [ ] `cargo doc` 零缺失文档警告
-- [ ] `cargo fmt` 无漂移
-- [ ] 新公开项有 `///` rustdoc
+- [ ] `cargo test --workspace` 全部通过
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` 零警告
+- [ ] `cargo doc --workspace --no-deps` 零缺失文档
+- [ ] `cargo fmt --all -- --check` 无漂移
+- [ ] 新公开 API 有 `///` rustdoc
 - [ ] `CHANGELOG.md` 已更新
 
 ---
 
 ## 许可证
 
-**双许可**：[`Apache-2.0`](LICENSE-APACHE)
+[`Apache-2.0`](LICENSE-APACHE)
 
 ```
 Copyright (c) 2024-2026 The um-ass2sup authors
 ```
 
-详细条款见 `LICENSE-APACHE` 文件。
+详见 `LICENSE-APACHE`。
 
 ---
 
 ## 致谢
 
-构建于以下优秀开源项目之上：
+构建于以下优秀项目之上：
 
-- [`rustybuzz`](https://github.com/RazrFalcon/rustybuzz) — HarfBuzz 的 Rust 绑定
-- [`tiny-skia`](https://github.com/RazrFalcon/tiny-skia) — 纯 Rust Skia 绑定
-- [`fontdb`](https://github.com/RazrFalcon/fontdb) — 字体数据库
+### Rust 生态
+- [`swash`](https://github.com/dfrg/swash) — 字形塑形与光栅化
+- [`tiny-skia`](https://github.com/RazrFalcon/tiny-skia) — 纯 Rust Skia 位图合成
 - [`clap`](https://github.com/clap-rs/clap) — CLI 参数解析
 - [`rayon`](https://github.com/rayon-rs/rayon) — 数据并行
-- 所有 [依赖列表](Cargo.toml) 中的 crate
+- [`wide`](https://github.com/lokathor/wide) — SIMD 加速
+- [`parking_lot`](https://github.com/Amanieu/parking_lot) — 高效互斥锁
+- [`quick-xml`](https://github.com/tafia/quick-xml) — XML 序列化
+- [`png`](https://github.com/image-rs/image-png) — PNG 编码
+- [`criterion`](https://github.com/bheisler/criterion.rs) — 基准
+- [`proptest`](https://github.com/proptest-rs/proptest) — 属性测试
+- [`indicatif`](https://github.com/console-rs/indicatif) — 进度条
 
-也感谢所有 [贡献者](https://github.com/UnforgetMemory/um-ass2sup/graphs/contributors)。
+### 外部库
+- [`libass`](https://github.com/libass/libass) — ASS 字幕渲染器（v0.17+，可选后端）
+- [`fontconfig`](https://www.freedesktop.org/wiki/Software/fontconfig/) — 字体发现（Linux）
+
+### 蓝光标准参考
+- [Blu-ray Disc Read-Only Format](https://www.blu-raydisc.info/) — PGS/SUP 规范
+
+感谢所有 [贡献者](https://github.com/UnforgetMemory/um-ass2sup/graphs/contributors)。
 
 ---
 
 <p align="center">
-  <sub>用 <code>cargo</code> 构建 · 提交于 <code>master</code></sub>
+  <sub>用 <code>cargo</code> 构建 · 跟踪于 <code>master</code></sub>
 </p>

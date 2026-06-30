@@ -2,6 +2,7 @@
 use super::util::nums_f64;
 use crate::OverrideTag;
 
+/// Parse \a or \an alignment tag.
 pub fn parse(s: &str) -> Option<OverrideTag> {
     if s.starts_with("pos(") {
         let n = nums_f64(s, "pos(");

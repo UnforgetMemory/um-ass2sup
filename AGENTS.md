@@ -2,7 +2,7 @@
 
 ## Project
 
-ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter. Rust workspace, 9+ crates.
+ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter. Rust workspace, **8 crates**, v3.0.0.
 **Two rendering backends**, selectable at build time via Cargo features:
 
 - **`native-backend`** (default): self-built `FontRegistry` + `SimpleShaper` + `GlyphRasterizer` on swash — zero external font/shaper deps
@@ -27,13 +27,29 @@ crates/
   ass-core/                       # ASS/SSA/SRT parser → strong AST (hand-written, 0 external deps)
   subtitle-validator/             # Syntax/overlap checks (depends on ass-core)
   subtitle-renderer/              # [feature=native-backend] RGBA bitmap rendering — FontRegistry + swash + tiny-skia
-  libass-sys/                     # [feature=libass-backend] Manual FFI bindings for libass v0.17
+  libass-sys/                     # [feature=libass-backend] Manual FFI bindings for libass v0.17, header-only
   subtitle-renderer-libass/       # [feature=libass-backend] libass-based rendering pipeline
   color-quantizer/                # RGBA → indexed color (k-d tree accelerated, Floyd-Steinberg dither)
-  pgs-encoder/                    # Indexed frames → PGS/SUP binary segments
+  pgs-encoder/                    # Indexed frames → PGS/SUP binary segments (DDD: domain/ + encoding/)
   bdn-xml/                        # Blu-ray mastering XML + PNG output
-  ass2sup-cli/                    # CLI binary (clap), feature-gated backend dispatch
+  ass2sup-cli/                    # CLI binary (ass2sup), feature-gated backend dispatch
 ```
+
+Also at repo root: `ass2sup-libass/` — separate parallel workspace for libass-only builds (not part of main workspace).
+
+### Crate dependency details
+
+| Crate | Key deps | Doc lint |
+|---|---|---|
+| `ass-core` | thiserror, tracing | — (unsafe_code = "deny") |
+| `subtitle-validator` | ass-core, thiserror | `#![warn(missing_docs)]` |
+| `subtitle-renderer` | swash, tiny-skia, wide, parking_lot | — |
+| `libass-sys` | — (no build.rs deps) | — |
+| `subtitle-renderer-libass` | libass-sys, color-quantizer, pgs-encoder, bdn-xml | `#![warn(missing_docs)]` |
+| `color-quantizer` | thiserror, tracing | `#![warn(missing_docs)]` |
+| `pgs-encoder` | color-quantizer, png | — |
+| `bdn-xml` | quick-xml, png | — |
+| `ass2sup-cli` | clap, rayon, indicatif, glob, walkdir, serde, strsim | `#![warn(missing_docs)]` |
 
 ## Rendering stack (native-backend — NO fontdb / NO cosmic-text / NO rustybuzz)
 
@@ -41,6 +57,17 @@ crates/
 Trace: ass-core parse → RenderContext (build_context) → shape_horizontal/vertical (SimpleShaper/swash)
   → glyph rasterization (GlyphRasterizer/swash) → composite_glyph → effects (blur/shadow/outline)
   → transform_layer (AffineTransform for scale/rotate/shear/perspective) → composite_subregion
+```
+
+Font pipeline:
+```
+shape:    SimpleShaper::shape(text, font_data, font_size) → Vec<ShapedGlyph>
+          Maps chars→glyph_id via swash FontRef.charmap(), records advance width
+resolve:  FontRegistry.query() → FontId → get_font_data() → Vec<u8>
+          Uses name-parsed weight/style fallback + font_map per-style fallback chain
+rasterize: GlyphRasterizer::rasterize(font_data, glyph_id, font_size) → RasterizedGlyph
+           Uses swash CacheKey for glyph cache lookup
+composite: composite_glyph(layer, rasterized, x, y, color) — Porter-Duff over per pixel
 ```
 
 ## System dependency
@@ -66,10 +93,12 @@ brew install libass
 
 ```bash
 # Full verification (CI order)
+cargo check --workspace --all-targets
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
 cargo test --workspace --doc
+cargo bench --workspace --no-run     # compile benchmarks only
 cargo doc --workspace --no-deps
 # Generate (not check) release binary
 cargo build --release
@@ -90,30 +119,31 @@ cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 
 - **MSRV**: Rust 1.85 (enforced in CI, `Cargo.toml` `rust-version`)
 - **Edition**: 2021
-- **clippy**: `-D warnings` (zero warnings enforced)
+- **clippy**: `-D warnings` (zero warnings enforced across workspace)
 - **fmt**: `cargo fmt --all -- --check` (no drift allowed)
-- **doc**: `#![warn(missing_docs)]` at crate level; public items must have `///` rustdoc
+- **doc**: `#![warn(missing_docs)]` on 4/8 crates (subtitle-validator, subtitle-renderer-libass, color-quantizer, ass2sup-cli); ass-core additionally denies `unsafe_code`
 - **Profile**: `opt-level = 3`, `lto = "thin"`, `codegen-units = 1`
 - **cargo-deny**: `deny.toml` enforces license whitelist, no unknown registries/git sources
-- **Known ignored advisory**: `RUSTSEC-2025-0119` (transitive via `indicatif 0.17`, ignore in audit)
+- **cargo-audit**: weekly + push/PR, `--deny warnings`, known advisory `RUSTSEC-2025-0119` ignored
 
 ## Testing
 
-- 350+ unit/integration tests across workspace
-- **proptest** in: ass-core, color-quantizer, pgs-encoder
+- **700+ unit/integration tests** across workspace (all pass: 700+ ok, 2 ignored)
+- **proptest** in: ass-core, color-quantizer, pgs-encoder, bdn-xml
 - **insta snapshots** in: `crates/ass2sup-cli/tests/snapshots/` (update with `cargo insta review`)
 - **fuzz targets**: `crates/ass-core/fuzz/` (3 targets), `crates/color-quantizer/fuzz/` (1), `crates/pgs-encoder/fuzz/` (1)
+- **benches**: `cargo bench --workspace` (criterion, html_reports)
 - **Examples**: `cargo run --release --example parse_ass -p ass-core` (and similar for color-quantizer, pgs-encoder)
 
 ## CI workflows
 
-- `ci.yml`: fmt → clippy → test → MSRV check (on push/PR to master)
-- `audit.yml`: cargo-audit + cargo-deny (weekly + push/PR)
-- `release.yml`: cross-platform build matrix (Linux x86_64/aarch64, macOS ARM, Windows) on tag push
+- `ci.yml`: 4 jobs — check (rustfmt) → clippy → test (+ bench compile) → MSRV 1.85 (on push/PR to master)
+- `audit.yml`: cargo-audit + cargo-deny (weekly Monday 06:00 UTC + push/PR)
+- `release.yml`: cross-platform build matrix (Linux x86_64/aarch64, macOS ARM, Windows) + dry-run publish + GitHub Release on tag push
 
 ## Style conventions
 
-- Dual license: Apache-2.0
+- License: Apache-2.0
 - Workspace dependencies managed in root `Cargo.toml` `[workspace.dependencies]`
 - Fuzz crates excluded from workspace: `exclude = ["crates/*/fuzz"]`
 - No `unwrap()`/`expect()` outside tests and CLI main
@@ -135,6 +165,71 @@ crates/subtitle-renderer/src/font/
 ```
 
 Cross-platform font fallback: 8-level chain (exact match → suffix-strip → alias → hardcoded CJK → cross-platform CJK scan → generic → SansSerif → any).
+
+## pgs-encoder architecture (DDD, Wave 1 completed)
+
+```
+crates/pgs-encoder/src/
+  domain/                         # Pure domain model — no I/O, no encoding knowledge
+    composition.rs                # CompositionState, ObjectComposition, WindowDef
+    epoch.rs                      # EpochManager — object versioning, epoch lifecycle
+    palette.rs                    # PaletteEntry, YCbCr conversion, color swap
+    segment.rs                    # Segment, SegmentPayload (PCS/WDS/PDS/ODS/END), SupFile
+    rle.rs                        # RLE encode, chunk_rle_data
+    timing.rs                     # Frame rate codes, ms_to_90khz conversion
+    mod.rs                        # Re-exports
+  encoding/                       # Encoding—how domain objects serialize to binary
+    display_set.rs                # DisplaySet builder: EpochStart/NormalCase/EpochContinue/PaletteOnly
+    encoder.rs                    # PgsEncoder — frame → display set pipeline
+    sup.rs                        # SUP file writer
+    mod.rs                        # Re-exports
+  color.rs                        # Color type re-exports
+  encoder.rs                      # Legacy encoder (partial; new logic in encoding/)
+  epoch.rs                        # Legacy epoch (partial; new logic in domain/epoch.rs)
+  lib.rs                          # Crate root
+  rle.rs                          # Legacy RLE (partial)
+  types.rs                        # Legacy type aliases
+```
+
+Key architectural constraints (from project memory):
+- `MAX_OBJECT_REFS=2`: PotPlayer crashes on PCS with >2 objects — chunks(2) splits multi-object display sets
+- PotPlayer requires `palette_update=true` on all PCS; `num_objects=0` in palette_clear causes PotPlayer crash
+- Show PCS for fade events must use alpha=0 palette (via `encode_multi_object_display_set_with_alpha(Some(0))`) to prevent 1-frame full-alpha flash
+- `composition_number` increments after every `encode_frame` (wrapping_add), including NormalCase
+
+## color-quantizer architecture
+
+```
+crates/color-quantizer/src/
+  color/                          # Color science
+    space.rs                      # Color space definitions
+    transfer.rs                   # Transfer functions
+    delta_e.rs                    # Perceptual color difference
+    tonemap.rs                    # Tone mapping
+    mod.rs
+  dither/                         # Dithering methods
+    floyd_steinberg.rs            # Floyd-Steinberg error diffusion
+    ordered.rs                    # Ordered Bayer dither
+    adaptive.rs                   # Adaptive dither
+    mod.rs
+  quantize/                       # Palette generation
+    median_cut.rs                 # Median-cut palette
+    nearest.rs                    # K-D tree nearest-color lookup
+    palette.rs                    # Palette management
+    temporal.rs                   # Temporal palette reuse across frames
+    naarahara.rs                  # Nara hair a palette mapping
+    mod.rs
+  frame/                          # Frame abstraction
+    mod.rs
+    owned.rs
+    view.rs
+    iter.rs
+  pipeline.rs                     # Quantization pipeline orchestration
+  error.rs                        # Domain error types
+  lib.rs                          # Crate root
+```
+
+Key: k-d tree `find_nearest_index` accelerates palette mapping (2.57×). Temporal palette reuse reduces PDS overhead between adjacent frames.
 
 ## Surgical fix protocol
 
@@ -178,7 +273,7 @@ Run in foreground (not background) — completion reminder will deliver the resu
 ## Performance constraints
 
 - **No heap allocation in hot render paths** (glyph loop, composite, transform)
-- **PixmapPool**: reuse Pixmap buffers via pool_get/pool_put (8 cached entries)
+- **PixmapPool**: reuse Pixmap buffers via pool_get/pool_put (8 cached entries, wrapped in Mutex)
 - **AffineTransform**: SIMD (wide::f32x4) bilinear interpolation in `apply_to_pixmap`
 - **composite_over**: SIMD (wide::u32x4) Porter-Duff over for 4-pixel chunks
 - **Parallel rendering**: rayon-based `par_iter()` in `build_display_set` — each worker holds 1 frame at a time (~8.3 MB at 1080p), no intermediate `Vec<RenderedFrame>`
@@ -187,8 +282,8 @@ Run in foreground (not background) — completion reminder will deliver the resu
 
 ## Memory model
 
-- Renderer owns: `PixmapPool` (8 cached Pixmaps), `FontRegistryRenderResources` (registry + pool + font_map)
+- Renderer owns: `FontRegistryRenderResources` (registry + pool + font_map, all wrapped in `Mutex`)
 - `build_context` produces one `RenderContext` per event per timestamp
-- `render_event_font_registry` allocates one `layer: Pixmap` per event (pool_get → fill → composite → pool_put)
+- `render_event_font_registry` allocates one `layer: Pixmap` per event (pool_get → fill/outline/shadow → composite → pool_put)
 - `transform_layer` allocates output buffer (the transform is approx 1:1 or smaller)
 - Peak memory: `max_events_per_timestamp × layer_size + output_buffer`, typically < 50 MB at 1080p

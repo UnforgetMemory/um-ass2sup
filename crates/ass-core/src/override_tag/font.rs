@@ -2,6 +2,7 @@
 use super::util::strip_parens;
 use crate::OverrideTag;
 
+/// Parse font tags: \fn (font name), \fs (font size), \b (bold), \i (italic), etc.
 pub fn parse(s: &str) -> Option<OverrideTag> {
     // Font name
     if let Some(name) = s.strip_prefix("fn") {

@@ -8,6 +8,7 @@ use color_quantizer::QuantizedFrame;
 
 const MAX_DECODE_BUFFER: usize = 2 * 1024 * 1024;
 
+/// PGS/SUP subtitle encoder. Converts quantized frames into PGS display sets.
 pub struct PgsEncoder {
     pub composition_number: u16,
     pub object_id: u16,
@@ -35,6 +36,7 @@ impl PgsEncoder {
         }
     }
 
+    /// Create a new PgsEncoder with the given display dimensions and framerate.
     pub fn new(display_width: u16, display_height: u16, fps: f64) -> Self {
         Self {
             composition_number: 1,
@@ -52,6 +54,7 @@ impl PgsEncoder {
         }
     }
 
+    /// Convert milliseconds to 90 kHz PTS ticks, accounting for NTSC 1001/1000 factor.
     pub fn ms_to_90khz(&self, ms: u64) -> u64 {
         if is_ntsc_fps(self.fps) {
             (u128::from(ms) * 90000 * 1001 / 1000000) as u64
@@ -111,6 +114,7 @@ impl PgsEncoder {
         self.encode_frame_at_pts(frame, pts, duration_ms)
     }
 
+    /// Encode a quantized frame to SUP bytes (ms-based PTS).
     pub fn encode_frame_to_bytes(
         &mut self,
         frame: &QuantizedFrame,
@@ -125,6 +129,7 @@ impl PgsEncoder {
         output
     }
 
+    /// Build a PGS display set (PCS/WDS/PDS/ODS) from a quantized frame.
     pub fn build_display_set(
         &mut self,
         frame: &QuantizedFrame,

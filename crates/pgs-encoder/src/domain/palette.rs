@@ -109,6 +109,7 @@ fn rgba_to_ycbcr_cs(r: u8, g: u8, b: u8, cs: ColorSpace) -> (u8, u8, u8) {
     }
 }
 
+/// Convert RGBA color to YCbCr using BT.601 colour space.
 pub fn rgba_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
     rgba_to_ycbcr_bt601(r, g, b)
 }

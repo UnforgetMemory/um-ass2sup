@@ -9,6 +9,7 @@ use crate::renderer::font_registry_renderer::FontRegistryRenderResources;
 use parking_lot::Mutex;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+/// Errors that can occur during rendering (font, I/O, etc).
 pub enum RendererError {
     #[error("no system fonts available — install fonts or pass a font directory")]
     NoFonts,
@@ -57,6 +58,7 @@ impl PixmapPool {
     }
 }
 
+/// ASS subtitle renderer. Produces RGBA bitmaps from parsed ASS documents.
 pub struct Renderer {
     config: RenderConfig,
     pixmap_pool: Mutex<PixmapPool>,
@@ -64,6 +66,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Create a new Renderer with the given rendering configuration.
     pub fn new(config: RenderConfig) -> Self {
         Self {
             config,
@@ -72,6 +75,7 @@ impl Renderer {
         }
     }
 
+    /// Load system fonts into the font registry. Returns the number of fonts loaded.
     pub fn load_system_fonts(&self) -> usize {
         self.font_registry_render
             .lock()
@@ -80,6 +84,7 @@ impl Renderer {
             .load_system_fonts()
     }
 
+    /// Load fonts from a user-specified directory. Returns the number of fonts loaded.
     pub fn load_user_fonts_dir(&self, dir: &std::path::Path) -> usize {
         self.font_registry_render
             .lock()
@@ -88,6 +93,7 @@ impl Renderer {
             .load_user_fonts_dir(dir)
     }
 
+    /// Load a single font from raw bytes into the registry.
     pub fn load_user_font_data(
         &self,
         data: Vec<u8>,
@@ -158,6 +164,7 @@ impl Renderer {
         self.font_registry_render.lock().font_map = font_map;
     }
 
+    /// Render an ASS document at a specific timestamp into a RGBA frame.
     pub fn render_ass(&self, doc: &SubtitleDocument, timestamp_ms: u64) -> Option<RenderedFrame> {
         self.render_ass_inner(doc, timestamp_ms, &mut self.font_registry_render.lock())
     }

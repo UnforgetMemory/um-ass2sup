@@ -95,10 +95,12 @@ pub struct SupFile {
 }
 
 impl SupFile {
+    /// Create a new empty SUP file container.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Append a PGS segment to the SUP file.
     pub fn add_segment(&mut self, segment: Segment) {
         self.segments.push(segment);
     }

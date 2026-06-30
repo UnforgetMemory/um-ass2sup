@@ -2,6 +2,7 @@
 use super::util::strip_parens;
 use crate::OverrideTag;
 
+/// Parse border/shadow/blur tags: \bord, \xbord, \ybord, \shad, \be, \blur.
 pub fn parse(s: &str) -> Option<OverrideTag> {
     // Border
     if let Some(w) = s

@@ -35,11 +35,8 @@ coverage/
 *.profraw
 *.profdata
 
-# ── Repo-level build/test outputs ──────────────────────────────────
-# any .sup file anywhere
+# ── Build/test outputs ────────────────────────────────────────────
 *.sup
-# root-level .sup (test artifacts)
-/*.sup
 
 # ── Agent / planning docs (ephemeral, regenerate per phase) ───────
 phase*-plan.md
