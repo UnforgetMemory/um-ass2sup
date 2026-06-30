@@ -139,6 +139,7 @@ fn test_extract_text_empty() {
 }
 /// Run the ASS→SUP→decode→PNG→OCR pipeline for one fixture.
 /// Returns the similarity score, or -1.0 if the test should skip.
+#[cfg(feature = "native-backend")]
 fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarity: f64) -> f64 {
     use std::path::Path;
     use std::process::Command;
@@ -165,6 +166,7 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
         script_height: 1080,
         default_font: "Arial".to_string(),
         default_font_size: 48.0,
+        vsfilter_compat: false,
     };
     let renderer = Renderer::new(config);
     let quantizer = Quantizer::new(255);
@@ -304,6 +306,7 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
 
 #[test]
 #[ignore = "requires PaddleOCR and test ASS files"]
+#[cfg(feature = "native-backend")]
 fn test_ocr_roundtrip() {
     // Fixture list: (filename, description, minimum similarity threshold)
     let fixtures = [
@@ -347,13 +350,14 @@ fn test_ocr_roundtrip() {
     }
 }
 
+#[cfg(feature = "native-backend")]
 fn is_png_blank(png_data: &[u8]) -> bool {
     let decoder = png::Decoder::new(std::io::Cursor::new(png_data));
     let mut reader = match decoder.read_info() {
         Ok(r) => r,
         Err(_) => return false,
     };
-    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let mut buf = vec![0u8; reader.output_buffer_size().unwrap_or(0)];
     let info = match reader.next_frame(&mut buf) {
         Ok(i) => i,
         Err(_) => return false,
