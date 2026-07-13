@@ -1,4 +1,10 @@
-# ass2sup
+<p align="center">
+  <a href="https://github.com/UnforgetMemory/um-ass2sup">
+    <img src="https://raw.githubusercontent.com/UnforgetMemory/um-ass2sup/main/.github/logo.png" alt="ass2sup" width="100">
+  </a>
+</p>
+
+<h1 align="center">ass2sup</h1>
 
 <p align="center">
   <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg" alt="CI"></a>

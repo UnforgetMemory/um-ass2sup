@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/UnforgetMemory/um-ass2sup/main/.github/logo.png" alt="ass2sup" width="80">
+</p>
+
 # AGENTS.md · 🤖 Project Instructions for AI Coding Agents
 
 > **ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter**  

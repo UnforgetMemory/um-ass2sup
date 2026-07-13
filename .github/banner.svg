@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e94560"/>
+      <stop offset="100%" style="stop-color:#f5a623"/>
+    </linearGradient>
+    <linearGradient id="sub-accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4a90d9"/>
+      <stop offset="100%" style="stop-color:#7b68ee"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="240" rx="16" fill="url(#bg)"/>
+
+  <!-- Decorative film-strip dots (left) -->
+  <circle cx="30" cy="30" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="30" cy="60" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="30" cy="90" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="30" cy="120" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="30" cy="150" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="30" cy="180" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="30" cy="210" r="4" fill="rgba(255,255,255,0.15)"/>
+
+  <!-- Decorative film-strip dots (right) -->
+  <circle cx="770" cy="30" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="770" cy="60" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="770" cy="90" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="770" cy="120" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="770" cy="150" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="770" cy="180" r="4" fill="rgba(255,255,255,0.15)"/>
+  <circle cx="770" cy="210" r="4" fill="rgba(255,255,255,0.15)"/>
+
+  <!-- Top subtitle bar decoration -->
+  <rect x="50" y="55" width="3" height="130" rx="1.5" fill="url(#accent)"/>
+
+  <!-- Project name -->
+  <text x="70" y="120" font-family="'SF Mono','Consolas','Courier New',monospace" font-size="52" font-weight="700" fill="#ffffff" letter-spacing="4">ass2sup</text>
+
+  <!-- Subtitle -->
+  <text x="70" y="158" font-family="'SF Mono','Consolas','Courier New',monospace" font-size="16" fill="#8899aa" letter-spacing="2">
+    ASS/SSA/SRT
+    <tspan fill="url(#accent)"> → </tspan>
+    Blu-ray SUP/PGS
+  </text>
+
+  <!-- Rust badge -->
+  <rect x="70" y="175" width="90" height="24" rx="12" fill="rgba(255,255,255,0.08)"/>
+  <text x="115" y="191" font-family="system-ui,sans-serif" font-size="12" fill="#e94560" text-anchor="middle">✦ Rust</text>
+
+  <!-- Version badge -->
+  <rect x="172" y="175" width="74" height="24" rx="12" fill="rgba(255,255,255,0.08)"/>
+  <text x="209" y="191" font-family="system-ui,sans-serif" font-size="12" fill="#4a90d9" text-anchor="middle">v3.0.0</text>
+
+  <!-- Decorative film frame (right) -->
+  <rect x="560" y="55" width="170" height="130" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <rect x="570" y="65" width="150" height="110" rx="4" fill="rgba(255,255,255,0.04)"/>
+
+  <!-- Film frame inner decoration - subtitle lines -->
+  <rect x="580" y="80" width="130" height="6" rx="3" fill="rgba(255,255,255,0.12)"/>
+  <rect x="580" y="92" width="90" height="6" rx="3" fill="rgba(255,255,255,0.08)"/>
+  <rect x="580" y="108" width="130" height="6" rx="3" fill="url(#accent)"/>
+  <rect x="580" y="120" width="60" height="6" rx="3" fill="rgba(255,255,255,0.08)"/>
+
+  <!-- Film frame sprockets -->
+  <circle cx="575" cy="58" r="2" fill="rgba(255,255,255,0.2)"/>
+  <circle cx="575" cy="182" r="2" fill="rgba(255,255,255,0.2)"/>
+  <circle cx="715" cy="58" r="2" fill="rgba(255,255,255,0.2)"/>
+  <circle cx="715" cy="182" r="2" fill="rgba(255,255,255,0.2)"/>
+</svg>

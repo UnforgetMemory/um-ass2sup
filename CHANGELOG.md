@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Regression test**: `test_build_context_script_resolution_zero` — verifies `font_size` remains finite when `script_width`/`script_height` is 0.
 - **Wiki documentation**: 14-page bilingual technical wiki under `docs/` (English) and `docs/zh/` (Simplified Chinese) covering architecture, rendering backends, development guide, PGS encoder DDD design, color quantizer pipeline, and font subsystem.
 - **Test coverage report**: `docs/test-coverage.md` — per-crate assessment with test counts, fuzz/proptest/snapshot inventories, and 4 recommendations.
+- **Project logo**: `.github/logo.png` + `.github/banner.svg` for README branding, displayed in AGENTS.md / README.md / README.en.md.
+- **Security audit report**: `docs/security-audit.md` — 445-line static analysis across all 8 crates + libass standalone workspace.
 
 ### Changed
 
