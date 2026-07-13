@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/UnforgetMemory/um-ass2sup/main/.github/logo.png" alt="ass2sup" width="80">
+  <img src=".github/banner.svg" alt="ass2sup" width="320">
 </p>
 
 # AGENTS.md · 🤖 Project Instructions for AI Coding Agents
