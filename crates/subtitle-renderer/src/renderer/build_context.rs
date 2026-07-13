@@ -56,12 +56,16 @@ pub fn build_context(
     ctx.strikeout = style.strikeout;
     ctx.rotation = style.angle as f32;
 
-    let scale_x = config.width as f32 / config.script_width as f32;
-    let scale_y = config.height as f32 / config.script_height as f32;
+    // Guard against ASS files with no PlayRes (play_res_x/y = 0).
+    // Division by zero would produce inf, causing invisible rendering.
+    let sw = config.script_width.max(1);
+    let sh = config.script_height.max(1);
+    let scale_x = config.width as f32 / sw as f32;
+    let scale_y = config.height as f32 / sh as f32;
     ctx.margin_l *= scale_x;
     ctx.margin_r *= scale_x;
     ctx.margin_v *= scale_y;
-    ctx.font_size = ctx.font_size * config.height as f32 / config.script_height as f32;
+    ctx.font_size = ctx.font_size * config.height as f32 / sh as f32;
     if config.vsfilter_compat {
         // Experimental: scale font_size by ~0.764× to match GDI/VSFilter
         // advance widths (GetTextExtentPoint32W). Derived from comparing

@@ -1,6 +1,47 @@
-# AGENTS.md
+# AGENTS.md · 🤖 Project Instructions for AI Coding Agents
 
-## Project
+> **ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter**  
+> Rust workspace · **8 crates** · **v3.0.0** · **Two rendering backends**
+
+<p align="center">
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg" alt="Audit"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg" alt="Rust 1.85+">
+  <img src="https://img.shields.io/badge/version-3.0.0-blue.svg" alt="v3.0.0">
+</p>
+
+---
+
+## 📋 Table of Contents
+
+| § | Section | 章节 |
+|---|---------|------|
+| 1 | [🚀 Project Overview](#-project-overview) | 项目概览 |
+| 2 | [🏗️ Build Modes](#️-build-modes) | 构建模式 |
+| 3 | [📦 Workspace Layout](#-workspace-layout) | 工作区结构 |
+| 4 | [⚙️ Rendering Stack (native-backend)](#️-rendering-stack-native-backend) | 渲染堆栈 |
+| 5 | [🔤 Font Pipeline](#-font-pipeline) | 字体管线 |
+| 6 | [📡 System Dependencies](#-system-dependencies) | 系统依赖 |
+| 7 | [🔧 Build & Verify Commands](#-build--verify-commands) | 构建与验证 |
+| 8 | [🎯 Quality Gates](#-quality-gates) | 质量门禁 |
+| 9 | [🧪 Testing](#-testing) | 测试体系 |
+| 10 | [🔄 CI Workflows](#-ci-workflows) | CI 工作流 |
+| 11 | [📐 Style Conventions](#-style-conventions) | 代码规范 |
+| 12 | [📁 Font Subsystem (v3, swash-native)](#-font-subsystem-v3-swash-native) | 字体子系统 |
+| 13 | [🧩 pgs-encoder Architecture (DDD)](#-pgs-encoder-architecture-ddd) | PGS 编码器架构 |
+| 14 | [🎨 color-quantizer Architecture](#-color-quantizer-architecture) | 色彩量化器架构 |
+| 15 | [🏥 Surgical Fix Protocol](#-surgical-fix-protocol) | 精准修复协议 |
+| 16 | [📎 Post-fix Verification Artifacts](#-post-fix-verification-artifacts) | 修复后验证 |
+| 17 | [⚡ Performance Constraints](#-performance-constraints) | 性能约束 |
+| 18 | [🧠 Memory Model](#-memory-model) | 内存模型 |
+
+---
+
+## 🚀 Project Overview
+
+> 项目概览
 
 ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter. Rust workspace, **8 crates**, v3.0.0.
 **Two rendering backends**, selectable at build time via Cargo features:
@@ -8,7 +49,12 @@ ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter. Rust workspace, **8 crates**
 - **`native-backend`** (default): self-built `FontRegistry` + `SimpleShaper` + `GlyphRasterizer` on swash — zero external font/shaper deps
 - **`libass-backend`**: libass C library via FFI — delegates shaping/rasterization to libass
 
-Build modes:
+---
+
+## 🏗️ Build Modes
+
+> 构建模式
+
 ```bash
 # Default (native only)
 cargo build --release
@@ -20,7 +66,11 @@ cargo build --release --no-default-features -F libass-backend
 cargo build --release --no-default-features -F native-backend,libass-backend
 ```
 
-## Workspace layout
+---
+
+## 📦 Workspace Layout
+
+> 工作区结构
 
 ```
 crates/
@@ -37,7 +87,9 @@ crates/
 
 Also at repo root: `ass2sup-libass/` — separate parallel workspace for libass-only builds (not part of main workspace).
 
-### Crate dependency details
+### Crate Dependency Details
+
+> 依赖详情
 
 | Crate | Key deps | Doc lint |
 |---|---|---|
@@ -51,7 +103,11 @@ Also at repo root: `ass2sup-libass/` — separate parallel workspace for libass-
 | `bdn-xml` | quick-xml, png | — |
 | `ass2sup-cli` | clap, rayon, indicatif, glob, walkdir, serde, strsim | `#![warn(missing_docs)]` |
 
-## Rendering stack (native-backend — NO fontdb / NO cosmic-text / NO rustybuzz)
+---
+
+## ⚙️ Rendering Stack (native-backend)
+
+> 渲染堆栈 — NO fontdb / NO cosmic-text / NO rustybuzz
 
 ```
 Trace: ass-core parse → RenderContext (build_context) → shape_horizontal/vertical (SimpleShaper/swash)
@@ -59,7 +115,12 @@ Trace: ass-core parse → RenderContext (build_context) → shape_horizontal/ver
   → transform_layer (AffineTransform for scale/rotate/shear/perspective) → composite_subregion
 ```
 
-Font pipeline:
+---
+
+## 🔤 Font Pipeline
+
+> 字体管线
+
 ```
 shape:    SimpleShaper::shape(text, font_data, font_size) → Vec<ShapedGlyph>
           Maps chars→glyph_id via swash FontRef.charmap(), records advance width
@@ -70,7 +131,11 @@ rasterize: GlyphRasterizer::rasterize(font_data, glyph_id, font_size) → Raster
 composite: composite_glyph(layer, rasterized, x, y, color) — Porter-Duff over per pixel
 ```
 
-## System dependency
+---
+
+## 📡 System Dependencies
+
+> 系统依赖
 
 Linux requires `libfontconfig1-dev` and `fonts-dejavu-core` for native-backend tests:
 
@@ -89,7 +154,11 @@ sudo apt-get install libass9
 brew install libass
 ```
 
-## Build & verify commands
+---
+
+## 🔧 Build & Verify Commands
+
+> 构建与验证 (CI order)
 
 ```bash
 # Full verification (CI order)
@@ -106,7 +175,9 @@ cargo build --release
 
 There is no Makefile or task runner. Run commands directly.
 
-## Single crate work
+### Single Crate Work
+
+> 单 crate 操作
 
 ```bash
 cargo test -p ass-core
@@ -115,7 +186,11 @@ cargo clippy -p color-quantizer --all-targets -- -D warnings
 cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 ```
 
-## Quality gates
+---
+
+## 🎯 Quality Gates
+
+> 质量门禁
 
 - **MSRV**: Rust 1.85 (enforced in CI, `Cargo.toml` `rust-version`)
 - **Edition**: 2021
@@ -126,7 +201,11 @@ cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 - **cargo-deny**: `deny.toml` enforces license whitelist, no unknown registries/git sources
 - **cargo-audit**: weekly + push/PR, `--deny warnings`, known advisory `RUSTSEC-2025-0119` ignored
 
-## Testing
+---
+
+## 🧪 Testing
+
+> 测试体系
 
 - **700+ unit/integration tests** across workspace (all pass: 700+ ok, 2 ignored)
 - **proptest** in: ass-core, color-quantizer, pgs-encoder, bdn-xml
@@ -135,13 +214,21 @@ cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 - **benches**: `cargo bench --workspace` (criterion, html_reports)
 - **Examples**: `cargo run --release --example parse_ass -p ass-core` (and similar for color-quantizer, pgs-encoder)
 
-## CI workflows
+---
+
+## 🔄 CI Workflows
+
+> CI 工作流
 
 - `ci.yml`: 4 jobs — check (rustfmt) → clippy → test (+ bench compile) → MSRV 1.85 (on push/PR to master)
 - `audit.yml`: cargo-audit + cargo-deny (weekly Monday 06:00 UTC + push/PR)
 - `release.yml`: cross-platform build matrix (Linux x86_64/aarch64, macOS ARM, Windows) + dry-run publish + GitHub Release on tag push
 
-## Style conventions
+---
+
+## 📐 Style Conventions
+
+> 代码规范
 
 - License: Apache-2.0
 - Workspace dependencies managed in root `Cargo.toml` `[workspace.dependencies]`
@@ -149,7 +236,11 @@ cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 - No `unwrap()`/`expect()` outside tests and CLI main
 - `#[expect(clippy::*)]` over `#[allow(clippy::*)]` with justification
 
-## Font subsystem (v3, swash-native)
+---
+
+## 📁 Font Subsystem (v3, swash-native)
+
+> 字体子系统
 
 ```
 crates/subtitle-renderer/src/font/
@@ -166,7 +257,11 @@ crates/subtitle-renderer/src/font/
 
 Cross-platform font fallback: 8-level chain (exact match → suffix-strip → alias → hardcoded CJK → cross-platform CJK scan → generic → SansSerif → any).
 
-## pgs-encoder architecture (DDD, Wave 1 completed)
+---
+
+## 🧩 pgs-encoder Architecture (DDD, Wave 1 completed)
+
+> PGS 编码器架构 — 领域驱动设计
 
 ```
 crates/pgs-encoder/src/
@@ -191,13 +286,20 @@ crates/pgs-encoder/src/
   types.rs                        # Legacy type aliases
 ```
 
-Key architectural constraints (from project memory):
+### Key Architectural Constraints (from project memory)
+
+> 关键架构约束
+
 - `MAX_OBJECT_REFS=2`: PotPlayer crashes on PCS with >2 objects — chunks(2) splits multi-object display sets
 - PotPlayer requires `palette_update=true` on all PCS; `num_objects=0` in palette_clear causes PotPlayer crash
 - Show PCS for fade events must use alpha=0 palette (via `encode_multi_object_display_set_with_alpha(Some(0))`) to prevent 1-frame full-alpha flash
 - `composition_number` increments after every `encode_frame` (wrapping_add), including NormalCase
 
-## color-quantizer architecture
+---
+
+## 🎨 color-quantizer Architecture
+
+> 色彩量化器架构
 
 ```
 crates/color-quantizer/src/
@@ -229,11 +331,13 @@ crates/color-quantizer/src/
   lib.rs                          # Crate root
 ```
 
-Key: k-d tree `find_nearest_index` accelerates palette mapping (2.57×). Temporal palette reuse reduces PDS overhead between adjacent frames.
+**Key**: k-d tree `find_nearest_index` accelerates palette mapping (2.57×). Temporal palette reuse reduces PDS overhead between adjacent frames.
 
-## Surgical fix protocol
+---
 
-Every non-trivial fix MUST follow:
+## 🏥 Surgical Fix Protocol
+
+> 精准修复协议 — 每个非平凡修复必须遵循
 
 ```
 1. FULL-CHAIN INVESTIGATION
@@ -251,7 +355,11 @@ Every non-trivial fix MUST follow:
    - Generate .output/ artifacts from .localref/ for end-to-end verification
 ```
 
-## Post-fix verification artifacts
+---
+
+## 📎 Post-fix Verification Artifacts
+
+> 修复后验证产出
 
 After every completed fix:
 
@@ -267,10 +375,16 @@ done
 ```
 
 Only run when `.localref/` contains `.ass` files and after a fix that affects rendering output.
+
 Output naming: `{original-name}-{YYYYMMDD-HHMMSS}.sup` + `{original-name}-{YYYYMMDD-HHMMSS}/` (BDN XML + PNG seq).
+
 Run in foreground (not background) — completion reminder will deliver the result.
 
-## Performance constraints
+---
+
+## ⚡ Performance Constraints
+
+> 性能约束
 
 - **No heap allocation in hot render paths** (glyph loop, composite, transform)
 - **PixmapPool**: reuse Pixmap buffers via pool_get/pool_put (8 cached entries, wrapped in Mutex)
@@ -280,7 +394,11 @@ Run in foreground (not background) — completion reminder will deliver the resu
 - **Small palette dedup**: `HashSet<u32>` in quantizer, O(n²) → O(n)
 - **k-d tree quantizer**: `find_nearest_index` for palette mapping acceleration (2.57×)
 
-## Memory model
+---
+
+## 🧠 Memory Model
+
+> 内存模型
 
 - Renderer owns: `FontRegistryRenderResources` (registry + pool + font_map, all wrapped in `Mutex`)
 - `build_context` produces one `RenderContext` per event per timestamp

@@ -1,44 +1,57 @@
-# ass2sup
+<p align="center">
+  <img src="https://raw.githubusercontent.com/UnforgetMemory/um-ass2sup/main/.github/banner.svg" alt="ass2sup" width="400" style="display: none;">
+</p>
 
-[![CI](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml)
-[![Audit](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml)
-[![Release](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
-[![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
+<h1 align="center">ass2sup</h1>
 
-[English](README.en.md) | **简体中文**
+<p align="center">
+  <b>ASS / SSA / SRT → Blu-ray SUP / PGS 字幕转换器</b><br>
+  <sub>附带 BDN XML 蓝光母版输出 · Rust 实现 · v3.0.0</sub>
+</p>
 
-> Rust 编写的 ASS/SSA/SRT → Blu-ray SUP/PGS 字幕转换器，附带 BDN XML 母版输出。
+<p align="center">
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg" alt="Audit"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+  <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg" alt="Rust 1.85+"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/releases"><img src="https://img.shields.io/badge/version-3.0.0-blue.svg" alt="Version"></a>
+</p>
 
----
-
-## 目录
-
-- [是什么](#是什么)
-- [双渲染后端](#双渲染后端)
-- [核心特性](#核心特性)
-- [快速开始](#快速开始)
-- [架构总览](#架构总览)
-- [工作区结构](#工作区结构)
-- [安装](#安装)
-- [使用方式](#使用方式)
-- [命令行选项](#命令行选项)
-- [作为 Rust 库使用](#作为-rust-库使用)
-- [性能与基准](#性能与基准)
-- [测试与质量](#测试与质量)
-- [安全](#安全)
-- [贡献](#贡献)
-- [许可证](#许可证)
-- [致谢](#致谢)
+<p align="center">
+  <a href="README.en.md">English</a> · <b>简体中文</b>
+</p>
 
 ---
 
-## 是什么
+## 📋 目录
+
+- [🚀 项目介绍](#-项目介绍)
+- [🔬 与传统工具链的差异](#-与传统工具链的差异)
+- [🎯 双渲染后端](#-双渲染后端)
+- [⚡ 核心特性](#-核心特性)
+- [🏃 快速开始](#-快速开始)
+- [🏗️ 架构总览](#️-架构总览)
+- [📂 工作区结构](#-工作区结构)
+- [🔧 安装](#-安装)
+- [📖 使用方式](#-使用方式)
+- [📝 CLI 参考](#-cli-参考)
+- [📦 作为 Rust 库使用](#-作为-rust-库使用)
+- [📊 性能与基准](#-性能与基准)
+- [🧪 测试与质量](#-测试与质量)
+- [🛡️ 安全](#️-安全)
+- [🤝 贡献](#-贡献)
+- [📄 许可证](#-许可证)
+- [🙏 致谢](#-致谢)
+
+---
+
+## 🚀 项目介绍
 
 `ass2sup` 将开源字幕格式（ASS/SSA/SRT）转换为蓝光播放器原生支持的位图字幕流（PGS/SUP），同时支持 BDN XML 母版输出。
 
 **典型场景：**
+
 - 自制 BDMV 时替换或追加多语字幕轨
 - 批量处理整季番剧的字幕自动化流水线
 - 保留 ASS 特效（`\move`、`\fad`、`\t`、卡拉 OK）的时序精度
@@ -46,7 +59,7 @@
 
 ---
 
-## 与传统工具链的差异
+## 🔬 与传统工具链的差异
 
 ### 背景
 
@@ -81,16 +94,16 @@ ASS → AviSynth (avs2pipe) → easyavs2bdnxml/easyavs2sup → SUP
 
 ---
 
-## 双渲染后端
+## 🎯 双渲染后端
 
-`ass2sup` 提供两种渲染路径，编译时通过 Cargo features 选择：
+`ass2sup` 提供两种渲染路径，编译时通过 Cargo features 选择。
 
 ### native-backend（默认）
 
 纯 Rust 实现，零 C/C++ 依赖：
 
 ```
-swash (字形塑形 + 光栅化) → tiny-skia (位图合成)
+swash（字形塑形 + 光栅化）→ tiny-skia（位图合成）
 ```
 
 - `FontRegistry` + `SimpleShaper` + `GlyphRasterizer`，基于 swash
@@ -103,14 +116,14 @@ swash (字形塑形 + 光栅化) → tiny-skia (位图合成)
 通过 FFI 调用系统 libass（v0.17+）：
 
 ```
-libass.so (字形塑形 + 光栅化) → 量化 → PGS 编码
+libass.so（字形塑形 + 光栅化）→ 量化 → PGS 编码
 ```
 
 - 完美的 ASS 规范兼容性
 - 渲染结果与其他 libass 工具（ffmpeg、mpv、VLC）一致
 - 适合需要 ASS 精确匹配的场景
 
-### 构建
+### 构建方式
 
 ```bash
 # 默认（native 后端）
@@ -119,42 +132,46 @@ cargo build --release
 # 仅 libass 后端
 cargo build --release --no-default-features -F libass-backend
 
-# 双后端（运行时 --backend 切换）
+# 双后端（运行时通过 --backend 切换）
 cargo build --release --no-default-features -F native-backend,libass-backend
 ```
 
 ---
 
-## 核心特性
+## ⚡ 核心特性
 
 ### 输入与解析
+
 - ASS v4+、SSA v4、SubRip（`.srt`）自动识别（`SubtitleFormat::detect`）
 - 手写解析器，零外部解析依赖
 - 完整 AST，保留 Style/Dialogue/Font 全部信息
 - SRT 自检：`ass2sup in.srt --to-srt -o out.srt && diff in.srt out.srt`
 
 ### 渲染
+
 - **native-backend**：swash 字形塑形，8 级字体回退，全面 ASS 特效支持
 - **libass-backend**：libass 原生渲染，完美规范兼容
 - ASS 特效：卡拉 OK、`\move`、`\fad`/`\fade`、`\t`、3D 旋转、各向异性边框、矢量裁剪、滚动横幅
 
 ### 量化与编码
-- Median-Cut 量化，k-d 树最近色查找
-- 三种抖动：None / Floyd-Steinberg / Ordered
+
+- Median-Cut 量化，k-d 树最近色查找（加速比 2.57×）
+- 三种抖动算法：None / Floyd-Steinberg / Ordered
 - 相邻帧调色板复用，减少 PDS 开销
 - 完整 PGS 显示集（PCS/WDS/PDS/ODS），NTSC 1001/1000 因子
-- `PotPlayer MAX_OBJECT_REFS=2` 兼容：chunks(2) 自动拆分多对象显示集
-- 淡入淡出 PDS-only 优化（无 ODS 重绘）
+- PotPlayer `MAX_OBJECT_REFS=2` 兼容：chunks(2) 自动拆分多对象显示集
+- 淡入淡出 PDS-only 优化（无需 ODS 重绘）
 - 并行量化（rayon，opt-in）
 
 ### 输出
+
 - SUP（`.sup`）：蓝光原盘字幕流
 - BDN XML + PNG：蓝光母版 XML 描述符
 - SRT 降级：ASS → SRT 调试输出
 
 ---
 
-## 快速开始
+## 🏃 快速开始
 
 ```bash
 # 单文件转换
@@ -169,7 +186,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 
 ---
 
-## 架构总览
+## 🏗️ 架构总览
 
 ```
             ┌────────────┐
@@ -215,7 +232,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 
 ---
 
-## 工作区结构
+## 📂 工作区结构
 
 ### 主要工作区（8 crates）
 
@@ -237,7 +254,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 
 ---
 
-## 安装
+## 🔧 安装
 
 ### 前置依赖
 
@@ -254,7 +271,7 @@ cd um-ass2sup
 cargo build --release
 ```
 
-产物：`target/release/ass2sup`。
+产物位于 `target/release/ass2sup`。
 
 ### 安装到 `$PATH`
 
@@ -264,7 +281,7 @@ cargo install --path crates/ass2sup-cli --locked
 
 ---
 
-## 使用方式
+## 📖 使用方式
 
 ### 单文件转换
 
@@ -325,15 +342,15 @@ ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 
 ---
 
-## 命令行选项
+## 📝 CLI 参考
 
-| 选项 | 说明 | 默认 |
+| 选项 | 说明 | 默认值 |
 |---|---|---|
 | `-o, --output <OUTPUT>` | 输出 SUP 路径（单文件） | — |
 | `-d, --output-dir <DIR>` | 输出目录（批量） | — |
 | `-r, --resolution <WxH>` | 显示分辨率 | `1920x1080` |
 | `-f, --fps <FLOAT>` | 帧率 | `23.976` |
-| `--backend <BACKEND>` | 渲染后端（双后端构建时）`native` / `libass` | `native` |
+| `--backend <BACKEND>` | 渲染后端 `native` / `libass`（双后端构建时） | `native` |
 | `--validate` | 转换前校验 | off |
 | `--overlap-warn` | 事件重叠检测 | off |
 | `--overlap-mode <MODE>` | 重叠模式 `strict` / `lenient` | `lenient` |
@@ -345,26 +362,26 @@ ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 | `--to-bdn` | 输出 BDN XML + PNG | off |
 | `--parallel-frames` | 单文件并行量化 | off |
 | `--parallel` | 批量文件并行 | off |
-| `--dry-run` | 仅校验，不写 | off |
-| `--force` | 校验失败仍转换 | off |
+| `--dry-run` | 仅校验，不写入 | off |
+| `--force` | 校验失败仍继续转换 | off |
 | `--font <NAME>` | SRT 输入默认字体 | `Arial` |
 | `--font-size <PT>` | SRT 输入默认字号 | `48.0` |
-| `--glob <PATTERN>` | 输入通配符 | — |
-| `--recursive` | `--glob` 模式递归 | off |
-| `--max-files <N>` | glob 最大文件数 | 不限 |
+| `--glob <PATTERN>` | 输入通配符模式 | — |
+| `--recursive` | `--glob` 模式下递归搜索 | off |
+| `--max-files <N>` | glob 模式最大文件数 | 不限 |
 | `--quiet` | 禁用进度条 | off |
 | `--color <MODE>` | 颜色输出 `auto` / `always` / `never` | `auto` |
-| `-v, --verbose` | 详细日志 | off |
-| `-h, --help` | 帮助 | — |
-| `-V, --version` | 版本 | — |
+| `-v, --verbose` | 详细日志输出 | off |
+| `-h, --help` | 显示帮助信息 | — |
+| `-V, --version` | 显示版本号 | — |
 
-输入文件超过 **100 MiB** 会被拒绝（`MAX_INPUT_SIZE_BYTES`），防止误传视频文件。
+> 输入文件超过 **100 MiB** 会被拒绝（`MAX_INPUT_SIZE_BYTES`），防止误传视频文件。
 
 ---
 
-## 作为 Rust 库使用
+## 📦 作为 Rust 库使用
 
-每个 crate 可独立复用。`Cargo.toml`：
+每个 crate 均可独立复用。在 `Cargo.toml` 中添加依赖：
 
 ```toml
 [dependencies]
@@ -376,14 +393,14 @@ pgs-encoder         = "2.7"
 bdn-xml             = "2.7"
 ```
 
-或 path 依赖：
+或使用 path 依赖：
 
 ```toml
 [dependencies]
 ass-core = { path = "../ass2sup/crates/ass-core" }
 ```
 
-解析 + 校验示例：
+### 解析 + 校验示例
 
 ```rust
 use ass_core::AssFile;
@@ -402,7 +419,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-更多示例：
+### 更多运行示例
 
 ```bash
 cargo run --example parse_ass       -p ass-core
@@ -412,7 +429,7 @@ cargo run --example encode_sup      -p pgs-encoder
 
 ---
 
-## 性能与基准
+## 📊 性能与基准
 
 完整数据见 [BENCHMARKS.md](BENCHMARKS.md)。代表值（Linux / Rust 1.85）：
 
@@ -431,19 +448,20 @@ cargo bench --workspace
 
 ---
 
-## 测试与质量
+## 🧪 测试与质量
 
 - **700+ 单元/集成测试**（`cargo test --workspace`，全部通过）
 - **proptest**：ass-core（解析确定性、SRT 往返、ASS 宽松恢复）、color-quantizer、pgs-encoder、bdn-xml
-- **insta 快照**：`crates/ass2sup-cli/tests/snapshots/`
+- **insta 快照测试**：`crates/ass2sup-cli/tests/snapshots/`
 - **cargo-fuzz**：ass-core（3 目标）、color-quantizer（1）、pgs-encoder（1）
 - **criterion 基准**：`cargo bench --workspace`（HTML 报告）
-- **clippy `-D warnings`** 零警告
-- **`cargo fmt --all -- --check`** 无漂移
-- **`#[expect(clippy::*)]`** 优先于 `#[allow(clippy::*)]`
+- **clippy `-D warnings`** — 零警告
+- **`cargo fmt --all -- --check`** — 无漂移
+- **`#[expect(clippy::*)]`** — 优先于 `#[allow(clippy::*)]`
+
+### 完备验证命令
 
 ```bash
-# 完备验证
 cargo check --workspace --all-targets
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
@@ -455,33 +473,33 @@ cargo doc --workspace --no-deps
 
 ---
 
-## 安全
+## 🛡️ 安全
 
-- **SECURITY.md**：漏洞上报（GitHub Security Advisories，勿开公开 issue）
-- **deny.toml**：cargo-deny（advisories / bans / licenses / sources）
-- **audit.yml**：每周一 06:00 UTC + push/PR 自动审计
+- **SECURITY.md**：漏洞上报请通过 GitHub Security Advisories，**勿**开公开 issue
+- **deny.toml**：cargo-deny 规则（advisories / bans / licenses / sources）
+- **audit.yml**：每周一 06:00 UTC + push/PR 自动安全审计
 - 已知忽略：`RUSTSEC-2025-0119`（`number_prefix` 无人维护，通过 `indicatif` 间接引入）
 
 详见 [SECURITY.md](SECURITY.md)。
 
 ---
 
-## 贡献
+## 🤝 贡献
 
-PR 和 Issue 欢迎。提交前：
+欢迎提交 PR 和 Issue。提交前请确认：
 
 - [ ] `cargo test --workspace` 全部通过
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` 零警告
 - [ ] `cargo doc --workspace --no-deps` 零缺失文档
 - [ ] `cargo fmt --all -- --check` 无漂移
-- [ ] 新公开 API 有 `///` rustdoc
+- [ ] 新公开 API 包含 `///` rustdoc
 - [ ] `CHANGELOG.md` 已更新
 
 ---
 
-## 许可证
+## 📄 许可证
 
-[`Apache-2.0`](LICENSE-APACHE)
+本项目基于 [`Apache-2.0`](LICENSE-APACHE) 许可。
 
 ```
 Copyright (c) 2024-2026 The um-ass2sup authors
@@ -491,28 +509,35 @@ Copyright (c) 2024-2026 The um-ass2sup authors
 
 ---
 
-## 致谢
+## 🙏 致谢
 
 构建于以下优秀项目之上：
 
 ### Rust 生态
-- [`swash`](https://github.com/dfrg/swash) — 字形塑形与光栅化
-- [`tiny-skia`](https://github.com/RazrFalcon/tiny-skia) — 纯 Rust Skia 位图合成
-- [`clap`](https://github.com/clap-rs/clap) — CLI 参数解析
-- [`rayon`](https://github.com/rayon-rs/rayon) — 数据并行
-- [`wide`](https://github.com/lokathor/wide) — SIMD 加速
-- [`parking_lot`](https://github.com/Amanieu/parking_lot) — 高效互斥锁
-- [`quick-xml`](https://github.com/tafia/quick-xml) — XML 序列化
-- [`png`](https://github.com/image-rs/image-png) — PNG 编码
-- [`criterion`](https://github.com/bheisler/criterion.rs) — 基准
-- [`proptest`](https://github.com/proptest-rs/proptest) — 属性测试
-- [`indicatif`](https://github.com/console-rs/indicatif) — 进度条
+
+| 项目 | 用途 |
+|---|---|
+| [`swash`](https://github.com/dfrg/swash) | 字形塑形与光栅化 |
+| [`tiny-skia`](https://github.com/RazrFalcon/tiny-skia) | 纯 Rust Skia 位图合成 |
+| [`clap`](https://github.com/clap-rs/clap) | CLI 参数解析 |
+| [`rayon`](https://github.com/rayon-rs/rayon) | 数据并行 |
+| [`wide`](https://github.com/lokathor/wide) | SIMD 加速 |
+| [`parking_lot`](https://github.com/Amanieu/parking_lot) | 高效互斥锁 |
+| [`quick-xml`](https://github.com/tafia/quick-xml) | XML 序列化 |
+| [`png`](https://github.com/image-rs/image-png) | PNG 编码 |
+| [`criterion`](https://github.com/bheisler/criterion.rs) | 性能基准 |
+| [`proptest`](https://github.com/proptest-rs/proptest) | 属性测试 |
+| [`indicatif`](https://github.com/console-rs/indicatif) | 进度条 |
 
 ### 外部库
-- [`libass`](https://github.com/libass/libass) — ASS 字幕渲染器（v0.17+，可选后端）
-- [`fontconfig`](https://www.freedesktop.org/wiki/Software/fontconfig/) — 字体发现（Linux）
+
+| 项目 | 用途 |
+|---|---|
+| [`libass`](https://github.com/libass/libass) | ASS 字幕渲染器（v0.17+，可选后端） |
+| [`fontconfig`](https://www.freedesktop.org/wiki/Software/fontconfig/) | 字体发现（Linux） |
 
 ### 蓝光标准参考
+
 - [Blu-ray Disc Read-Only Format](https://www.blu-raydisc.info/) — PGS/SUP 规范
 
 感谢所有 [贡献者](https://github.com/UnforgetMemory/um-ass2sup/graphs/contributors)。
@@ -520,5 +545,5 @@ Copyright (c) 2024-2026 The um-ass2sup authors
 ---
 
 <p align="center">
-  <sub>用 <code>cargo</code> 构建 · 跟踪于 <code>master</code></sub>
+  <sub>用 <code>cargo</code> 构建 · 基于 <code>master</code> 分支维护</sub>
 </p>

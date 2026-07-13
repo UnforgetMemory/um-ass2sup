@@ -905,3 +905,30 @@ fn test_build_context_clip_drawing_current_no_prior() {
     // Without a prior ClipDrawing, clip should not be enabled
     assert!(!ctx.clip_enabled);
 }
+
+#[test]
+fn test_build_context_script_resolution_zero() {
+    // Regression test: when script_width/script_height is 0,
+    // build_context must not produce inf font_size.
+    let config = RenderConfig {
+        width: 1920,
+        height: 1080,
+        script_width: 0,
+        script_height: 0,
+        ..Default::default()
+    };
+    let renderer = Renderer::new(config);
+    let event = default_event();
+    let style = make_style();
+    let ctx = renderer.build_context(&event, &style, &default_ass(), 2500, 0, 5000);
+    assert!(
+        ctx.font_size.is_finite(),
+        "font_size should be finite when script_width=0, script_height=0, got: {}",
+        ctx.font_size
+    );
+    assert!(
+        ctx.font_size > 0.0,
+        "font_size should be > 0 when script_width=0, got: {}",
+        ctx.font_size
+    );
+}

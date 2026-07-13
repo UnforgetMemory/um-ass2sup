@@ -29,8 +29,9 @@ pub struct ConversionConfig {
     pub dither: String,
     /// Default font family for fontconfig.
     pub default_font: Option<String>,
-    /// Additional font directory.
-    pub fonts_dir: Option<String>,
+    /// User-provided font directories — each is scanned for font files
+    /// and registered via `ass_add_font`, giving system + user two-level matching.
+    pub fonts_dirs: Vec<String>,
     /// Per-style font fallback map (style_name → fallback family).
     pub font_fallback_map: std::collections::HashMap<String, String>,
     /// Check font availability before rendering.
@@ -46,7 +47,7 @@ impl Default for ConversionConfig {
             max_colors: 255,
             dither: "floyd-steinberg".into(),
             default_font: None,
-            fonts_dir: None,
+            fonts_dirs: Vec::new(),
             font_fallback_map: std::collections::HashMap::new(),
             check_fonts: false,
         }
@@ -172,7 +173,7 @@ impl Ass2Sup {
 
         let mut renderer = AssRenderer::new(config.width, config.height)?;
         renderer.load_ass(&content)?;
-        renderer.configure_fonts(config.default_font.as_deref(), config.fonts_dir.as_deref())?;
+        renderer.configure_fonts(config.default_font.as_deref(), &config.fonts_dirs)?;
 
         let events = renderer.events();
         if events.is_empty() {

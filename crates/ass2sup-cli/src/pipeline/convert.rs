@@ -166,8 +166,8 @@ impl ConversionPipeline {
         let render_cfg = RenderConfig {
             width: config.resolution.width,
             height: config.resolution.height,
-            script_width: doc.metadata.play_res_x,
-            script_height: doc.metadata.play_res_y,
+            script_width: if doc.metadata.play_res_x > 0 { doc.metadata.play_res_x } else { config.resolution.width },
+            script_height: if doc.metadata.play_res_y > 0 { doc.metadata.play_res_y } else { config.resolution.height },
             default_font: config.font.default_font.clone(),
             default_font_size: config.font.default_font_size,
             vsfilter_compat: config.font.vsfilter_compat,
@@ -176,7 +176,11 @@ impl ConversionPipeline {
         let renderer = Renderer::new(render_cfg);
 
         let system_count = renderer.load_system_fonts();
-        debug!(system_count, "loaded system fonts");
+        info!("System fonts loaded: {system_count}");
+
+        if system_count == 0 {
+            warn!("No system fonts found — the ASS file may render empty frames. Try --font-dir to provide fonts.");
+        }
 
         for dir in &config.font.font_dirs {
             let added = renderer.load_user_fonts_dir(dir);
@@ -541,6 +545,14 @@ pub fn convert_file(
         .map_err(|e| CliError::ReadError(input.display().to_string(), e.to_string()))?;
     let doc = ConversionPipeline::parse_input(input)?;
     ConversionPipeline::validate(&doc, args)?;
+
+    info!(
+        "Resolution: {}x{} (output) / {}x{} (script coords)",
+        config.resolution.width,
+        config.resolution.height,
+        doc.metadata.play_res_x,
+        doc.metadata.play_res_y,
+    );
 
     if config.output.dry_run {
         info!("Dry run complete -- skipping render/encode");

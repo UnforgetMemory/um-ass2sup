@@ -6,7 +6,7 @@
 
 use ass_core::SubtitleDocument;
 use color_quantizer::QuantizedFrame;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::cli::args::Args;
 use crate::config::Config;
@@ -50,11 +50,30 @@ fn create_native_renderer(
     doc: &SubtitleDocument,
     config: &Config,
 ) -> Result<subtitle_renderer::Renderer, CliError> {
+    let sw = if doc.metadata.play_res_x > 0 {
+        doc.metadata.play_res_x
+    } else {
+        info!(
+            "Script PlayResX is 0 or missing, using output width {} as coordinate system",
+            config.resolution.width
+        );
+        config.resolution.width
+    };
+    let sh = if doc.metadata.play_res_y > 0 {
+        doc.metadata.play_res_y
+    } else {
+        info!(
+            "Script PlayResY is 0 or missing, using output height {} as coordinate system",
+            config.resolution.height
+        );
+        config.resolution.height
+    };
+
     let render_cfg = subtitle_renderer::RenderConfig {
         width: config.resolution.width,
         height: config.resolution.height,
-        script_width: doc.metadata.play_res_x,
-        script_height: doc.metadata.play_res_y,
+        script_width: sw,
+        script_height: sh,
         default_font: config.font.default_font.clone(),
         default_font_size: config.font.default_font_size,
         vsfilter_compat: config.font.vsfilter_compat,
@@ -63,7 +82,7 @@ fn create_native_renderer(
     let renderer = subtitle_renderer::Renderer::new(render_cfg);
 
     let system_count = renderer.load_system_fonts();
-    debug!(system_count, "loaded system fonts");
+    info!("System fonts loaded: {system_count}");
 
     for dir in &config.font.font_dirs {
         let added = renderer.load_user_fonts_dir(dir);

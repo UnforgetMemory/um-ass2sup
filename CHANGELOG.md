@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`libass-sys`: `ass_add_font` FFI binding** — registers fonts from raw binary data (TTF/OTF/TTC) into libass's font cache before `ass_set_fonts`, enabling true system + user two-level font matching.
+- **`subtitle-renderer-libass`: Platform-specific font directory scanning** — automatically scans standard font paths per platform (Windows: `C:\Windows\Fonts` + `%LOCALAPPDATA%`, Linux: `/usr/share/fonts` + `~/.fonts`, macOS: system/library/user Fonts directories). All found fonts are registered via `ass_add_font` before provider init.
+- **`subtitle-renderer-libass`: Multi-directory font support** — `fonts_dir` → `fonts_dirs` (`Vec<String>`), enabling users to specify multiple font directories.
+- **`subtitle-renderer`: Per-event font data cache** — `render_event_font_registry` caches resolved font data per event in a `HashMap`, avoiding repeated expensive fallback chain traversals for every glyph.
+- **`subtitle-renderer`: Last-resort font fallback** — when all fallback strategies fail, uses the first available font from the registry rather than returning empty data.
+- **`ass2sup-cli`: Script resolution fallback** — when `PlayResX`/`PlayResY` is 0 or missing, falls back to output resolution instead of producing `inf` font size.
+- **`ass2sup-cli`: `Resolution::from_args_or_script` unit tests** — 4 tests covering zero/override/valid/oversized script resolutions.
+- **`ass2sup-cli`: Font loading diagnostics** — logs system font count at startup; warns when 0 fonts are found.
+- **Regression test**: `test_build_context_script_resolution_zero` — verifies `font_size` remains finite when `script_width`/`script_height` is 0.
+- **Wiki documentation**: 14-page bilingual technical wiki under `docs/` (English) and `docs/zh/` (Simplified Chinese) covering architecture, rendering backends, development guide, PGS encoder DDD design, color quantizer pipeline, and font subsystem.
+- **Test coverage report**: `docs/test-coverage.md` — per-crate assessment with test counts, fuzz/proptest/snapshot inventories, and 4 recommendations.
+
+### Changed
+
+- **AGENTS.md**: Professional visual overhaul — GitHub badges, emoji-categorized bilingual sections, cleaner formatting. All 18 technical sections preserved.
+- **README.md / README.en.md**: Professional visual overhaul — centered layout, badge row, emoji table of contents, Chinese/English language toggle.
+- **`.gitignore`**: Comprehensive bilingual section headers. Added patterns for coverage instrumentation (`*gcda`/`*gcno`), benchmark artifacts (`criterion-*`), Python coverage (`htmlcov/`), Windows debug/link artifacts (`*.pdb`/`*.ilk`), lock files (`*.pid`/`*.lock`), Nix build results (`result/`), system font dir tracking (`.direnv/`), and log files.
+- **`subtitle-renderer-libass`**: `ConversionConfig.fonts_dir` (single `Option<String>`) → `fonts_dirs` (`Vec<String>`).
+- **`ass2sup-cli`**: Libass backend uses all font directories (`fonts_dirs`) instead of just the first.
+- **`ass2sup-cli`**: `debug!` → `info!` for system font count; added resolution info at conversion start.
+
+### Fixed
+
+- **`build_context`: Division by zero** — when `script_width`/`script_height` is 0 (malformed ASS missing PlayRes), `scale_x`/`scale_y` = inf caused invisible rendering. Now guarded with `.max(1)`.
+- **`create_native_renderer`: Empty PlayRes crash** — previously passed raw 0 values to `RenderConfig`, causing downstream division by zero. Now falls back to output resolution with an info log.
+
+---
+
 ## [3.0.0] - 2026-06-30
 
 ### Major

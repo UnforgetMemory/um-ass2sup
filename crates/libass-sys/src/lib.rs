@@ -321,4 +321,22 @@ extern "C" {
     ///
     /// `track` must be a valid pointer returned by [`ass_read_memory`].
     pub fn ass_flush_events(track: *mut ASS_Track);
+
+    /// Add a font from raw binary data to the library's font cache.
+    ///
+    /// The `name` parameter is a user-chosen label (not the font family name);
+    /// it is used for deduplication. `data` must be valid font data (TTF, OTF,
+    /// TTC, OTC, WOFF, WOFF2).
+    ///
+    /// # Safety
+    ///
+    /// `library` must be a valid pointer returned by [`ass_library_init`].
+    /// `name` must be a valid C string.
+    /// `data` must be valid for reads of `data_size` bytes.
+    pub fn ass_add_font(
+        library: *mut ASS_Library,
+        name: *const i8,
+        data: *const i8,
+        data_size: i32,
+    );
 }

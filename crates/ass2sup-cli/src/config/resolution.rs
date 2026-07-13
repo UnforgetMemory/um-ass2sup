@@ -68,3 +68,47 @@ impl Resolution {
         Self::default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_args_or_script_zero_script_resolution_returns_default() {
+        // When script_width/script_height is 0, must fall back to 1920x1080.
+        let user = Resolution::default(); // no explicit -r flag
+        let result = Resolution::from_args_or_script(&user, 0, 0);
+        assert_eq!(result.width, 1920);
+        assert_eq!(result.height, 1080);
+    }
+
+    #[test]
+    fn from_args_or_script_user_override_used() {
+        // When user explicitly passes -r, the custom resolution takes precedence.
+        let user = Resolution {
+            width: 1280,
+            height: 720,
+        };
+        let result = Resolution::from_args_or_script(&user, 0, 0);
+        assert_eq!(result.width, 1280);
+        assert_eq!(result.height, 720);
+    }
+
+    #[test]
+    fn from_args_or_script_valid_script_resolution_used() {
+        // When script_width/height are valid, they should be used.
+        let user = Resolution::default();
+        let result = Resolution::from_args_or_script(&user, 1280, 720);
+        assert_eq!(result.width, 1280);
+        assert_eq!(result.height, 720);
+    }
+
+    #[test]
+    fn from_args_or_script_oversized_script_falls_back() {
+        // Script resolutions exceeding 8K should fall back to 1920x1080.
+        let user = Resolution::default();
+        let result = Resolution::from_args_or_script(&user, 10000, 5000);
+        assert_eq!(result.width, 1920);
+        assert_eq!(result.height, 1080);
+    }
+}

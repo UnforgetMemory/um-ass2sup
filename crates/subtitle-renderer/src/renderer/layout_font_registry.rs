@@ -310,6 +310,25 @@ fn resolve_font_data(
         }
     }
 
+    let families = registry.list_families();
+    for fallback_family in &families {
+        let q = FontQuery {
+            family: fallback_family.clone(),
+            weight: FontWeight::Normal,
+            style: FontStyle::Normal,
+        };
+        if let Some(id) = registry.query(&q).found {
+            if let Some(data) = registry.get_font_data(id) {
+                tracing::warn!(
+                    requested = %family,
+                    fallback = %fallback_family,
+                    "font not found, using first available font as last resort"
+                );
+                return data.to_vec();
+            }
+        }
+    }
+
     tracing::warn!(family = %family, style = %style_name, "font not found after all fallbacks");
     Vec::new()
 }

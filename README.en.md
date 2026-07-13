@@ -1,40 +1,45 @@
 # ass2sup
 
-[![CI](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml)
-[![Audit](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml)
-[![Release](https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
-[![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/UnforgetMemory/um-ass2sup/releases)
+<p align="center">
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg" alt="Audit"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/releases"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+  <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg" alt="Rust 1.85+"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/releases"><img src="https://img.shields.io/badge/version-3.0.0-blue.svg" alt="Version"></a>
+</p>
 
-**[简体中文](README.md) | English**
+<p align="center">
+  [**简体中文**](README.md) | <strong>English</strong>
+</p>
 
 > A Rust subtitle converter that transforms **ASS / SSA / SRT** into Blu-ray **SUP / PGS** bitmap subtitle streams, with **BDN XML** mastering output.
 
 ---
 
-## Table of Contents
+## 📋 Table of Contents
 
-- [Overview](#overview)
-- [Dual Rendering Backends](#dual-rendering-backends)
-- [Highlights](#highlights)
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [Workspace Layout](#workspace-layout)
-- [Installation](#installation)
-- [Usage](#usage)
-- [CLI Reference](#cli-reference)
-- [Library Usage](#library-usage)
-- [Performance & Benchmarks](#performance--benchmarks)
-- [Testing & Quality](#testing--quality)
-- [Security](#security)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
+- [🚀 Overview](#-overview)
+- [🏗️ Differences from Traditional Toolchains](#%EF%B8%8F-differences-from-traditional-toolchains)
+- [🎯 Dual Rendering Backends](#-dual-rendering-backends)
+- [⚡ Highlights](#-highlights)
+- [📦 Quick Start](#-quick-start)
+- [🏛️ Architecture](#%EF%B8%8F-architecture)
+- [📁 Workspace Layout](#-workspace-layout)
+- [🔧 Installation](#-installation)
+- [💻 Usage](#-usage)
+- [📖 CLI Reference](#-cli-reference)
+- [📚 Library Usage](#-library-usage)
+- [📊 Performance & Benchmarks](#-performance--benchmarks)
+- [🧪 Testing & Quality](#-testing--quality)
+- [🔒 Security](#-security)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+- [🙏 Acknowledgments](#-acknowledgments)
 
 ---
 
-## Overview
+## 🚀 Overview
 
 `ass2sup` converts open subtitle formats (ASS/SSA/SRT) into PGS/SUP bitmap subtitle streams natively supported by Blu-ray players, with BDN XML mastering as a secondary output.
 
@@ -46,7 +51,7 @@
 
 ---
 
-## Differences from Traditional Toolchains
+## 🏗️ Differences from Traditional Toolchains
 
 ### Background
 
@@ -81,7 +86,7 @@ These tools rely on **libass** (via a VSFilter compatibility layer) for subtitle
 
 ---
 
-## Dual Rendering Backends
+## 🎯 Dual Rendering Backends
 
 `ass2sup` offers two rendering paths, selected at compile time via Cargo features:
 
@@ -125,7 +130,7 @@ cargo build --release --no-default-features -F native-backend,libass-backend
 
 ---
 
-## Highlights
+## ⚡ Highlights
 
 ### Input & Parsing
 - ASS v4+, SSA v4, SubRip (`.srt`) auto-detection via `SubtitleFormat::detect`
@@ -154,7 +159,7 @@ cargo build --release --no-default-features -F native-backend,libass-backend
 
 ---
 
-## Quick Start
+## 📦 Quick Start
 
 ```bash
 # Single file
@@ -169,7 +174,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 
 ---
 
-## Architecture
+## 🏛️ Architecture
 
 ```
             ┌────────────┐
@@ -215,7 +220,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 
 ---
 
-## Workspace Layout
+## 📁 Workspace Layout
 
 ### Main workspace (8 crates)
 
@@ -237,7 +242,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 
 ---
 
-## Installation
+## 🔧 Installation
 
 ### Prerequisites
 
@@ -264,7 +269,7 @@ cargo install --path crates/ass2sup-cli --locked
 
 ---
 
-## Usage
+## 💻 Usage
 
 ### Single file
 
@@ -325,7 +330,7 @@ ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 
 ---
 
-## CLI Reference
+## 📖 CLI Reference
 
 | Option | Description | Default |
 |---|---|---|
@@ -362,7 +367,7 @@ Input files exceeding **100 MiB** are rejected (`MAX_INPUT_SIZE_BYTES`) to preve
 
 ---
 
-## Library Usage
+## 📚 Library Usage
 
 Each crate is independently reusable. `Cargo.toml`:
 
@@ -412,7 +417,7 @@ cargo run --example encode_sup      -p pgs-encoder
 
 ---
 
-## Performance & Benchmarks
+## 📊 Performance & Benchmarks
 
 Full data in [BENCHMARKS.md](BENCHMARKS.md). Representative values (Linux / Rust 1.85):
 
@@ -431,7 +436,7 @@ cargo bench --workspace
 
 ---
 
-## Testing & Quality
+## 🧪 Testing & Quality
 
 - **700+ unit/integration tests** (`cargo test --workspace`, all passing)
 - **proptest**: ass-core (parse determinism, SRT roundtrip, ASS lenient recovery), color-quantizer, pgs-encoder, bdn-xml
@@ -455,7 +460,7 @@ cargo doc --workspace --no-deps
 
 ---
 
-## Security
+## 🔒 Security
 
 - **SECURITY.md**: vulnerability reporting (GitHub Security Advisories — **not** public issues)
 - **deny.toml**: cargo-deny (advisories / bans / licenses / sources)
@@ -466,7 +471,7 @@ See [SECURITY.md](SECURITY.md).
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 PRs and issues welcome. Before submitting:
 
@@ -479,7 +484,7 @@ PRs and issues welcome. Before submitting:
 
 ---
 
-## License
+## 📄 License
 
 [`Apache-2.0`](LICENSE-APACHE)
 
@@ -491,7 +496,7 @@ See `LICENSE-APACHE` for full terms.
 
 ---
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 Built on the shoulders of:
 

@@ -1,4 +1,4 @@
-# ── Rust build artifacts ────────────────────────────────────────────
+# ── Rust build artifacts / Rust 构建产物 ──────────────────────────
 target/
 **/target/
 
@@ -6,7 +6,7 @@ target/
 # resolved automatically; not part of workspace lockfile)
 crates/*/fuzz/Cargo.lock
 
-# ── Generated / machine-local indexes ───────────────────────────────
+# ── Generated / machine-local indexes / 生成索引 / 本地状态 ──────
 # CodeGraph MCP AST index (per-machine)
 .codegraph/
 # OhMyOpenCode agent state
@@ -14,7 +14,7 @@ crates/*/fuzz/Cargo.lock
 # OhMyOpenCode planning dir
 .omo/
 
-# ── Test framework artifacts ───────────────────────────────────────
+# ── Test framework artifacts / 测试框架产物 ───────────────────────
 # proptest crash/regression storage
 **/proptest-regressions/
 # proptest regression files (individual)
@@ -24,28 +24,41 @@ crates/*/fuzz/Cargo.lock
 # (also covered by target/ above, kept for clarity)
 **/fuzz/target/
 
-# ── Dev scripts (temp validation, not distribution) ──────────────────
+# ── Dev scripts (temp validation, not distribution) ──────────────
 scripts/*.py
 
-# ── Generated validation reports ───────────────────────────────────
+# ── Generated validation reports / 生成的验证报告 ────────────────
 docs/sup-validation-report.md
 
-# ── Coverage reports (regenerable) ────────────────────────────────
+# ── Coverage reports / 覆盖率报告 ────────────────────────────────
 coverage/
 *.profraw
 *.profdata
+# Code coverage instrumentation data (gcov)
+**/*.gcda
+**/*.gcno
+# Python coverage reports
+htmlcov/
+.coverage/
+coverage.xml
 
-# ── Build/test outputs ────────────────────────────────────────────
+# ── Build/test outputs / 构建测试产物 ────────────────────────────
 *.sup
 
-# ── Agent / planning docs (ephemeral, regenerate per phase) ───────
+# ── Agent / planning docs (ephemeral) / 规划文档 ─────────────────
 phase*-plan.md
 phase*-spec.md
 phase*-spec.html
 ass2sup-spec.html
 easyavs2bdnxml-analysis-report.html
 
-# ── Editor / IDE state ─────────────────────────────────────────────
+# ── Benchmark artifacts / 基准测试产物 ───────────────────────────
+criterion-*/
+.bench_coverage/
+.perf_test/
+.metrics/
+
+# ── Editor / IDE state / 编辑器 / IDE 状态 ───────────────────────
 .idea/
 .vscode/
 *.swp
@@ -58,41 +71,72 @@ easyavs2bdnxml-analysis-report.html
 .\#*
 *.bak
 
-# ── Patch / merge artifacts ───────────────────────────────────────
+# ── Patch / merge artifacts / 补丁 / 合并产物 ───────────────────
 *.orig
 *.rej
 *.patch
 *.tmp
 
-# ── Environment files ──────────────────────────────────────────────
+# ── Environment files / 环境配置 ────────────────────────────────
 .env
 .env.local
-# direnv
+# direnv (env loading)
 .envrc
+.direnv/
 
-# ── OS metadata ────────────────────────────────────────────────────
+# ── OS metadata / 操作系统元数据 ──────────────────────────────────
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-# ── Python virtual environments / bytecode ─────────────────────────
+# ── Python virtual environments / bytecode / Python 虚拟环境 ─────
 .venv/
 .venv*/
 __pycache__/
 *.pyc
 *.pyo
 
-# ── Local dev config (per-machine, not shared) ─────────────────────
+# ── Local dev config (per-machine, not shared) / 本地开发配置 ─────
 .localref/
 .opencode/
 .output/
 
-# ── Cross-compilation cache (xwin) ─────────────────────────────────
+# ── Cross-compilation artifacts / 交叉编译产物 ────────────────────
+# xwin cache (Windows CRT/headers for cross-compilation)
 .xwin-cache/
 output/
 
-# ── ass2sup-libass local build files ──────────────────────────────
+# ── Windows cross-compilation output / Windows 交叉编译输出 ──────
+# Debug symbols / 调试符号
+*.pdb
+# Incremental linker files / 增量链接文件
+*.ilk
+# Export library files / 导出库
+*.exp
+# Static libraries / 静态库
+*.lib
+# MSVC debug output directories / MSVC 调试输出目录
+debug/
+release/
+
+# ── ass2sup-libass local build files / libass 本地构建 ───────────
 ass2sup-libass/links/
 
-# Performance test artifacts
-.perf_test/
+# ── CI pre-built library files (downloaded MSVC packages) ─────────
+links/*.dll
+links/*.lib
+links/*.exp
+*.zip
+/tmp/*
+
+# ── Log files / 日志文件 ─────────────────────────────────────────
+*.log
+
+# ── Process / lock files / 进程 / 锁文件 ─────────────────────────
+*.pid
+# Generic lock files (not Cargo.lock — that is tracked) / 通用锁文件
+*.lock
+
+# ── Nix build results / Nix 构建结果 ─────────────────────────────
+result/
+result-*

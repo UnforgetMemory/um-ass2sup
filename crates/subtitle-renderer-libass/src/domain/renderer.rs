@@ -86,30 +86,120 @@ impl AssRenderer {
 
     /// Configure font lookup.
     ///
-    /// Uses fontconfig on Linux (ASS_FONTPROVIDER_FONTCONFIG=3).
-    /// If `default_family` is `None`, libass uses its own fallback.
-    /// If `fonts_dir` is `Some`, sets an additional fonts directory.
+    /// Font provider selection uses `ASS_FONTPROVIDER_AUTODETECT=0` so that libass
+    /// picks the platform-native provider (DirectWrite on Windows, fontconfig on
+    /// Linux, CoreText on macOS).
+    ///
+    /// System font directories are scanned automatically based on the platform:
+    ///
+    /// - **Windows**: `C:\Windows\Fonts` and `%LOCALAPPDATA%\Microsoft\Windows\Fonts`
+    /// - **Linux**: `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts`, `~/.fonts`
+    /// - **macOS**: `/System/Library/Fonts`, `/Library/Fonts`, `~/Library/Fonts`
+    ///
+    /// In addition, all `font_dirs` provided by the user are scanned. Every font
+    /// file (`.ttf`, `.otf`, `.ttc`, `.otc`, `.woff`, `.woff2`) found in any of
+    /// these directories is registered with libass via [`ass_add_font`] **before**
+    /// [`ass_set_fonts`] is called, so they are available to every font provider.
+    /// This gives true system + user two-level font matching, regardless of the
+    /// font provider in use.
+    ///
+    /// `font_dirs` — user-provided font directories. The first directory is also
+    /// passed to [`ass_set_fonts_dir`] for embedded font extraction.
     pub fn configure_fonts(
         &mut self,
         default_family: Option<&str>,
-        fonts_dir: Option<&str>,
+        font_dirs: &[String],
     ) -> Result<(), AssError> {
-        // Font directory MUST be set BEFORE ass_set_fonts
-        if let Some(dir) = fonts_dir {
-            let cdir = CString::new(dir)
-                .map_err(|_| AssError::Config("fonts_dir contains null byte".into()))?;
-            unsafe {
-                libass_sys::ass_set_fonts_dir(self.library, cdir.as_ptr());
+        // --- 0) Build list of font directories to scan ------------------------
+        let mut scan_dirs: Vec<String> = Vec::new();
+
+        #[cfg(target_os = "windows")]
+        {
+            scan_dirs.push("C:\\Windows\\Fonts".to_string());
+            if let Ok(local) = std::env::var("LOCALAPPDATA") {
+                scan_dirs.push(format!("{}\\Microsoft\\Windows\\Fonts", local));
             }
-        } else {
-            // Fallback: set the user font dir so fontconfig finds CJK fonts
-            static USER_FONTS: &str = "/home/um/.local/share/fonts";
-            if let Ok(cdir) = CString::new(USER_FONTS) {
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            scan_dirs.push("/usr/share/fonts".to_string());
+            scan_dirs.push("/usr/local/share/fonts".to_string());
+            if let Ok(home) = std::env::var("HOME") {
+                scan_dirs.push(format!("{}/.local/share/fonts", home));
+                scan_dirs.push(format!("{}/.fonts", home));
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            scan_dirs.push("/System/Library/Fonts".to_string());
+            scan_dirs.push("/Library/Fonts".to_string());
+            if let Ok(home) = std::env::var("HOME") {
+                scan_dirs.push(format!("{}/Library/Fonts", home));
+            }
+        }
+
+        // Add user-provided font directories
+        scan_dirs.extend(font_dirs.iter().cloned());
+
+        // --- 1) Register individual font files from all directories -----------
+        for dir_path in &scan_dirs {
+            let dir = std::path::Path::new(dir_path);
+            if !dir.is_dir() {
+                continue;
+            }
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if !path.is_file() {
+                        continue;
+                    }
+                    let ext = path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_lowercase())
+                        .unwrap_or_default();
+                    if !matches!(
+                        ext.as_str(),
+                        "ttf" | "otf" | "ttc" | "otc" | "woff" | "woff2"
+                    ) {
+                        continue;
+                    }
+                    let font_data = match std::fs::read(&path) {
+                        Ok(d) => d,
+                        Err(_) => continue,
+                    };
+                    let name = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("font")
+                        .to_string();
+                    if let Ok(cname) = CString::new(name.as_str()) {
+                        unsafe {
+                            libass_sys::ass_add_font(
+                                self.library,
+                                cname.as_ptr(),
+                                font_data.as_ptr() as *const i8,
+                                font_data.len() as i32,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 2) Set fonts_dir for embedded font extraction (first user dir) ------
+        if let Some(dir) = font_dirs.first() {
+            if let Ok(cdir) = CString::new(dir.as_str()) {
                 unsafe {
                     libass_sys::ass_set_fonts_dir(self.library, cdir.as_ptr());
                 }
             }
         }
+
+        // --- 3) Select font provider and initialize -------------------------
+        let provider: i32 = 0; // ASS_FONTPROVIDER_AUTODETECT
 
         let family_cstr = default_family.and_then(|f| CString::new(f).ok());
 
@@ -123,7 +213,7 @@ impl AssRenderer {
                 self.renderer,
                 ptr::null(),
                 family_ptr,
-                3, // ASS_FONTPROVIDER_FONTCONFIG
+                provider,
                 ptr::null(),
                 0,
             );

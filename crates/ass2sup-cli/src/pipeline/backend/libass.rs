@@ -43,11 +43,12 @@ fn build_libass_config(config: &Config) -> subtitle_renderer_libass::ConversionC
         max_colors: config.max_colors,
         dither,
         default_font: Some(config.font.default_font.clone()),
-        fonts_dir: config
+        fonts_dirs: config
             .font
             .font_dirs
-            .first()
-            .map(|p| p.to_string_lossy().to_string()),
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect(),
         font_fallback_map: HashMap::new(),
         check_fonts: false,
     }
@@ -65,7 +66,7 @@ fn process_libass(
 
     let mut renderer = AssRenderer::new(config.width, config.height)?;
     renderer.load_ass(content)?;
-    renderer.configure_fonts(config.default_font.as_deref(), config.fonts_dir.as_deref())?;
+    renderer.configure_fonts(config.default_font.as_deref(), &config.fonts_dirs)?;
 
     let events = renderer.events();
     if events.is_empty() {

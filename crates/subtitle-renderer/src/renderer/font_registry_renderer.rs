@@ -121,6 +121,11 @@ pub fn render_event_font_registry(
         return;
     }
 
+    // Per-event font data cache: font_name → raw font data (Vec<u8>).
+    // This avoids re-running the expensive fallback chain (parse_font_name,
+    // list_families() allocation, loop) for every glyph in the same event.
+    let mut font_cache: std::collections::HashMap<String, Vec<u8>> = std::collections::HashMap::new();
+
     let registry = resources.registry.lock();
     let available_width = config.width as f32 - ctx.margin_l - ctx.margin_r;
     let available_height = config.height as f32 - ctx.margin_v * 2.0;
@@ -237,13 +242,17 @@ pub fn render_event_font_registry(
             "rendering line"
         );
         for g in &sl.glyphs {
-            let font_data = resolve_glyph_font_data(
-                &registry,
-                &ctx,
-                g.glyph_id,
-                &resources.font_map,
-                event.style.as_str(),
-            );
+            let font_data = font_cache
+                .entry(ctx.font_name.clone())
+                .or_insert_with(|| {
+                    resolve_glyph_font_data(
+                        &registry,
+                        &ctx,
+                        g.glyph_id,
+                        &resources.font_map,
+                        event.style.as_str(),
+                    )
+                });
             if font_data.is_empty() {
                 tracing::warn!(
                     glyph_id = g.glyph_id,
@@ -259,7 +268,7 @@ pub fn render_event_font_registry(
                 y = sl.line_y + g.y_offset - oyf,
                 "rasterizing glyph"
             );
-            match GlyphRasterizer::rasterize(&font_data, g.glyph_id, ctx.font_size) {
+            match GlyphRasterizer::rasterize(font_data, g.glyph_id, ctx.font_size) {
                 Ok(rasterized) => {
                     tracing::debug!(
                         width = rasterized.width,
@@ -555,6 +564,25 @@ fn resolve_glyph_font_data(
         }
     }
 
+    let families = registry.list_families();
+    for fallback_family in &families {
+        let q = FontQuery {
+            family: fallback_family.clone(),
+            weight: FontWeight::Normal,
+            style: FontStyle::Normal,
+        };
+        if let Some(id) = registry.query(&q).found {
+            if let Some(data) = registry.get_font_data(id) {
+                tracing::warn!(
+                    requested = %ctx.font_name,
+                    fallback = %fallback_family,
+                    "font not found, using first available font as last resort"
+                );
+                return data.to_vec();
+            }
+        }
+    }
+
     Vec::new()
 }
 
@@ -730,4 +758,68 @@ pub fn parse_font_name(family: &str) -> Option<(String, crate::font::types::Font
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::font::registry::FontRegistry;
+    use crate::font::types::{FontQuery, FontStyle, FontWeight};
+
+    fn dejavu_path() -> &'static std::path::Path {
+        std::path::Path::new("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+    }
+
+    fn has_dejavu() -> bool {
+        dejavu_path().exists()
+    }
+
+    #[test]
+    fn font_data_cache_roundtrip() {
+        // Verify that font data loaded into the registry is retrievable
+        // via get_font_data — the cache that resolve_glyph_font_data depends on.
+        if !has_dejavu() {
+            eprintln!("SKIP: no DejaVu Sans font found");
+            return;
+        }
+        let data = std::fs::read(dejavu_path()).expect("read DejaVuSans.ttf");
+        let mut registry = FontRegistry::new();
+        let id = registry.load_user_font_data(data.clone()).expect("load font");
+
+        let cached = registry.get_font_data(id);
+        assert!(cached.is_some(), "get_font_data should return Some for loaded font");
+        assert!(!cached.unwrap().is_empty(), "cached font data should not be empty");
+    }
+
+    #[test]
+    fn font_data_cache_nonexistent_id() {
+        // get_font_data should return None for an invalid font ID.
+        let registry = FontRegistry::new();
+        let invalid_id = crate::font::types::FontId(9999);
+        let cached = registry.get_font_data(invalid_id);
+        assert!(cached.is_none(), "get_font_data should return None for non-existent ID");
+    }
+
+    #[test]
+    fn font_data_cache_exact_match_then_fallback() {
+        // Simulate the resolve_glyph_font_data cache path: load a font,
+        // query by name, then retrieve cached data via the found ID.
+        if !has_dejavu() {
+            eprintln!("SKIP: no DejaVu Sans font found");
+            return;
+        }
+        let raw_data = std::fs::read(dejavu_path()).expect("read DejaVuSans.ttf");
+        let mut registry = FontRegistry::new();
+        registry.load_user_font_data(raw_data).expect("load font");
+
+        let q = FontQuery {
+            family: "DejaVu Sans".into(),
+            weight: FontWeight::Normal,
+            style: FontStyle::Normal,
+        };
+        let result = registry.query(&q);
+        assert!(result.found.is_some(), "DejaVu Sans Normal should be found");
+
+        let cached = registry.get_font_data(result.found.unwrap());
+        assert!(cached.is_some(), "cached data for DejaVu Sans should exist");
+    }
 }
