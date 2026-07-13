@@ -8,7 +8,7 @@
 
 <p align="center">
   <b>ASS / SSA / SRT → Blu-ray SUP / PGS 字幕转换器</b><br>
-  <sub>附带 BDN XML 蓝光母版输出 · Rust 实现 · v3.0.0</sub>
+  <sub>附带 BDN XML 蓝光母版输出 · Rust 实现 · v2.7.1</sub>
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg" alt="Rust 1.85+"></a>
-  <a href="https://github.com/UnforgetMemory/um-ass2sup/releases"><img src="https://img.shields.io/badge/version-3.0.0-blue.svg" alt="Version"></a>
+  <a href="https://github.com/UnforgetMemory/um-ass2sup/releases"><img src="https://img.shields.io/badge/version-2.7.1-blue.svg" alt="Version"></a>
 </p>
 
 <p align="center">

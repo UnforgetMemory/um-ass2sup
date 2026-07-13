@@ -5,7 +5,7 @@
 # AGENTS.md · 🤖 Project Instructions for AI Coding Agents
 
 > **ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter**  
-> Rust workspace · **8 crates** · **v3.0.0** · **Two rendering backends**
+> Rust workspace · **8 crates** · **v2.7.1** · **Two rendering backends**
 
 <p align="center">
   <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -13,7 +13,7 @@
   <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg" alt="Rust 1.85+">
-  <img src="https://img.shields.io/badge/version-3.0.0-blue.svg" alt="v3.0.0">
+  <img src="https://img.shields.io/badge/version-2.7.1-blue.svg" alt="v2.7.1">
 </p>
 
 ---
@@ -47,7 +47,7 @@
 
 > 项目概览
 
-ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter. Rust workspace, **8 crates**, v3.0.0.
+ASS/SSA/SRT → Blu-ray SUP/PGS subtitle converter. Rust workspace, **8 crates**, v2.7.1.
 **Two rendering backends**, selectable at build time via Cargo features:
 
 - **`native-backend`** (default): self-built `FontRegistry` + `SimpleShaper` + `GlyphRasterizer` on swash — zero external font/shaper deps
