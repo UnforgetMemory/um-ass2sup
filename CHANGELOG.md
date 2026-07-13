@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Test coverage report**: `docs/test-coverage.md` — per-crate assessment with test counts, fuzz/proptest/snapshot inventories, and 4 recommendations.
 - **Project logo**: `.github/logo.png` + `.github/banner.svg` for README branding, displayed in AGENTS.md / README.md / README.en.md.
 - **Security audit report**: `docs/security-audit.md` — 445-line static analysis across all 8 crates + libass standalone workspace.
+- **`.gitignore` comprehensive fix**: `docs/` now gitignored (auto-generated wiki/reports); `*.sup` exempts `tests/fixtures/*.sup`; `output/` root-anchored as `/output/`.
 
 ### Changed
 

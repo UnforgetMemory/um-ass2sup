@@ -27,8 +27,11 @@ crates/*/fuzz/Cargo.lock
 # ── Dev scripts (temp validation, not distribution) ──────────────
 scripts/*.py
 
-# ── Generated validation reports / 生成的验证报告 ────────────────
-docs/sup-validation-report.md
+# ── Auto-generated documentation & reports / 自动生成文档/报告 ────
+# Wiki pages (architecture, backends, dev guide, encoder/quantizer/font docs)
+# Test coverage reports / security audit reports / planning docs
+# These are build artifacts: regenerate from source on publish
+docs/
 
 # ── Coverage reports / 覆盖率报告 ────────────────────────────────
 coverage/
@@ -43,7 +46,10 @@ htmlcov/
 coverage.xml
 
 # ── Build/test outputs / 构建测试产物 ────────────────────────────
+# Ignore generated .sup files everywhere...
 *.sup
+# ...but keep reference SUPs used by test fixtures
+!tests/fixtures/*.sup
 
 # ── Agent / planning docs (ephemeral) / 规划文档 ─────────────────
 phase*-plan.md
@@ -104,7 +110,8 @@ __pycache__/
 # ── Cross-compilation artifacts / 交叉编译产物 ────────────────────
 # xwin cache (Windows CRT/headers for cross-compilation)
 .xwin-cache/
-output/
+# Cross-compile output binaries
+/output/
 
 # ── Windows cross-compilation output / Windows 交叉编译输出 ──────
 # Debug symbols / 调试符号
