@@ -13,6 +13,8 @@ crates/*/fuzz/Cargo.lock
 .sisyphus/
 # OhMyOpenCode planning dir
 .omo/
+# cortexkit agent state (per-machine working data)
+.cortexkit/
 
 # ── Test framework artifacts / 测试框架产物 ───────────────────────
 # proptest crash/regression storage
@@ -24,14 +26,19 @@ crates/*/fuzz/Cargo.lock
 # (also covered by target/ above, kept for clarity)
 **/fuzz/target/
 
-# ── Dev scripts (temp validation, not distribution) ──────────────
+# ── Dev scripts (temp validation, not distribution) / 开发脚本 ────
+# All Python scripts in scripts/ are dev utilities, not for distribution
 scripts/*.py
+# Root-level validation scripts (standalone verification harnesses)
+/*.py
 
 # ── Auto-generated documentation & reports / 自动生成文档/报告 ────
 # Wiki pages (architecture, backends, dev guide, encoder/quantizer/font docs)
 # Test coverage reports / security audit reports / planning docs
 # These are build artifacts: regenerate from source on publish
 docs/
+# ass2sup-libass generated docs (mirrors main workspace pattern)
+ass2sup-libass/docs/
 
 # ── Coverage reports / 覆盖率报告 ────────────────────────────────
 coverage/
@@ -133,6 +140,7 @@ ass2sup-libass/links/
 links/*.dll
 links/*.lib
 links/*.exp
+links/*.so*
 *.zip
 /tmp/*
 

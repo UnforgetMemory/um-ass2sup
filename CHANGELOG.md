@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Test coverage report**: `docs/test-coverage.md` — per-crate assessment with test counts, fuzz/proptest/snapshot inventories, and 4 recommendations.
 - **Project logo**: `.github/logo.png` (256×256, from original LOGO.png) with relative path for GitHub markdown rendering.
 - **Security audit report**: `docs/security-audit.md` — 445-line static analysis across all 8 crates + libass standalone workspace.
-- **`.gitignore` comprehensive fix**: `docs/` now gitignored (auto-generated wiki/reports); `*.sup` exempts `tests/fixtures/*.sup`; `output/` root-anchored as `/output/`.
+- **`.gitignore` comprehensive overhaul**: `docs/` now gitignored (auto-generated wiki/reports); `*.sup` exempts `tests/fixtures/*.sup`; `output/` root-anchored as `/output/`; added `links/*.so*` (pre-built libass binary), `.cortexkit/` (agent state), `ass2sup-libass/docs/` (auto-generated doc), `/*.py` (root-level scripts). `git rm --cached` removed 4 tracked files.
 - **Public API doc comments**: Added concise English `///` doc comments to 35+ public items across `ass-core` (override tag sub-parsers), `pgs-encoder` (PgsEncoder, DisplaySetConfig, build_*, rgba_to_ycbcr, rle_decode, SupFile, EpochManager), and `subtitle-renderer` (Renderer, FontRegistryRenderResources, render_event_font_registry, SimpleShaper::shape).
 - **RLE round-trip tests** (`pgs-encoder/tests/test_rle_roundtrip.rs`): Proptest-based random image encode/decode round-trip + 14 edge-case tests.
 
