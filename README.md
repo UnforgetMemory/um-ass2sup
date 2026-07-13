@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/UnforgetMemory/um-ass2sup">
-    <img src=".github/logo.png" alt="ass2sup" width="200">
+    <img src=".github/logo.png" alt="ass2sup" width="300">
   </a>
 </p>
 
