@@ -95,7 +95,6 @@ jobs:
           cp README.md "$NAME/"
           cp README.en.md "$NAME/"
           cp CHANGELOG.md "$NAME/"
-          cp LICENSE-MIT "$NAME/"
           cp LICENSE-APACHE "$NAME/"
           tar -czf "${NAME}.tar.gz" "$NAME"
           shasum -a 256 "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256"
@@ -113,7 +112,6 @@ jobs:
           Copy-Item "README.md" -Destination "$NAME/"
           Copy-Item "README.en.md" -Destination "$NAME/"
           Copy-Item "CHANGELOG.md" -Destination "$NAME/"
-          Copy-Item "LICENSE-MIT" -Destination "$NAME/"
           Copy-Item "LICENSE-APACHE" -Destination "$NAME/"
           Compress-Archive -Path "$NAME/*" -DestinationPath "${NAME}.zip" -Force
           $hash = (Get-FileHash "${NAME}.zip" -Algorithm SHA256).Hash.ToLower()
