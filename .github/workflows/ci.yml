@@ -21,6 +21,8 @@ jobs:
           components: rustfmt
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev libass-dev
       - name: cargo check
         run: cargo check --workspace --all-targets
       - name: cargo fmt
@@ -35,6 +37,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev libass-dev
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -46,7 +50,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: System deps
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev fonts-dejavu-core libass9
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev fonts-dejavu-core libass-dev
       - name: cargo test
         run: cargo test --workspace --all-targets
       - name: cargo test (doc-tests)
