@@ -12,7 +12,7 @@
   <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg" alt="Audit"></a>
   <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg" alt="Rust 1.85+">
+  <img src="https://img.shields.io/badge/rust-1.89%2B-orange.svg" alt="Rust 1.89+">
   <img src="https://img.shields.io/badge/version-2.7.1-blue.svg" alt="v2.7.1">
 </p>
 
@@ -196,7 +196,7 @@ cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 
 > 质量门禁
 
-- **MSRV**: Rust 1.85 (enforced in CI, `Cargo.toml` `rust-version`)
+- **MSRV**: Rust 1.89 (enforced in CI, `Cargo.toml` `rust-version`)
 - **Edition**: 2021
 - **clippy**: `-D warnings` (zero warnings enforced across workspace)
 - **fmt**: `cargo fmt --all -- --check` (no drift allowed)
@@ -224,7 +224,7 @@ cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 
 > CI 工作流
 
-- `ci.yml`: 4 jobs — check (rustfmt) → clippy → test (+ bench compile) → MSRV 1.85 (on push/PR to master)
+- `ci.yml`: 4 jobs — check (rustfmt) → clippy → test (+ bench compile) → MSRV 1.89 (on push/PR to master)
 - `audit.yml`: cargo-audit + cargo-deny (weekly Monday 06:00 UTC + push/PR)
 - `release.yml`: cross-platform build matrix (Linux x86_64/aarch64, macOS ARM, Windows) + dry-run publish + GitHub Release on tag push
 

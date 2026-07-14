@@ -62,7 +62,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85
+          toolchain: 1.89
           targets: ${{ matrix.target }}
 
       - name: Cache cargo registry & target
@@ -143,7 +143,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85
+          toolchain: 1.89
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
@@ -234,8 +234,8 @@ jobs:
             ### Requirements
 
             - **Linux / macOS:** no runtime dependencies (static-ish musl-friendly where possible).
-            - **Windows:** no runtime dependencies (MSVC CRT is statically linked via Rust 1.85 toolchain).
-            - **MSRV:** Rust 1.85+ (only required if building from source).
+            - **Windows:** no runtime dependencies (MSVC CRT is statically linked via Rust 1.89 toolchain).
+            - **MSRV:** Rust 1.89+ (only required if building from source).
           files: |
             artifacts/ass2sup-*.tar.gz
             artifacts/ass2sup-*.zip

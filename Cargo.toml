@@ -15,7 +15,7 @@ members = [
 [workspace.package]
 version = "2.7.1"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.89"
 license = "Apache-2.0"
 repository = "https://github.com/UnforgetMemory/um-ass2sup"
 description = "ASS/SSA/SRT to Blu-ray SUP/PGS subtitle converter written in Rust"

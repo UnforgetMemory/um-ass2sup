@@ -1,8 +1,10 @@
 fn main() {
-    // Link libass via the local links/ copy that has a proper libass.so symlink.
-    // This approach propagates correctly to dependents (unlike -l:libass.so.9).
+    // Prefer the local links/ copy (CI checkout with pre-built binary).
+    // Fall back to system libass (e.g. libass9 via apt) when links/ doesn't exist.
     let dir =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../links");
-    println!("cargo:rustc-link-search={}", dir.display());
+    if dir.join("libass.so").exists() {
+        println!("cargo:rustc-link-search={}", dir.display());
+    }
     println!("cargo:rustc-link-lib=dylib=ass");
 }

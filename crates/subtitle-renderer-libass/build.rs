@@ -3,6 +3,8 @@ fn main() {
     // We need to ensure the test targets find libass.so.
     let dir =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../links");
-    println!("cargo:rustc-link-search={}", dir.display());
+    if dir.join("libass.so").exists() {
+        println!("cargo:rustc-link-search={}", dir.display());
+    }
     println!("cargo:rustc-link-lib=dylib=ass");
 }

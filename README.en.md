@@ -11,7 +11,7 @@
   <a href="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/audit.yml/badge.svg" alt="Audit"></a>
   <a href="https://github.com/UnforgetMemory/um-ass2sup/releases"><img src="https://github.com/UnforgetMemory/um-ass2sup/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
-  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg" alt="Rust 1.85+"></a>
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.89%2B-orange.svg" alt="Rust 1.89+"></a>
   <a href="https://github.com/UnforgetMemory/um-ass2sup/releases"><img src="https://img.shields.io/badge/version-2.7.1-blue.svg" alt="Version"></a>
 </p>
 
@@ -252,7 +252,7 @@ ass2sup s01/*.ass -d ./sup_output/ --parallel
 
 ### Prerequisites
 
-- **Rust 1.85+** ([rustup](https://rustup.rs/))
+- **Rust 1.89+** ([rustup](https://rustup.rs/))
 - Linux native-backend: `sudo apt install libfontconfig1-dev fonts-dejavu-core`
 - Linux libass-backend: `sudo apt install libass9`
 - macOS: `brew install libass`
@@ -425,7 +425,7 @@ cargo run --example encode_sup      -p pgs-encoder
 
 ## 📊 Performance & Benchmarks
 
-Full data in [BENCHMARKS.md](BENCHMARKS.md). Representative values (Linux / Rust 1.85):
+Full data in [BENCHMARKS.md](BENCHMARKS.md). Representative values (Linux / Rust 1.89):
 
 | Benchmark | Size | Median | Notes |
 |---|---|---|---|

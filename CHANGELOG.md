@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CI: `libass_smoke` test exit code 127** — `libass-sys`/`subtitle-renderer-libass` `build.rs` now falls back to system libass when `links/` dir is missing. Added `libass9` to CI apt install.
+- **CI: MSRV 1.85 check fails** — `criterion@0.8.2`/`safe_arch@1.0.0`/`wide@1.5.0` require Rust ≥ 1.86/1.89. Bumped MSRV to 1.89 across Cargo.toml, CI workflows, badges, and documentation.
 - **`build_context`: Division by zero** — when `script_width`/`script_height` is 0 (malformed ASS missing PlayRes), `scale_x`/`scale_y` = inf caused invisible rendering. Now guarded with `.max(1)`.
 - **`create_native_renderer`: Empty PlayRes crash** — previously passed raw 0 values to `RenderConfig`, causing downstream division by zero. Now falls back to output resolution with an info log.
 - **`clip::parse_inverse` removed**: Function was merged into `clip::parse` (both `\clip` and `\iclip` handled in one function), but `parse.rs` still referenced the removed symbol. Removed dead call.
