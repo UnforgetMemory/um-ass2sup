@@ -62,7 +62,14 @@ jobs:
             variant: native
             binary: ass2sup
             archive: tar.gz
-          # Windows x86_64 — native only (no libass on Windows CI)
+          # Windows x86_64 — dual (native + libass via vcpkg)
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            label: windows-x86_64
+            variant: dual
+            binary: ass2sup.exe
+            archive: zip
+          # Windows x86_64 — native only
           - os: windows-2022
             target: x86_64-pc-windows-msvc
             label: windows-x86_64
@@ -88,6 +95,10 @@ jobs:
       - name: Install system deps (macOS)
         if: runner.os == 'macOS' && matrix.variant == 'dual'
         run: HOMEBREW_NO_REQUIRE_TAP_TRUST=1 brew install libass
+
+      - name: Install system deps (Windows)
+        if: runner.os == 'Windows' && matrix.variant == 'dual'
+        run: vcpkg install libass:x64-windows --triplet x64-windows
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -240,6 +251,7 @@ jobs:
             | Linux aarch64 (glibc) | `-native` | native only |
             | macOS (Apple Silicon) | `-dual` | native + libass |
             | macOS (Apple Silicon) | `-native` | native only |
+            | Windows x86_64 | `-dual` | native + libass |
             | Windows x86_64 | `-native` | native only |
 
             Each archive contains the binary, README (Chinese + English), CHANGELOG, and both LICENSE files.
@@ -268,6 +280,9 @@ jobs:
             # Windows — native only
             Expand-Archive ass2sup-${{ github.ref_name }}-windows-x86_64-native.zip
             .\ass2sup-windows-x86_64-native\ass2sup.exe input.ass
+            # Windows — dual (requires libass.dll deployed alongside)
+            Expand-Archive ass2sup-${{ github.ref_name }}-windows-x86_64-dual.zip
+            .\ass2sup-windows-x86_64-dual\ass2sup.exe --backend libass input.ass
             ```
 
             ### Verify
@@ -283,7 +298,7 @@ jobs:
             ### Requirements
 
             - **Linux / macOS:** no runtime dependencies (native-backend is pure Rust). libass-backend requires `libass.so.9` on the system path.
-            - **Windows:** no runtime dependencies (native-backend is pure Rust). libass-backend requires `libass.dll` on the system path.
+            - **Windows:** no runtime dependencies (native-backend is pure Rust). The `-dual` variant bundles libass via vcpkg and requires `libass.dll` deployed alongside the binary.
             - **MSRV:** Rust 1.89+ (only required if building from source).
           files: |
             artifacts/ass2sup-*.tar.gz
