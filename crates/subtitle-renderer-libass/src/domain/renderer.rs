@@ -73,7 +73,12 @@ impl AssRenderer {
             .map_err(|_| AssError::Ass("ASS content contains null byte".into()))?;
 
         let track = unsafe {
-            libass_sys::ass_read_memory(self.library, cstr.as_ptr() as *const i8, content.len(), ptr::null())
+            libass_sys::ass_read_memory(
+                self.library,
+                cstr.as_ptr() as *const i8,
+                content.len(),
+                ptr::null(),
+            )
         };
 
         if track.is_null() {
@@ -179,7 +184,7 @@ impl AssRenderer {
                         unsafe {
                             libass_sys::ass_add_font(
                                 self.library,
-                                cname.as_ptr(),
+                                cname.as_ptr() as *const i8,
                                 font_data.as_ptr() as *const i8,
                                 font_data.len() as i32,
                             );

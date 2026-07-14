@@ -53,11 +53,15 @@ jobs:
       - name: Install cross toolchain (linux-aarch64)
         if: matrix.cross
         run: |
+          sudo dpkg --add-architecture arm64
           sudo apt-get update
           sudo apt-get install -y \
             gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu
+            binutils-aarch64-linux-gnu \
+            libass-dev:arm64
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig" >> "$GITHUB_ENV"
 
       - name: Install system deps
         if: runner.os == 'Linux'
@@ -79,12 +83,9 @@ jobs:
           cache-on-failure: true
 
       - name: Build release binary
-        run: |
-          FEATURES="native-backend"
-          if [ "${{ runner.os }}" != "Windows" ]; then
-            FEATURES="$FEATURES,libass-backend"
-          fi
-          cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F "$FEATURES"
+        env:
+          FEATURES: native-backend${{ runner.os != 'Windows' && ',libass-backend' || '' }}
+        run: cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F "$FEATURES"
 
       - name: Strip binary (linux/macos)
         if: matrix.archive == 'tar.gz'
