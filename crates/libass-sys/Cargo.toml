@@ -8,3 +8,6 @@ description = "Manual FFI bindings for libass (v0.17)"
 
 [lib]
 doctest = false
+
+[build-dependencies]
+pkg-config = "0.3"

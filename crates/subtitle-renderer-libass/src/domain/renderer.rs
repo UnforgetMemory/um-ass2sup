@@ -73,7 +73,7 @@ impl AssRenderer {
             .map_err(|_| AssError::Ass("ASS content contains null byte".into()))?;
 
         let track = unsafe {
-            libass_sys::ass_read_memory(self.library, cstr.as_ptr(), content.len(), ptr::null())
+            libass_sys::ass_read_memory(self.library, cstr.as_ptr() as *const i8, content.len(), ptr::null())
         };
 
         if track.is_null() {
@@ -193,7 +193,7 @@ impl AssRenderer {
         if let Some(dir) = font_dirs.first() {
             if let Ok(cdir) = CString::new(dir.as_str()) {
                 unsafe {
-                    libass_sys::ass_set_fonts_dir(self.library, cdir.as_ptr());
+                    libass_sys::ass_set_fonts_dir(self.library, cdir.as_ptr() as *const i8);
                 }
             }
         }
@@ -212,7 +212,7 @@ impl AssRenderer {
             libass_sys::ass_set_fonts(
                 self.renderer,
                 ptr::null(),
-                family_ptr,
+                family_ptr as *const i8,
                 provider,
                 ptr::null(),
                 0,
@@ -319,7 +319,7 @@ impl AssRenderer {
         for i in 0..n_events {
             let event = unsafe { &*(track.events.add(i)) };
             let text = if !event.text.is_null() {
-                unsafe { std::ffi::CStr::from_ptr(event.text) }
+                unsafe { std::ffi::CStr::from_ptr(event.text as *const std::os::raw::c_char) }
                     .to_string_lossy()
                     .into_owned()
             } else {

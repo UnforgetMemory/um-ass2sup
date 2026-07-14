@@ -65,7 +65,7 @@ jobs:
 
       - name: Install system deps (macOS)
         if: runner.os == 'macOS'
-        run: brew install libass
+        run: HOMEBREW_NO_REQUIRE_TAP_TRUST=1 brew install libass
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -79,7 +79,12 @@ jobs:
           cache-on-failure: true
 
       - name: Build release binary
-        run: cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F native-backend,libass-backend
+        run: |
+          FEATURES="native-backend"
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            FEATURES="$FEATURES,libass-backend"
+          fi
+          cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F "$FEATURES"
 
       - name: Strip binary (linux/macos)
         if: matrix.archive == 'tar.gz'
@@ -212,8 +217,9 @@ jobs:
             | macOS (Apple Silicon, runs Intel via Rosetta 2) | `ass2sup-${{ github.ref_name }}-macos-aarch64.tar.gz` |
             | Windows x86_64 | `ass2sup-${{ github.ref_name }}-windows-x86_64.zip` |
 
-            Each archive contains the binary (built with both native-backend and libass-backend), README (Chinese + English), CHANGELOG, and both LICENSE files.
-            Use `--backend native` (default) or `--backend libass` to select the rendering backend at runtime.
+            Each archive contains the binary, README (Chinese + English), CHANGELOG, and both LICENSE files.
+            Linux and macOS builds include both rendering backends (use `--backend native` or `--backend libass`).
+            Windows build includes native-backend only.
             A `SHA256SUMS` manifest with checksums for every binary is included in the artifacts and listed below.
 
             ### Quick start
