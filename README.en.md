@@ -531,5 +531,5 @@ Thanks to all [contributors](https://github.com/UnforgetMemory/um-ass2sup/graphs
 ---
 
 <p align="center">
-  <sub>Built with <code>cargo</code> · tracked on <code>master</code></sub>
+  <sub>Built with <code>cargo</code> · tracked on <code>main</code></sub>
 </p>

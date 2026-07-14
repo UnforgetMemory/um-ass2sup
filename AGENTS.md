@@ -224,7 +224,7 @@ cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 
 > CI 工作流
 
-- `ci.yml`: 4 jobs — check (rustfmt) → clippy → test (+ bench compile) → MSRV 1.89 (on push/PR to master)
+- `ci.yml`: 4 jobs — check (rustfmt) → clippy → test (+ bench compile) → MSRV 1.89 (on push/PR to main)
 - `audit.yml`: cargo-audit + cargo-deny (weekly Monday 06:00 UTC + push/PR)
 - `release.yml`: cross-platform build matrix (Linux x86_64/aarch64, macOS ARM, Windows) + dry-run publish + GitHub Release on tag push
 

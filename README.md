@@ -547,5 +547,5 @@ Copyright (c) 2024-2026 The um-ass2sup authors
 ---
 
 <p align="center">
-  <sub>用 <code>cargo</code> 构建 · 基于 <code>master</code> 分支维护</sub>
+  <sub>用 <code>cargo</code> 构建 · 基于 <code>main</code> 分支维护</sub>
 </p>
