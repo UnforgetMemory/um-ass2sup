@@ -189,10 +189,6 @@ pub fn run(args: Args) -> Result<(), CliError> {
         "ass2sup v{} — ASS/SRT to SUP/PGS converter",
         env!("CARGO_PKG_VERSION")
     );
-    println!(
-        "ass2sup v{} — ASS/SRT to SUP/PGS converter",
-        env!("CARGO_PKG_VERSION")
-    );
 
     // Warn about deprecated --parallel-frames flag
     #[allow(deprecated)]
@@ -211,7 +207,7 @@ pub fn run(args: Args) -> Result<(), CliError> {
 
         match pipeline::convert::convert_file(input, &output, &args, &config) {
             Ok(stats) => {
-                let msg = format!(
+                info!(
                     "{} Converted {} events ({} frames) → {} ({} bytes)",
                     if use_color { "✅" } else { "[OK]" },
                     stats.events_processed,
@@ -219,17 +215,13 @@ pub fn run(args: Args) -> Result<(), CliError> {
                     output.display(),
                     stats.output_size,
                 );
-                info!("{msg}");
-                println!("{msg}");
             }
             Err(e) => {
-                let msg = format!(
+                error!(
                     "{}Conversion failed: {}",
                     if use_color { "❌ " } else { "[FAIL] " },
                     e
                 );
-                error!("{msg}");
-                eprintln!("{msg}");
                 return Err(e);
             }
         }
