@@ -59,6 +59,14 @@ jobs:
             binutils-aarch64-linux-gnu
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
 
+      - name: Install system deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev libass-dev
+
+      - name: Install system deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libass
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -71,7 +79,7 @@ jobs:
           cache-on-failure: true
 
       - name: Build release binary
-        run: cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli
+        run: cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F native-backend,libass-backend
 
       - name: Strip binary (linux/macos)
         if: matrix.archive == 'tar.gz'
@@ -204,7 +212,8 @@ jobs:
             | macOS (Apple Silicon, runs Intel via Rosetta 2) | `ass2sup-${{ github.ref_name }}-macos-aarch64.tar.gz` |
             | Windows x86_64 | `ass2sup-${{ github.ref_name }}-windows-x86_64.zip` |
 
-            Each archive contains the binary, README (Chinese + English), CHANGELOG, and both LICENSE files.
+            Each archive contains the binary (built with both native-backend and libass-backend), README (Chinese + English), CHANGELOG, and both LICENSE files.
+            Use `--backend native` (default) or `--backend libass` to select the rendering backend at runtime.
             A `SHA256SUMS` manifest with checksums for every binary is included in the artifacts and listed below.
 
             ### Quick start
@@ -231,8 +240,8 @@ jobs:
 
             ### Requirements
 
-            - **Linux / macOS:** no runtime dependencies (static-ish musl-friendly where possible).
-            - **Windows:** no runtime dependencies (MSVC CRT is statically linked via Rust 1.89 toolchain).
+            - **Linux / macOS:** no runtime dependencies (native-backend is pure Rust). libass-backend requires `libass.so.9` on the system path.
+            - **Windows:** no runtime dependencies (native-backend is pure Rust). libass-backend requires `libass.dll` on the system path.
             - **MSRV:** Rust 1.89+ (only required if building from source).
           files: |
             artifacts/ass2sup-*.tar.gz
