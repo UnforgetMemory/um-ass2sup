@@ -8,6 +8,14 @@ use libass_sys;
 use crate::domain::error::AssError;
 use crate::domain::frame::{AssEventInfo, AssImageData, ImageType};
 
+/// Cast any `*const T` to `*const i8` for libass FFI.
+///
+/// On x86_64/macOS `c_char = i8` → T is often already i8 (no-op at runtime).
+/// On aarch64/Windows `c_char = u8` → required type conversion for `CString::as_ptr()` etc.
+fn cast_ptr_to_i8<T>(p: *const T) -> *const i8 {
+    p as *const i8
+}
+
 /// Safe Rust wrapper around libass lifecycle.
 ///
 /// Manages `ASS_Library`, `ASS_Renderer`, and `ASS_Track` handles with
@@ -62,6 +70,7 @@ impl AssRenderer {
     ///
     /// Parses the ASS script using `ass_read_memory`. Any previously loaded
     /// track is freed first.
+    #[allow(clippy::unnecessary_cast, reason = "c_char differs per platform")]
     pub fn load_ass(&mut self, content: &str) -> Result<(), AssError> {
         // Free any existing track
         if !self.track.is_null() {
@@ -75,7 +84,7 @@ impl AssRenderer {
         let track = unsafe {
             libass_sys::ass_read_memory(
                 self.library,
-                cstr.as_ptr() as *const i8,
+                cast_ptr_to_i8(cstr.as_ptr()),
                 content.len(),
                 ptr::null(),
             )
@@ -110,6 +119,7 @@ impl AssRenderer {
     ///
     /// `font_dirs` — user-provided font directories. The first directory is also
     /// passed to [`ass_set_fonts_dir`] for embedded font extraction.
+    #[allow(clippy::unnecessary_cast, reason = "c_char differs per platform")]
     pub fn configure_fonts(
         &mut self,
         default_family: Option<&str>,
@@ -184,8 +194,8 @@ impl AssRenderer {
                         unsafe {
                             libass_sys::ass_add_font(
                                 self.library,
-                                cname.as_ptr() as *const i8,
-                                font_data.as_ptr() as *const i8,
+                                cast_ptr_to_i8(cname.as_ptr()),
+                                cast_ptr_to_i8(font_data.as_ptr()),
                                 font_data.len() as i32,
                             );
                         }
@@ -198,7 +208,7 @@ impl AssRenderer {
         if let Some(dir) = font_dirs.first() {
             if let Ok(cdir) = CString::new(dir.as_str()) {
                 unsafe {
-                    libass_sys::ass_set_fonts_dir(self.library, cdir.as_ptr() as *const i8);
+                    libass_sys::ass_set_fonts_dir(self.library, cast_ptr_to_i8(cdir.as_ptr()));
                 }
             }
         }
@@ -217,7 +227,7 @@ impl AssRenderer {
             libass_sys::ass_set_fonts(
                 self.renderer,
                 ptr::null(),
-                family_ptr as *const i8,
+                cast_ptr_to_i8(family_ptr),
                 provider,
                 ptr::null(),
                 0,
