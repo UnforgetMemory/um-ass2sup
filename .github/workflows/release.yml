@@ -19,32 +19,54 @@ jobs:
   # 1. Build & verify on every target platform (matrix)
   # ---------------------------------------------------------------------------
   build-matrix:
-    name: Build (${{ matrix.label }})
+    name: Build (${{ matrix.label }}-${{ matrix.variant }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Linux x86_64 — dual (native + libass)
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             label: linux-x86_64
+            variant: dual
             binary: ass2sup
             archive: tar.gz
+          # Linux x86_64 — native only
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x86_64
+            variant: native
+            binary: ass2sup
+            archive: tar.gz
+          # Linux aarch64 — native only (no libass cross-compile)
           - os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
             label: linux-aarch64
+            variant: native
             binary: ass2sup
             archive: tar.gz
             cross: true
             strip_tool: aarch64-linux-gnu-strip
+          # macOS aarch64 — dual (native + libass)
           - os: macos-14
             target: aarch64-apple-darwin
             label: macos-aarch64
+            variant: dual
             binary: ass2sup
             archive: tar.gz
+          # macOS aarch64 — native only
+          - os: macos-14
+            target: aarch64-apple-darwin
+            label: macos-aarch64
+            variant: native
+            binary: ass2sup
+            archive: tar.gz
+          # Windows x86_64 — native only (no libass on Windows CI)
           - os: windows-2022
             target: x86_64-pc-windows-msvc
             label: windows-x86_64
+            variant: native
             binary: ass2sup.exe
             archive: zip
     steps:
@@ -60,11 +82,11 @@ jobs:
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
 
       - name: Install system deps
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.variant == 'dual'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev libass-dev
 
       - name: Install system deps (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.variant == 'dual'
         run: HOMEBREW_NO_REQUIRE_TAP_TRUST=1 brew install libass
 
       - name: Install Rust toolchain
@@ -79,7 +101,13 @@ jobs:
           cache-on-failure: true
 
       - name: Build release binary
-        run: cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F native-backend${{ (runner.os != 'Windows' && !matrix.cross) && ',libass-backend' || '' }}
+        shell: bash
+        run: |
+          FEATURES="native-backend"
+          if [ "${{ matrix.variant }}" = "dual" ]; then
+            FEATURES="$FEATURES,libass-backend"
+          fi
+          cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F "$FEATURES"
 
       - name: Strip binary (linux/macos)
         if: matrix.archive == 'tar.gz'
@@ -97,7 +125,7 @@ jobs:
         if: matrix.archive == 'tar.gz'
         run: |
           BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
-          NAME="ass2sup-${{ github.ref_name }}-${{ matrix.label }}"
+          NAME="ass2sup-${{ github.ref_name }}-${{ matrix.label }}-${{ matrix.variant }}"
           mkdir -p "$NAME"
           cp "$BIN" "$NAME/"
           cp README.md "$NAME/"
@@ -114,7 +142,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $BIN = "target/${{ matrix.target }}/release/${{ matrix.binary }}"
-          $NAME = "ass2sup-${{ github.ref_name }}-${{ matrix.label }}"
+          $NAME = "ass2sup-${{ github.ref_name }}-${{ matrix.label }}-${{ matrix.variant }}"
           New-Item -ItemType Directory -Force -Path "$NAME" | Out-Null
           Copy-Item "$BIN" -Destination "$NAME/"
           Copy-Item "README.md" -Destination "$NAME/"
@@ -129,7 +157,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ass2sup-${{ matrix.label }}
+          name: ass2sup-${{ matrix.label }}-${{ matrix.variant }}
           path: |
             ass2sup-${{ github.ref_name }}-${{ matrix.label }}.${{ matrix.archive }}
             ass2sup-${{ github.ref_name }}-${{ matrix.label }}.${{ matrix.archive }}.sha256
@@ -205,28 +233,41 @@ jobs:
 
             Four platform builds are attached. Download the archive for your OS and architecture:
 
-            | Platform | Asset |
-            |----------|-------|
-            | Linux x86_64 (glibc) | `ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz` |
-            | Linux aarch64 (glibc) | `ass2sup-${{ github.ref_name }}-linux-aarch64.tar.gz` |
-            | macOS (Apple Silicon, runs Intel via Rosetta 2) | `ass2sup-${{ github.ref_name }}-macos-aarch64.tar.gz` |
-            | Windows x86_64 | `ass2sup-${{ github.ref_name }}-windows-x86_64.zip` |
+            | Platform | Variant | Backends |
+            |----------|---------|----------|
+            | Linux x86_64 (glibc) | `-dual` | native + libass |
+            | Linux x86_64 (glibc) | `-native` | native only |
+            | Linux aarch64 (glibc) | `-native` | native only |
+            | macOS (Apple Silicon) | `-dual` | native + libass |
+            | macOS (Apple Silicon) | `-native` | native only |
+            | Windows x86_64 | `-native` | native only |
 
             Each archive contains the binary, README (Chinese + English), CHANGELOG, and both LICENSE files.
-            Linux x86_64 and macOS builds include both rendering backends (use `--backend native` or `--backend libass`).
-            Linux aarch64 and Windows builds include native-backend only.
+            Each variant includes `--backend native` (default) by default. The `-dual` variant also supports `--backend libass`.
+            Linux aarch64 and Windows x86_64 are `-native` only (no libass cross-compile available on CI).
+
+            | Variant | Backends | Platforms |
+            |---------|----------|----------|
+            | `*-dual` | native + libass | linux-x86_64, macos-aarch64 |
+            | `*-native` | native only | all platforms |
+
+            Each archive contains the binary, README (Chinese + English), CHANGELOG, and LICENSE.
             A `SHA256SUMS` manifest with checksums for every binary is included in the artifacts and listed below.
 
             ### Quick start
 
             ```bash
-            # Linux / macOS
-            tar -xzf ass2sup-${{ github.ref_name }}-linux-x86_64.tar.gz
-            ./ass2sup-linux-x86_64/ass2sup --help
+            # Linux — dual backends
+            tar -xzf ass2sup-${{ github.ref_name }}-linux-x86_64-dual.tar.gz
+            ./ass2sup-linux-x86_64-dual/ass2sup --backend libass input.ass
 
-            # Windows (PowerShell)
-            Expand-Archive ass2sup-${{ github.ref_name }}-windows-x86_64.zip
-            .\ass2sup-windows-x86_64\ass2sup.exe --help
+            # macOS — dual backends
+            tar -xzf ass2sup-${{ github.ref_name }}-macos-aarch64-dual.tar.gz
+            ./ass2sup-macos-aarch64-dual/ass2sup input.ass
+
+            # Windows — native only
+            Expand-Archive ass2sup-${{ github.ref_name }}-windows-x86_64-native.zip
+            .\ass2sup-windows-x86_64-native\ass2sup.exe input.ass
             ```
 
             ### Verify
