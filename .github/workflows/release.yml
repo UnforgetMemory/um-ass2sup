@@ -138,6 +138,19 @@ jobs:
           ls -la "$BIN"
           file "$BIN"
 
+      - name: Bundle libass DLL (Windows dual)
+        if: runner.os == 'Windows' && matrix.variant == 'dual'
+        shell: pwsh
+        run: |
+          $vcpkgRoot = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } else { "C:\vcpkg" }
+          $dllPath = Join-Path $vcpkgRoot "installed\x64-windows\bin\ass.dll"
+          if (Test-Path $dllPath) {
+            Copy-Item $dllPath -Destination "."
+            Write-Output "Bundled ass.dll ($((Get-Item $dllPath).Length / 1KB) KB)"
+          } else {
+            Write-Output "WARNING: ass.dll not found at $dllPath"
+          }
+
       - name: Package (tar.gz)
         if: matrix.archive == 'tar.gz'
         run: |
@@ -162,6 +175,9 @@ jobs:
           $NAME = "ass2sup-${{ github.ref_name }}-${{ matrix.label }}-${{ matrix.variant }}"
           New-Item -ItemType Directory -Force -Path "$NAME" | Out-Null
           Copy-Item "$BIN" -Destination "$NAME/"
+          if ("${{ matrix.variant }}" -eq "dual") {
+            if (Test-Path "ass.dll") { Copy-Item "ass.dll" -Destination "$NAME/" }
+          }
           Copy-Item "README.md" -Destination "$NAME/"
           Copy-Item "README.en.md" -Destination "$NAME/"
           Copy-Item "CHANGELOG.md" -Destination "$NAME/"
@@ -286,7 +302,7 @@ jobs:
             # Windows — native only
             Expand-Archive ass2sup-${{ github.ref_name }}-windows-x86_64-native.zip
             .\ass2sup-windows-x86_64-native\ass2sup.exe input.ass
-            # Windows — dual (requires libass.dll deployed alongside)
+            # Windows — dual (libass.dll included)
             Expand-Archive ass2sup-${{ github.ref_name }}-windows-x86_64-dual.zip
             .\ass2sup-windows-x86_64-dual\ass2sup.exe --backend libass input.ass
             ```
@@ -304,7 +320,7 @@ jobs:
             ### Requirements
 
             - **Linux / macOS:** no runtime dependencies (native-backend is pure Rust). libass-backend requires `libass.so.9` on the system path.
-            - **Windows:** no runtime dependencies (native-backend is pure Rust). The `-dual` variant bundles libass via vcpkg and requires `libass.dll` deployed alongside the binary.
+            - **Windows:** no runtime dependencies (native-backend is pure Rust). The `-dual` variant includes `libass.dll` in the archive.
             - **MSRV:** Rust 1.89+ (only required if building from source).
           files: |
             artifacts/ass2sup-*.tar.gz
