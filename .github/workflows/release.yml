@@ -159,8 +159,8 @@ jobs:
         with:
           name: ass2sup-${{ matrix.label }}-${{ matrix.variant }}
           path: |
-            ass2sup-${{ github.ref_name }}-${{ matrix.label }}.${{ matrix.archive }}
-            ass2sup-${{ github.ref_name }}-${{ matrix.label }}.${{ matrix.archive }}.sha256
+            ass2sup-${{ github.ref_name }}-${{ matrix.label }}-${{ matrix.variant }}.${{ matrix.archive }}
+            ass2sup-${{ github.ref_name }}-${{ matrix.label }}-${{ matrix.variant }}.${{ matrix.archive }}.sha256
           if-no-files-found: warn
           retention-days: 14
 
