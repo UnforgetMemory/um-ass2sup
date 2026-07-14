@@ -53,15 +53,11 @@ jobs:
       - name: Install cross toolchain (linux-aarch64)
         if: matrix.cross
         run: |
-          sudo dpkg --add-architecture arm64
           sudo apt-get update
           sudo apt-get install -y \
             gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu \
-            libass-dev:arm64
+            binutils-aarch64-linux-gnu
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig" >> "$GITHUB_ENV"
 
       - name: Install system deps
         if: runner.os == 'Linux'
@@ -83,9 +79,7 @@ jobs:
           cache-on-failure: true
 
       - name: Build release binary
-        env:
-          FEATURES: native-backend${{ runner.os != 'Windows' && ',libass-backend' || '' }}
-        run: cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F "$FEATURES"
+        run: cargo build --release --locked --target ${{ matrix.target }} -p ass2sup-cli --no-default-features -F native-backend${{ (runner.os != 'Windows' && !matrix.cross) && ',libass-backend' || '' }}
 
       - name: Strip binary (linux/macos)
         if: matrix.archive == 'tar.gz'
@@ -219,8 +213,8 @@ jobs:
             | Windows x86_64 | `ass2sup-${{ github.ref_name }}-windows-x86_64.zip` |
 
             Each archive contains the binary, README (Chinese + English), CHANGELOG, and both LICENSE files.
-            Linux and macOS builds include both rendering backends (use `--backend native` or `--backend libass`).
-            Windows build includes native-backend only.
+            Linux x86_64 and macOS builds include both rendering backends (use `--backend native` or `--backend libass`).
+            Linux aarch64 and Windows builds include native-backend only.
             A `SHA256SUMS` manifest with checksums for every binary is included in the artifacts and listed below.
 
             ### Quick start
