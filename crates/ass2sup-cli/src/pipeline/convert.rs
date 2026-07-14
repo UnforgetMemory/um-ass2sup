@@ -166,8 +166,16 @@ impl ConversionPipeline {
         let render_cfg = RenderConfig {
             width: config.resolution.width,
             height: config.resolution.height,
-            script_width: if doc.metadata.play_res_x > 0 { doc.metadata.play_res_x } else { config.resolution.width },
-            script_height: if doc.metadata.play_res_y > 0 { doc.metadata.play_res_y } else { config.resolution.height },
+            script_width: if doc.metadata.play_res_x > 0 {
+                doc.metadata.play_res_x
+            } else {
+                config.resolution.width
+            },
+            script_height: if doc.metadata.play_res_y > 0 {
+                doc.metadata.play_res_y
+            } else {
+                config.resolution.height
+            },
             default_font: config.font.default_font.clone(),
             default_font_size: config.font.default_font_size,
             vsfilter_compat: config.font.vsfilter_compat,

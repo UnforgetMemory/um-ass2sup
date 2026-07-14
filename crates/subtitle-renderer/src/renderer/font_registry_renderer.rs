@@ -124,7 +124,8 @@ pub fn render_event_font_registry(
     // Per-event font data cache: font_name → raw font data (Vec<u8>).
     // This avoids re-running the expensive fallback chain (parse_font_name,
     // list_families() allocation, loop) for every glyph in the same event.
-    let mut font_cache: std::collections::HashMap<String, Vec<u8>> = std::collections::HashMap::new();
+    let mut font_cache: std::collections::HashMap<String, Vec<u8>> =
+        std::collections::HashMap::new();
 
     let registry = resources.registry.lock();
     let available_width = config.width as f32 - ctx.margin_l - ctx.margin_r;
@@ -242,17 +243,15 @@ pub fn render_event_font_registry(
             "rendering line"
         );
         for g in &sl.glyphs {
-            let font_data = font_cache
-                .entry(ctx.font_name.clone())
-                .or_insert_with(|| {
-                    resolve_glyph_font_data(
-                        &registry,
-                        &ctx,
-                        g.glyph_id,
-                        &resources.font_map,
-                        event.style.as_str(),
-                    )
-                });
+            let font_data = font_cache.entry(ctx.font_name.clone()).or_insert_with(|| {
+                resolve_glyph_font_data(
+                    &registry,
+                    &ctx,
+                    g.glyph_id,
+                    &resources.font_map,
+                    event.style.as_str(),
+                )
+            });
             if font_data.is_empty() {
                 tracing::warn!(
                     glyph_id = g.glyph_id,
@@ -783,11 +782,19 @@ mod tests {
         }
         let data = std::fs::read(dejavu_path()).expect("read DejaVuSans.ttf");
         let mut registry = FontRegistry::new();
-        let id = registry.load_user_font_data(data.clone()).expect("load font");
+        let id = registry
+            .load_user_font_data(data.clone())
+            .expect("load font");
 
         let cached = registry.get_font_data(id);
-        assert!(cached.is_some(), "get_font_data should return Some for loaded font");
-        assert!(!cached.unwrap().is_empty(), "cached font data should not be empty");
+        assert!(
+            cached.is_some(),
+            "get_font_data should return Some for loaded font"
+        );
+        assert!(
+            !cached.unwrap().is_empty(),
+            "cached font data should not be empty"
+        );
     }
 
     #[test]
@@ -796,7 +803,10 @@ mod tests {
         let registry = FontRegistry::new();
         let invalid_id = crate::font::types::FontId(9999);
         let cached = registry.get_font_data(invalid_id);
-        assert!(cached.is_none(), "get_font_data should return None for non-existent ID");
+        assert!(
+            cached.is_none(),
+            "get_font_data should return None for non-existent ID"
+        );
     }
 
     #[test]
