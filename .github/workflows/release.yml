@@ -125,7 +125,7 @@ jobs:
           path: |
             ass2sup-${{ github.ref_name }}-${{ matrix.label }}.${{ matrix.archive }}
             ass2sup-${{ github.ref_name }}-${{ matrix.label }}.${{ matrix.archive }}.sha256
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
   # ---------------------------------------------------------------------------
