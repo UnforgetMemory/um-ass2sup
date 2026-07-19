@@ -21,6 +21,7 @@ fn cast_ptr_to_i8<T>(p: *const T) -> *const i8 {
 /// Manages `ASS_Library`, `ASS_Renderer`, and `ASS_Track` handles with
 /// correct Drop ordering (track → renderer → library).
 pub struct AssRenderer {
+    libass: &'static libass_sys::Libass,
     library: *mut libass_sys::ASS_Library,
     renderer: *mut libass_sys::ASS_Renderer,
     track: *mut libass_sys::ASS_Track,
@@ -39,24 +40,26 @@ impl AssRenderer {
     /// Initializes `ASS_Library` and `ASS_Renderer`, configures frame size
     /// and storage size, and enables font extraction.
     pub fn new(width: u32, height: u32) -> Result<Self, AssError> {
-        let library = unsafe { libass_sys::ass_library_init() };
+        let libass = libass_sys::Libass::global().map_err(|_| AssError::InitFailed)?;
+        let library = unsafe { (libass.ass_library_init)() };
         if library.is_null() {
             return Err(AssError::InitFailed);
         }
 
-        let renderer = unsafe { libass_sys::ass_renderer_init(library) };
+        let renderer = unsafe { (libass.ass_renderer_init)(library) };
         if renderer.is_null() {
-            unsafe { libass_sys::ass_library_done(library) };
+            unsafe { (libass.ass_library_done)(library) };
             return Err(AssError::InitFailed);
         }
 
         unsafe {
-            libass_sys::ass_set_frame_size(renderer, width as i32, height as i32);
-            libass_sys::ass_set_storage_size(renderer, width as i32, height as i32);
-            libass_sys::ass_set_extract_fonts(library, 1);
+            (libass.ass_set_frame_size)(renderer, width as i32, height as i32);
+            (libass.ass_set_storage_size)(renderer, width as i32, height as i32);
+            (libass.ass_set_extract_fonts)(library, 1);
         }
 
         Ok(Self {
+            libass,
             library,
             renderer,
             track: ptr::null_mut(),
@@ -74,7 +77,7 @@ impl AssRenderer {
     pub fn load_ass(&mut self, content: &str) -> Result<(), AssError> {
         // Free any existing track
         if !self.track.is_null() {
-            unsafe { libass_sys::ass_free_track(self.track) };
+            unsafe { (self.libass.ass_free_track)(self.track) };
             self.track = ptr::null_mut();
         }
 
@@ -82,7 +85,7 @@ impl AssRenderer {
             .map_err(|_| AssError::Ass("ASS content contains null byte".into()))?;
 
         let track = unsafe {
-            libass_sys::ass_read_memory(
+            (self.libass.ass_read_memory)(
                 self.library,
                 cast_ptr_to_i8(cstr.as_ptr()),
                 content.len(),
@@ -192,7 +195,7 @@ impl AssRenderer {
                         .to_string();
                     if let Ok(cname) = CString::new(name.as_str()) {
                         unsafe {
-                            libass_sys::ass_add_font(
+                            (self.libass.ass_add_font)(
                                 self.library,
                                 cast_ptr_to_i8(cname.as_ptr()),
                                 cast_ptr_to_i8(font_data.as_ptr()),
@@ -208,7 +211,7 @@ impl AssRenderer {
         if let Some(dir) = font_dirs.first() {
             if let Ok(cdir) = CString::new(dir.as_str()) {
                 unsafe {
-                    libass_sys::ass_set_fonts_dir(self.library, cast_ptr_to_i8(cdir.as_ptr()));
+                    (self.libass.ass_set_fonts_dir)(self.library, cast_ptr_to_i8(cdir.as_ptr()));
                 }
             }
         }
@@ -224,7 +227,7 @@ impl AssRenderer {
             .unwrap_or(ptr::null());
 
         unsafe {
-            libass_sys::ass_set_fonts(
+            (self.libass.ass_set_fonts)(
                 self.renderer,
                 ptr::null(),
                 cast_ptr_to_i8(family_ptr),
@@ -242,12 +245,12 @@ impl AssRenderer {
     ///
     /// `ASS_HINTING_LIGHT = 1`, `ASS_HINTING_NONE = 0`
     pub fn set_hinting(&self, hinting: i32) {
-        unsafe { libass_sys::ass_set_hinting(self.renderer, hinting) }
+        unsafe { (self.libass.ass_set_hinting)(self.renderer, hinting) }
     }
 
     /// Set font scale factor.
     pub fn set_font_scale(&self, scale: f64) {
-        unsafe { libass_sys::ass_set_font_scale(self.renderer, scale) }
+        unsafe { (self.libass.ass_set_font_scale)(self.renderer, scale) }
     }
 
     /// Render a single frame at the given timestamp.
@@ -263,7 +266,7 @@ impl AssRenderer {
 
         let mut detect_change: i32 = 0;
         let image = unsafe {
-            libass_sys::ass_render_frame(
+            (self.libass.ass_render_frame)(
                 self.renderer,
                 self.track,
                 timestamp_ms,
@@ -392,15 +395,14 @@ impl AssRenderer {
 
 impl Drop for AssRenderer {
     fn drop(&mut self) {
-        // IMPORTANT: Correct drop order is track → renderer → library
         if !self.track.is_null() {
-            unsafe { libass_sys::ass_free_track(self.track) };
+            unsafe { (self.libass.ass_free_track)(self.track) };
         }
         if !self.renderer.is_null() {
-            unsafe { libass_sys::ass_renderer_done(self.renderer) };
+            unsafe { (self.libass.ass_renderer_done)(self.renderer) };
         }
         if !self.library.is_null() {
-            unsafe { libass_sys::ass_library_done(self.library) };
+            unsafe { (self.libass.ass_library_done)(self.library) };
         }
     }
 }

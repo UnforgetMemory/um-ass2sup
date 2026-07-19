@@ -138,17 +138,24 @@ jobs:
           ls -la "$BIN"
           file "$BIN"
 
-      - name: Bundle libass DLL (Windows dual)
+      - name: Bundle libass DLLs (Windows dual)
         if: runner.os == 'Windows' && matrix.variant == 'dual'
         shell: pwsh
         run: |
           $vcpkgRoot = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } else { "C:\vcpkg" }
-          $dllPath = Join-Path $vcpkgRoot "installed\x64-windows\bin\ass.dll"
-          if (Test-Path $dllPath) {
-            Copy-Item $dllPath -Destination "."
-            Write-Output "Bundled ass.dll ($((Get-Item $dllPath).Length / 1KB) KB)"
+          $binDir = Join-Path $vcpkgRoot "installed\x64-windows\bin"
+          if (Test-Path $binDir) {
+            $dlls = Get-ChildItem -Path $binDir -Filter "*.dll"
+            if ($dlls.Count -eq 0) {
+              Write-Error "No DLLs found in vcpkg bin directory: $binDir"
+              exit 1
+            }
+            Copy-Item -Path "$binDir\*.dll" -Destination "."
+            Write-Output "Bundled $($dlls.Count) DLL(s) from vcpkg bin directory ($($binDir))"
+            $dlls | ForEach-Object { Write-Output "  $($_.Name) ($($_.Length / 1KB) KB)" }
           } else {
-            Write-Output "WARNING: ass.dll not found at $dllPath"
+            Write-Error "vcpkg bin directory not found: $binDir"
+            exit 1
           }
 
       - name: Package (tar.gz)
@@ -176,7 +183,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$NAME" | Out-Null
           Copy-Item "$BIN" -Destination "$NAME/"
           if ("${{ matrix.variant }}" -eq "dual") {
-            if (Test-Path "ass.dll") { Copy-Item "ass.dll" -Destination "$NAME/" }
+            # Bundle all vcpkg DLLs (ass.dll + transitive dependencies)
+            $dllFiles = Get-ChildItem -Path "." -Filter "*.dll"
+            if ($dllFiles.Count -gt 0) {
+              Copy-Item -Path "*.dll" -Destination "$NAME/"
+              Write-Output "Bundled $($dllFiles.Count) DLL(s) into archive"
+            }
           }
           Copy-Item "README.md" -Destination "$NAME/"
           Copy-Item "README.en.md" -Destination "$NAME/"
