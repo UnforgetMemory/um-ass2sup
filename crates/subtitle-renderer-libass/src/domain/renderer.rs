@@ -16,6 +16,27 @@ fn cast_ptr_to_i8<T>(p: *const T) -> *const i8 {
     p as *const i8
 }
 
+/// libass log callback — redirects to `tracing` so messages respect
+/// log-level control (`--verbose`/`--debug`) instead of printing to stderr
+/// unconditionally.
+extern "C" fn libass_log_callback(level: i32, _fmt: *const i8, message: *mut i8, _data: *mut i8) {
+    if message.is_null() {
+        return;
+    }
+    let msg = unsafe { std::ffi::CStr::from_ptr(message as *const std::os::raw::c_char) }
+        .to_string_lossy();
+    match level {
+        // MSGL_FATAL / MSGL_ERR
+        0 | 1 => tracing::error!("[libass] {msg}"),
+        // MSGL_WARN
+        2 => tracing::warn!("[libass] {msg}"),
+        // MSGL_INFO — font selection, libass version info, etc.
+        3 => tracing::debug!("[libass] {msg}"),
+        // MSGL_VDEBUG / DBG2 / DBG3
+        _ => tracing::trace!("[libass] {msg}"),
+    }
+}
+
 /// Safe Rust wrapper around libass lifecycle.
 ///
 /// Manages `ASS_Library`, `ASS_Renderer`, and `ASS_Track` handles with
@@ -56,6 +77,7 @@ impl AssRenderer {
             (libass.ass_set_frame_size)(renderer, width as i32, height as i32);
             (libass.ass_set_storage_size)(renderer, width as i32, height as i32);
             (libass.ass_set_extract_fonts)(library, 1);
+            (libass.ass_set_message_cb)(library, Some(libass_log_callback), std::ptr::null_mut());
         }
 
         Ok(Self {

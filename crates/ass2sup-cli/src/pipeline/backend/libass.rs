@@ -10,6 +10,7 @@ use color_quantizer::QuantizedFrame;
 use tracing::debug;
 
 use crate::cli::args::Args;
+use crate::cli::progress;
 use crate::config::Config;
 use crate::error::CliError;
 
@@ -18,10 +19,10 @@ pub fn render_and_quantize(
     content: &str,
     _doc: &SubtitleDocument,
     config: &Config,
-    _args: &Args,
+    args: &Args,
 ) -> Result<Vec<QuantizedFrame>, CliError> {
     let libass_config = build_libass_config(config);
-    let frames = process_libass(content, libass_config)
+    let frames = process_libass(content, libass_config, args)
         .map_err(|e| CliError::Conversion(format!("libass rendering failed: {e}")))?;
     Ok(frames)
 }
@@ -61,6 +62,7 @@ fn build_libass_config(config: &Config) -> subtitle_renderer_libass::ConversionC
 fn process_libass(
     content: &str,
     config: subtitle_renderer_libass::ConversionConfig,
+    args: &Args,
 ) -> Result<Vec<QuantizedFrame>, subtitle_renderer_libass::AssError> {
     use subtitle_renderer_libass::AssRenderer;
 
@@ -83,6 +85,12 @@ fn process_libass(
     let mut output_frames: Vec<QuantizedFrame> = Vec::new();
     let mut prev_data_hash: Option<u64> = None;
 
+    let pb = if args.quiet {
+        indicatif::ProgressBar::hidden()
+    } else {
+        progress::create(timestamps.len() as u64, "Rendering")
+    };
+
     let last_event_end = events
         .iter()
         .map(|e| e.start_ms + e.duration_ms)
@@ -97,12 +105,16 @@ fn process_libass(
             .iter()
             .any(|e| e.start_ms as u64 <= ts && ts < (e.start_ms + e.duration_ms) as u64);
         if !has_active {
+            pb.inc(1);
             continue;
         }
 
         let images = match renderer.render_frame(ts as i64)? {
             Some(imgs) if !imgs.is_empty() => imgs,
-            _ => continue,
+            _ => {
+                pb.inc(1);
+                continue;
+            }
         };
 
         let rgba = subtitle_renderer_libass::compose_frame(&images, config.width, config.height);
@@ -113,7 +125,10 @@ fn process_libass(
             config.height,
         ) {
             Some(c) => c,
-            None => continue,
+            None => {
+                pb.inc(1);
+                continue;
+            }
         };
 
         let cropped_frame = subtitle_renderer_libass::CroppedFrame {
@@ -142,12 +157,16 @@ fn process_libass(
             if let Some(last) = output_frames.last_mut() {
                 last.duration_ms = ts + q.duration_ms - last.pts_ms;
             }
+            pb.inc(1);
             continue;
         }
 
         prev_data_hash = Some(hash);
         output_frames.push(q);
+        pb.inc(1);
     }
+
+    pb.finish_and_clear();
 
     // Fix up last frame duration
     if let Some(last) = output_frames.last_mut() {
