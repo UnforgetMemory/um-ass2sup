@@ -142,28 +142,38 @@ pub struct Libass {
 unsafe impl Send for Libass {}
 unsafe impl Sync for Libass {}
 
-fn library_name() -> &'static str {
+/// Return a list of possible library names to try.
+/// The first successful load wins. On Windows, vcpkg may install the DLL
+/// with a version suffix (e.g. `ass-9.dll`) rather than the bare `ass.dll`.
+fn library_names() -> &'static [&'static str] {
     #[cfg(target_os = "windows")]
     {
-        "ass"
+        &["ass", "ass-9"]
     }
     #[cfg(target_os = "macos")]
     {
-        "libass.dylib"
+        &["libass.dylib"]
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        "libass.so"
+        &["libass.so"]
     }
 }
 
 impl Libass {
     /// Load the libass shared library and resolve all function pointers.
     fn load() -> Result<Self, LoadingError> {
-        let name = library_name();
-        let lib = unsafe {
-            Library::new(name).map_err(|e| LoadingError(format!("cannot load {name}: {e}")))
-        }?;
+        let names = library_names();
+        let lib = (|| -> Result<_, LoadingError> {
+            let mut last_err = String::from("no library names to try");
+            for name in names {
+                match unsafe { Library::new(name) } {
+                    Ok(lib) => return Ok(lib),
+                    Err(e) => last_err = format!("cannot load {name}: {e}"),
+                }
+            }
+            Err(LoadingError(last_err))
+        })()?;
 
         let ass_library_init: unsafe extern "C" fn() -> *mut ASS_Library = unsafe {
             *lib.get(b"ass_library_init\0")
