@@ -16,24 +16,16 @@ fn cast_ptr_to_i8<T>(p: *const T) -> *const i8 {
     p as *const i8
 }
 
-/// libass log callback — redirects to `tracing` so messages respect
-/// log-level control (`--verbose`/`--debug`) instead of printing to stderr
-/// unconditionally.
-extern "C" fn libass_log_callback(level: i32, _fmt: *const i8, message: *mut i8, _data: *mut i8) {
-    if message.is_null() {
-        return;
-    }
-    let msg = unsafe { std::ffi::CStr::from_ptr(message as *const std::os::raw::c_char) }
-        .to_string_lossy();
+/// libass log callback — third arg is a `va_list`, not a string, so we log
+/// by level only.  The actual message content is lost, but level-based
+/// filtering correctly suppresses INFO-level font-select noise while still
+/// surfacing WARN/ERROR to the user.
+extern "C" fn libass_log_callback(level: i32, _fmt: *const i8, _va: *mut i8, _data: *mut i8) {
     match level {
-        // MSGL_FATAL / MSGL_ERR
-        0 | 1 => tracing::error!("[libass] {msg}"),
-        // MSGL_WARN
-        2 => tracing::warn!("[libass] {msg}"),
-        // MSGL_INFO — font selection, libass version info, etc.
-        3 => tracing::debug!("[libass] {msg}"),
-        // MSGL_VDEBUG / DBG2 / DBG3
-        _ => tracing::trace!("[libass] {msg}"),
+        0 | 1 => tracing::error!("[libass] libass error"),
+        2 => tracing::warn!("[libass] libass warning"),
+        3 => tracing::debug!("[libass] libass info"),
+        _ => tracing::trace!("[libass] libass debug"),
     }
 }
 
@@ -150,16 +142,42 @@ impl AssRenderer {
         default_family: Option<&str>,
         font_dirs: &[String],
     ) -> Result<(), AssError> {
-        // --- 0) Register fonts from user-provided directories -----------------
-        //
-        // System font directories (C:\Windows\Fonts, /usr/share/fonts, ...) are
-        // handled by the native font provider (DirectWrite / fontconfig / CoreText)
-        // via ASS_FONTPROVIDER_AUTODETECT.  Registering them again via
-        // ass_add_font() would read every font file individually, which is
-        // extremely slow on Windows (hundreds of fonts).
-        //
-        // Only user-provided --font-dir directories are registered here.
-        for dir_path in font_dirs {
+        // --- 0) Build list of font directories to scan ------------------------
+        let mut scan_dirs: Vec<String> = Vec::new();
+
+        #[cfg(target_os = "windows")]
+        {
+            scan_dirs.push("C:\\Windows\\Fonts".to_string());
+            if let Ok(local) = std::env::var("LOCALAPPDATA") {
+                scan_dirs.push(format!("{}\\Microsoft\\Windows\\Fonts", local));
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            scan_dirs.push("/usr/share/fonts".to_string());
+            scan_dirs.push("/usr/local/share/fonts".to_string());
+            if let Ok(home) = std::env::var("HOME") {
+                scan_dirs.push(format!("{}/.local/share/fonts", home));
+                scan_dirs.push(format!("{}/.fonts", home));
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            scan_dirs.push("/System/Library/Fonts".to_string());
+            scan_dirs.push("/Library/Fonts".to_string());
+            if let Ok(home) = std::env::var("HOME") {
+                scan_dirs.push(format!("{}/Library/Fonts", home));
+            }
+        }
+
+        // Add user-provided font directories
+        scan_dirs.extend(font_dirs.iter().cloned());
+
+        // --- 1) Register individual font files from all directories -----------
+        tracing::info!("Registering fonts from {} director(ies)", scan_dirs.len());
+        for dir_path in &scan_dirs {
             let dir = std::path::Path::new(dir_path);
             if !dir.is_dir() {
                 continue;
