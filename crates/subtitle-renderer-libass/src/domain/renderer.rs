@@ -150,41 +150,16 @@ impl AssRenderer {
         default_family: Option<&str>,
         font_dirs: &[String],
     ) -> Result<(), AssError> {
-        // --- 0) Build list of font directories to scan ------------------------
-        let mut scan_dirs: Vec<String> = Vec::new();
-
-        #[cfg(target_os = "windows")]
-        {
-            scan_dirs.push("C:\\Windows\\Fonts".to_string());
-            if let Ok(local) = std::env::var("LOCALAPPDATA") {
-                scan_dirs.push(format!("{}\\Microsoft\\Windows\\Fonts", local));
-            }
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            scan_dirs.push("/usr/share/fonts".to_string());
-            scan_dirs.push("/usr/local/share/fonts".to_string());
-            if let Ok(home) = std::env::var("HOME") {
-                scan_dirs.push(format!("{}/.local/share/fonts", home));
-                scan_dirs.push(format!("{}/.fonts", home));
-            }
-        }
-
-        #[cfg(target_os = "macos")]
-        {
-            scan_dirs.push("/System/Library/Fonts".to_string());
-            scan_dirs.push("/Library/Fonts".to_string());
-            if let Ok(home) = std::env::var("HOME") {
-                scan_dirs.push(format!("{}/Library/Fonts", home));
-            }
-        }
-
-        // Add user-provided font directories
-        scan_dirs.extend(font_dirs.iter().cloned());
-
-        // --- 1) Register individual font files from all directories -----------
-        for dir_path in &scan_dirs {
+        // --- 0) Register fonts from user-provided directories -----------------
+        //
+        // System font directories (C:\Windows\Fonts, /usr/share/fonts, ...) are
+        // handled by the native font provider (DirectWrite / fontconfig / CoreText)
+        // via ASS_FONTPROVIDER_AUTODETECT.  Registering them again via
+        // ass_add_font() would read every font file individually, which is
+        // extremely slow on Windows (hundreds of fonts).
+        //
+        // Only user-provided --font-dir directories are registered here.
+        for dir_path in font_dirs {
             let dir = std::path::Path::new(dir_path);
             if !dir.is_dir() {
                 continue;
