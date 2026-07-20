@@ -97,7 +97,6 @@ impl PgsEncoder {
             payload: SegmentPayload::End,
         });
         self.composition_number = self.composition_number.wrapping_add(1);
-        self.epoch.frame_count += 1;
         segments
     }
 
@@ -214,6 +213,7 @@ impl PgsEncoder {
 
         let total_size: usize = segments.iter().map(|s| s.to_bytes().len()).sum();
         if total_size > MAX_DECODE_BUFFER * 3 / 4 {
+            self.epoch.update(palette_hash, rle_hash);
             (
                 ds::build_epoch_split_display_set(
                     cfg,
