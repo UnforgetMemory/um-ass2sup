@@ -1,8 +1,10 @@
 //! Rendering bridge: libass track management and frame rasterization.
 
 use std::ffi::CString;
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::ptr;
+use std::time::SystemTime;
 
 use libass_sys;
 use rayon::prelude::*;
@@ -28,6 +30,217 @@ extern "C" fn libass_log_callback(level: i32, _fmt: *const i8, _va: *mut i8, _da
         2 => tracing::warn!("[libass] libass warning"),
         3 => tracing::debug!("[libass] libass info"),
         _ => tracing::trace!("[libass] libass debug"),
+    }
+}
+
+/// Font cache file format:
+/// ```text
+/// [magic: 4 bytes] "ASFC"
+/// [version: 4 bytes LE] 1
+/// [entry_count: 4 bytes LE]
+/// entries[]:
+///   [name_len: 4 bytes LE][name: name_len bytes]
+///   [path_len: 4 bytes LE][path: path_len bytes]
+///   [mtime_sec: 8 bytes LE][mtime_nsec: 4 bytes LE]
+///   [data_len: 4 bytes LE][data: data_len bytes]
+/// ```
+struct FontCache;
+
+impl FontCache {
+    fn cache_dir() -> Option<PathBuf> {
+        #[cfg(target_os = "windows")]
+        {
+            std::env::var("LOCALAPPDATA")
+                .ok()
+                .map(|d| PathBuf::from(d).join("ass2sup"))
+        }
+        #[cfg(target_os = "linux")]
+        {
+            std::env::var("XDG_CACHE_HOME")
+                .ok()
+                .map(|d| PathBuf::from(d).join("ass2sup"))
+                .or_else(|| {
+                    std::env::var("HOME")
+                        .ok()
+                        .map(|h| PathBuf::from(h).join(".cache").join("ass2sup"))
+                })
+        }
+        #[cfg(target_os = "macos")]
+        {
+            std::env::var("HOME").ok().map(|h| {
+                PathBuf::from(h)
+                    .join("Library")
+                    .join("Caches")
+                    .join("ass2sup")
+            })
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+        {
+            None
+        }
+    }
+
+    fn cache_path() -> Option<PathBuf> {
+        Self::cache_dir().map(|d| d.join("fonts.cache"))
+    }
+
+    /// Collect all font files from scan directories and return (name, path, mtime).
+    fn scan_fonts(scan_dirs: &[String]) -> Vec<(String, PathBuf, SystemTime)> {
+        let mut fonts = Vec::new();
+        for dir_path in scan_dirs {
+            let dir = std::path::Path::new(dir_path);
+            if !dir.is_dir() {
+                continue;
+            }
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if !path.is_file() {
+                        continue;
+                    }
+                    let ext = path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_lowercase())
+                        .unwrap_or_default();
+                    if !matches!(
+                        ext.as_str(),
+                        "ttf" | "otf" | "ttc" | "otc" | "woff" | "woff2"
+                    ) {
+                        continue;
+                    }
+                    let name = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("font")
+                        .to_string();
+                    let mtime = std::fs::metadata(&path)
+                        .and_then(|m| m.modified())
+                        .unwrap_or(SystemTime::UNIX_EPOCH);
+                    fonts.push((name, path, mtime));
+                }
+            }
+        }
+        fonts
+    }
+
+    /// Check if a cached entry is still valid by comparing mtime.
+    fn entry_valid(path: &Path, stored_mtime: SystemTime) -> bool {
+        std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .map(|m| m == stored_mtime)
+            .unwrap_or(false)
+    }
+
+    /// Try to load font data from cache. Returns None if cache is missing or invalid.
+    fn load() -> Option<Vec<(String, Vec<u8>)>> {
+        let path = Self::cache_path()?;
+        let mut file = std::fs::File::open(&path).ok()?;
+
+        let mut magic = [0u8; 4];
+        file.read_exact(&mut magic).ok()?;
+        if &magic != b"ASFC" {
+            return None;
+        }
+
+        let mut version = [0u8; 4];
+        file.read_exact(&mut version).ok()?;
+        if u32::from_le_bytes(version) != 1 {
+            return None;
+        }
+
+        let mut count_buf = [0u8; 4];
+        file.read_exact(&mut count_buf).ok()?;
+        let entry_count = u32::from_le_bytes(count_buf) as usize;
+
+        let mut entries = Vec::with_capacity(entry_count);
+        for _ in 0..entry_count {
+            // name
+            let mut nl = [0u8; 4];
+            file.read_exact(&mut nl).ok()?;
+            let name_len = u32::from_le_bytes(nl) as usize;
+            let mut name_bytes = vec![0u8; name_len];
+            file.read_exact(&mut name_bytes).ok()?;
+            let name = String::from_utf8(name_bytes).ok()?;
+
+            // path
+            let mut pl = [0u8; 4];
+            file.read_exact(&mut pl).ok()?;
+            let path_len = u32::from_le_bytes(pl) as usize;
+            let mut path_bytes = vec![0u8; path_len];
+            file.read_exact(&mut path_bytes).ok()?;
+            let path_str = String::from_utf8(path_bytes).ok()?;
+
+            // mtime
+            let mut sec_buf = [0u8; 8];
+            file.read_exact(&mut sec_buf).ok()?;
+            let mut nsec_buf = [0u8; 4];
+            file.read_exact(&mut nsec_buf).ok()?;
+            let duration =
+                std::time::Duration::new(u64::from_le_bytes(sec_buf), u32::from_le_bytes(nsec_buf));
+            let stored_mtime = SystemTime::UNIX_EPOCH + duration;
+
+            // data
+            let mut dl = [0u8; 4];
+            file.read_exact(&mut dl).ok()?;
+            let data_len = u32::from_le_bytes(dl) as usize;
+            let mut data = vec![0u8; data_len];
+            file.read_exact(&mut data).ok()?;
+
+            // Validate mtime — skip this entry if the file changed
+            let path = std::path::Path::new(&path_str);
+            if Self::entry_valid(path, stored_mtime) {
+                entries.push((name, data));
+            }
+        }
+
+        if entries.is_empty() {
+            return None;
+        }
+        Some(entries)
+    }
+
+    /// Update cache with actual font data (after reading files).
+    fn update_with_data(fonts: &[(String, PathBuf, SystemTime)], font_data: &[(String, Vec<u8>)]) {
+        let path = match Self::cache_path() {
+            Some(p) => p,
+            None => return,
+        };
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"ASFC");
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&(fonts.len() as u32).to_le_bytes());
+
+        for (name, fpath, mtime) in fonts {
+            let name_bytes = name.as_bytes();
+            buf.extend_from_slice(&(name_bytes.len() as u32).to_le_bytes());
+            buf.extend_from_slice(name_bytes);
+
+            let path_str = fpath.to_string_lossy();
+            let path_bytes = path_str.as_bytes();
+            buf.extend_from_slice(&(path_bytes.len() as u32).to_le_bytes());
+            buf.extend_from_slice(path_bytes);
+
+            let duration = mtime
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default();
+            buf.extend_from_slice(&duration.as_secs().to_le_bytes());
+            buf.extend_from_slice(&duration.subsec_nanos().to_le_bytes());
+
+            // Find the data for this font
+            if let Some((_, data)) = font_data.iter().find(|(n, _)| n == name) {
+                buf.extend_from_slice(&(data.len() as u32).to_le_bytes());
+                buf.extend_from_slice(data);
+            } else {
+                buf.extend_from_slice(&0u32.to_le_bytes());
+            }
+        }
+
+        let _ = std::fs::write(&path, &buf);
     }
 }
 
@@ -177,66 +390,59 @@ impl AssRenderer {
         // Add user-provided font directories
         scan_dirs.extend(font_dirs.iter().cloned());
 
-        // --- 1) Collect all font file paths from all directories -----------
-        tracing::info!("Registering fonts from {} director(ies)", scan_dirs.len());
-        let mut fonts: Vec<(String, PathBuf)> = Vec::new();
-        for dir_path in &scan_dirs {
-            let dir = std::path::Path::new(dir_path);
-            if !dir.is_dir() {
-                continue;
-            }
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if !path.is_file() {
-                        continue;
+        // --- 1) Try font cache first ---
+        if let Some(cached) = FontCache::load() {
+            tracing::info!("Font cache hit — {} font(s) from cache", cached.len());
+            for (name, data) in &cached {
+                if let Ok(cname) = CString::new(name.as_str()) {
+                    unsafe {
+                        (self.libass.ass_add_font)(
+                            self.library,
+                            cast_ptr_to_i8(cname.as_ptr()),
+                            cast_ptr_to_i8(data.as_ptr()),
+                            data.len() as i32,
+                        );
                     }
-                    let ext = path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .map(|e| e.to_lowercase())
-                        .unwrap_or_default();
-                    if !matches!(
-                        ext.as_str(),
-                        "ttf" | "otf" | "ttc" | "otc" | "woff" | "woff2"
-                    ) {
-                        continue;
-                    }
-                    let name = path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("font")
-                        .to_string();
-                    fonts.push((name, path));
                 }
             }
-        }
+        } else {
+            // --- 2) Cache miss — scan, read, register, cache -------------
+            tracing::info!("Registering fonts from {} director(ies)", scan_dirs.len());
+            let fonts_meta = FontCache::scan_fonts(&scan_dirs);
+            let font_count = fonts_meta.len();
+            if font_count == 0 {
+                tracing::info!("  no font files found");
+            } else {
+                tracing::info!("  found {font_count} font file(s), reading in parallel...");
 
-        // --- 2) Read all font files in parallel, then register sequentially -----
-        let font_count = fonts.len();
-        tracing::info!("  found {font_count} font file(s), reading in parallel...");
+                let font_data: Vec<(String, Vec<u8>)> = fonts_meta
+                    .par_iter()
+                    .filter_map(|(name, path, _mtime)| {
+                        std::fs::read(path).ok().map(|data| (name.clone(), data))
+                    })
+                    .collect();
 
-        let font_data: Vec<(String, Vec<u8>)> = fonts
-            .par_iter()
-            .filter_map(|(name, path)| std::fs::read(path).ok().map(|data| (name.clone(), data)))
-            .collect();
+                let loaded = font_data.len();
+                tracing::info!("  read {loaded}/{font_count} font file(s)");
 
-        let loaded = font_data.len();
-        tracing::info!("  read {loaded}/{font_count} font file(s)");
-
-        for (i, (name, data)) in font_data.iter().enumerate() {
-            if let Ok(cname) = CString::new(name.as_str()) {
-                unsafe {
-                    (self.libass.ass_add_font)(
-                        self.library,
-                        cast_ptr_to_i8(cname.as_ptr()),
-                        cast_ptr_to_i8(data.as_ptr()),
-                        data.len() as i32,
-                    );
+                for (i, (name, data)) in font_data.iter().enumerate() {
+                    if let Ok(cname) = CString::new(name.as_str()) {
+                        unsafe {
+                            (self.libass.ass_add_font)(
+                                self.library,
+                                cast_ptr_to_i8(cname.as_ptr()),
+                                cast_ptr_to_i8(data.as_ptr()),
+                                data.len() as i32,
+                            );
+                        }
+                    }
+                    if (i + 1).is_multiple_of(50) || i + 1 == loaded {
+                        tracing::info!("  registered font {}/{}", i + 1, loaded);
+                    }
                 }
-            }
-            if (i + 1).is_multiple_of(50) || i + 1 == loaded {
-                tracing::info!("  registered font {}/{}", i + 1, loaded);
+
+                FontCache::update_with_data(&fonts_meta, &font_data);
+                tracing::info!("  font cache written");
             }
         }
 
