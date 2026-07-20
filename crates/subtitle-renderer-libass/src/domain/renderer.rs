@@ -182,6 +182,7 @@ impl AssRenderer {
             if !dir.is_dir() {
                 continue;
             }
+            let mut count = 0u32;
             if let Ok(entries) = std::fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
@@ -218,7 +219,14 @@ impl AssRenderer {
                             );
                         }
                     }
+                    count += 1;
+                    if count.is_multiple_of(50) {
+                        tracing::info!("  fonts registered: {count}");
+                    }
                 }
+            }
+            if count > 0 {
+                tracing::info!("  {dir_path}: registered {count} font(s)");
             }
         }
 
