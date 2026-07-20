@@ -1,4 +1,4 @@
-use crate::types::*;
+use crate::domain::palette::PaletteEntry;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 

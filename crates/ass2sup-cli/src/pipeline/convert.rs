@@ -424,7 +424,7 @@ impl ConversionPipeline {
     pub fn encode_sup(
         frames: &[QuantizedFrame],
         config: &Config,
-    ) -> Vec<pgs_encoder::types::Segment> {
+    ) -> Vec<pgs_encoder::domain::segment::Segment> {
         let mut encoder = PgsEncoder::new(
             config.resolution.width as u16,
             config.resolution.height as u16,
@@ -464,10 +464,10 @@ impl ConversionPipeline {
 
     /// Write a SUP file from PGS segments.
     pub fn write_sup(
-        segments: Vec<pgs_encoder::types::Segment>,
+        segments: Vec<pgs_encoder::domain::segment::Segment>,
         output: &Path,
     ) -> Result<usize, CliError> {
-        let sup_file = pgs_encoder::types::SupFile { segments };
+        let sup_file = pgs_encoder::domain::segment::SupFile { segments };
         let bytes = sup_file.to_bytes();
         let len = bytes.len();
         std::fs::write(output, &bytes)

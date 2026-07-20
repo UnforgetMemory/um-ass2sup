@@ -79,7 +79,7 @@ pub fn encode_sup(
     fps: f64,
 ) -> Result<Vec<u8>, AssError> {
     let mut encoder = PgsEncoder::new(width, height, fps);
-    let mut sup_file = pgs_encoder::SupFile::new();
+    let mut sup_file = pgs_encoder::domain::segment::SupFile::new();
 
     for (i, frame) in frames.iter().enumerate() {
         // Gap detection: if current frame starts after previous ended,

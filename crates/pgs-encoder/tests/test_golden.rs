@@ -1,7 +1,8 @@
 use color_quantizer::Rgba;
-use pgs_encoder::color::{build_palette, color_space_for_height};
-use pgs_encoder::rle::{rle_decode, rle_encode};
-use pgs_encoder::{PgsEncoder, SegmentType};
+use pgs_encoder::domain::palette::{build_palette, color_space_for_height};
+use pgs_encoder::domain::rle::{rle_decode, rle_encode};
+use pgs_encoder::domain::segment::SegmentType;
+use pgs_encoder::PgsEncoder;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
