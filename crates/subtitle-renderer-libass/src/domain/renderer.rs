@@ -1,9 +1,11 @@
 //! Rendering bridge: libass track management and frame rasterization.
 
 use std::ffi::CString;
+use std::path::PathBuf;
 use std::ptr;
 
 use libass_sys;
+use rayon::prelude::*;
 
 use crate::domain::error::AssError;
 use crate::domain::frame::{AssEventInfo, AssImageData, ImageType};
@@ -175,14 +177,14 @@ impl AssRenderer {
         // Add user-provided font directories
         scan_dirs.extend(font_dirs.iter().cloned());
 
-        // --- 1) Register individual font files from all directories -----------
+        // --- 1) Collect all font file paths from all directories -----------
         tracing::info!("Registering fonts from {} director(ies)", scan_dirs.len());
+        let mut fonts: Vec<(String, PathBuf)> = Vec::new();
         for dir_path in &scan_dirs {
             let dir = std::path::Path::new(dir_path);
             if !dir.is_dir() {
                 continue;
             }
-            let mut count = 0u32;
             if let Ok(entries) = std::fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
@@ -200,33 +202,41 @@ impl AssRenderer {
                     ) {
                         continue;
                     }
-                    let font_data = match std::fs::read(&path) {
-                        Ok(d) => d,
-                        Err(_) => continue,
-                    };
                     let name = path
                         .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("font")
                         .to_string();
-                    if let Ok(cname) = CString::new(name.as_str()) {
-                        unsafe {
-                            (self.libass.ass_add_font)(
-                                self.library,
-                                cast_ptr_to_i8(cname.as_ptr()),
-                                cast_ptr_to_i8(font_data.as_ptr()),
-                                font_data.len() as i32,
-                            );
-                        }
-                    }
-                    count += 1;
-                    if count.is_multiple_of(50) {
-                        tracing::info!("  fonts registered: {count}");
-                    }
+                    fonts.push((name, path));
                 }
             }
-            if count > 0 {
-                tracing::info!("  {dir_path}: registered {count} font(s)");
+        }
+
+        // --- 2) Read all font files in parallel, then register sequentially -----
+        let font_count = fonts.len();
+        tracing::info!("  found {font_count} font file(s), reading in parallel...");
+
+        let font_data: Vec<(String, Vec<u8>)> = fonts
+            .par_iter()
+            .filter_map(|(name, path)| std::fs::read(path).ok().map(|data| (name.clone(), data)))
+            .collect();
+
+        let loaded = font_data.len();
+        tracing::info!("  read {loaded}/{font_count} font file(s)");
+
+        for (i, (name, data)) in font_data.iter().enumerate() {
+            if let Ok(cname) = CString::new(name.as_str()) {
+                unsafe {
+                    (self.libass.ass_add_font)(
+                        self.library,
+                        cast_ptr_to_i8(cname.as_ptr()),
+                        cast_ptr_to_i8(data.as_ptr()),
+                        data.len() as i32,
+                    );
+                }
+            }
+            if (i + 1).is_multiple_of(50) || i + 1 == loaded {
+                tracing::info!("  registered font {}/{}", i + 1, loaded);
             }
         }
 

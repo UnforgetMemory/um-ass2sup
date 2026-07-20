@@ -1240,6 +1240,7 @@ dependencies = [
  "color-quantizer",
  "libass-sys",
  "pgs-encoder",
+ "rayon",
  "thiserror",
  "tracing",
 ]

@@ -13,3 +13,4 @@ pgs-encoder.workspace = true
 bdn-xml.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+rayon.workspace = true
