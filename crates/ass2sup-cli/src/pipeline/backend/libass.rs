@@ -85,10 +85,13 @@ fn process_libass(
     let mut output_frames: Vec<QuantizedFrame> = Vec::new();
     let mut prev_data_hash: Option<u64> = None;
 
+    let total_frames = timestamps.len() as u64;
+    tracing::info!("Rendering {total_frames} frames...");
+
     let pb = if args.quiet {
         indicatif::ProgressBar::hidden()
     } else {
-        progress::create(timestamps.len() as u64, "Rendering")
+        progress::create(total_frames, "Rendering")
     };
 
     let last_event_end = events
