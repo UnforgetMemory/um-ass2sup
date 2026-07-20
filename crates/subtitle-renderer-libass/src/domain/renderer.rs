@@ -455,6 +455,21 @@ impl AssRenderer {
         Ok(())
     }
 
+    /// Core fallback fonts that should always be available regardless of the ASS
+    /// file's font requirements.  These are the most common fonts libass resorts
+    /// to when the requested font is missing or doesn't cover certain glyphs.
+    fn fallback_fonts() -> HashSet<String> {
+        let mut fb = HashSet::new();
+        fb.insert(normalize_font_name("Arial"));
+        fb.insert(normalize_font_name("Times New Roman"));
+        fb.insert(normalize_font_name("Microsoft YaHei"));
+        fb.insert(normalize_font_name("Segoe UI"));
+        fb.insert(normalize_font_name("Tahoma"));
+        fb.insert(normalize_font_name("DejaVu Sans"));
+        fb.insert(normalize_font_name("Helvetica"));
+        fb
+    }
+
     /// Configure font lookup.
     ///
     /// Font provider selection uses `ASS_FONTPROVIDER_AUTODETECT=0` so that libass
@@ -516,10 +531,16 @@ impl AssRenderer {
         // Add user-provided font directories
         scan_dirs.extend(font_dirs.iter().cloned());
 
+        // Merge ASS-needed families with the global fallback set so that
+        // libass's font fallback chain (e.g. CJK → Microsoft YaHei) has
+        // fonts available even when the ASS file doesn't reference them.
+        let mut all_needed = needed_families.clone();
+        all_needed.extend(Self::fallback_fonts());
+
         // --- 1) Try font cache first ---
         if let Some(cached) = FontCache::load() {
             let filtered: Vec<&(String, Vec<u8>)> = cached.iter().collect();
-            let filtered: Vec<&&(String, Vec<u8>)> = if needed_families.is_empty() {
+            let filtered: Vec<&&(String, Vec<u8>)> = if all_needed.is_empty() {
                 filtered.iter().collect()
             } else {
                 filtered
@@ -530,7 +551,7 @@ impl AssRenderer {
                             .and_then(|s| s.to_str())
                             .unwrap_or(name);
                         let stem_norm = normalize_font_name(stem);
-                        needed_families.iter().any(|nf| stem_norm.contains(nf))
+                        all_needed.iter().any(|nf| stem_norm.contains(nf))
                     })
                     .collect()
             };
@@ -550,7 +571,9 @@ impl AssRenderer {
         } else {
             // --- 2) Cache miss — scan, read, register, cache -------------
             tracing::info!("Registering fonts from {} director(ies)", scan_dirs.len());
-            let fonts_meta = FontCache::scan_fonts(&scan_dirs, needed_families);
+            let mut all_needed = needed_families.clone();
+            all_needed.extend(Self::fallback_fonts());
+            let fonts_meta = FontCache::scan_fonts(&scan_dirs, &all_needed);
             let font_count = fonts_meta.len();
             if font_count == 0 {
                 tracing::info!("  no font files found");
