@@ -29,6 +29,16 @@ fn normalize_font_name(name: &str) -> String {
         .collect()
 }
 
+/// Returns true if the string is plausibly a real font family name (contains at
+/// least one alphabetic character).  Filters out hex color codes, override tags,
+/// and other garbage that the \fn parser might pick up.
+fn is_valid_font_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > 64 {
+        return false;
+    }
+    name.chars().any(|c| c.is_ascii_alphabetic())
+}
+
 /// Extract all font family names referenced in an ASS subtitle file.
 ///
 /// Parses `Style:` lines for `Fontname` and `Dialogue:` lines for `\fn` override
@@ -79,7 +89,7 @@ pub fn extract_font_families(content: &str) -> HashSet<String> {
                 let parts: Vec<&str> = after_style.splitn(idx + 2, ',').collect();
                 if parts.len() > idx + 1 {
                     let fontname = parts[idx + 1].trim().trim_matches('"');
-                    if !fontname.is_empty() && !fontname.eq_ignore_ascii_case("Arial") {
+                    if is_valid_font_name(fontname) && !fontname.eq_ignore_ascii_case("Arial") {
                         families.insert(normalize_font_name(fontname));
                     }
                 }
@@ -104,7 +114,8 @@ pub fn extract_font_families(content: &str) -> HashSet<String> {
                         // \fn{FontName}
                         if let Some(end) = text[start + 1..].find('}') {
                             let fn_name = text[start + 1..start + 1 + end].trim();
-                            if !fn_name.is_empty() && !fn_name.eq_ignore_ascii_case("Arial") {
+                            if is_valid_font_name(fn_name) && !fn_name.eq_ignore_ascii_case("Arial")
+                            {
                                 families.insert(normalize_font_name(fn_name));
                             }
                             pos = start + 1 + end + 1;
@@ -116,7 +127,7 @@ pub fn extract_font_families(content: &str) -> HashSet<String> {
                         .find(['\\', '}', '{'])
                         .unwrap_or(text[start..].len());
                     let fn_name = text[start..start + end].trim();
-                    if !fn_name.is_empty() && !fn_name.eq_ignore_ascii_case("Arial") {
+                    if is_valid_font_name(fn_name) && !fn_name.eq_ignore_ascii_case("Arial") {
                         families.insert(normalize_font_name(fn_name));
                     }
                     pos = start + end;
