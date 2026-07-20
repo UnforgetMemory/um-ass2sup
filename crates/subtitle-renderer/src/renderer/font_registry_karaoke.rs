@@ -215,48 +215,5 @@ fn composite_glyph(
 }
 
 fn resolve_font_data(registry: &FontRegistry, family: &str, bold: bool) -> Vec<u8> {
-    use crate::font::types::{FontQuery, FontStyle, FontWeight};
-
-    let weight = if bold {
-        FontWeight::Bold
-    } else {
-        FontWeight::Normal
-    };
-    let q = FontQuery {
-        family: family.to_string(),
-        weight,
-        style: FontStyle::Normal,
-    };
-    let result = registry.query(&q);
-    if let Some(id) = result.found {
-        if let Some(data) = registry.get_font_data(id) {
-            return data.to_vec();
-        }
-    }
-    if let Some(sug) = result.suggestion {
-        if let Some(data) = registry.get_font_data(sug.id) {
-            return data.to_vec();
-        }
-    }
-
-    let families = registry.list_families();
-    for fallback_family in &families {
-        let q = FontQuery {
-            family: fallback_family.clone(),
-            weight: FontWeight::Normal,
-            style: FontStyle::Normal,
-        };
-        if let Some(id) = registry.query(&q).found {
-            if let Some(data) = registry.get_font_data(id) {
-                tracing::warn!(
-                    requested = %family,
-                    fallback = %fallback_family,
-                    "font not found, using first available font as last resort"
-                );
-                return data.to_vec();
-            }
-        }
-    }
-
-    Vec::new()
+    super::font_registry_renderer::resolve_font_data_inner(registry, family, bold, None, "", false)
 }

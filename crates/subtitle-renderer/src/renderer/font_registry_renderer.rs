@@ -5,6 +5,7 @@
 
 use ass_core::{Effect, Event};
 use parking_lot::Mutex;
+use std::collections::HashMap;
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform};
 
 use crate::context::{RenderConfig, RenderContext};
@@ -465,24 +466,30 @@ fn composite_glyph(
     }
 }
 
-fn resolve_glyph_font_data(
+/// Consolidated font resolution with configurable fallback chain.
+///
+/// Steps (in order): exact match → suggestion → parse_font_name → bold_upgrade →
+/// font_map → all-families-last-resort.  Each step beyond exact+suggestion is
+/// gated by its corresponding parameter.
+pub(crate) fn resolve_font_data_inner(
     registry: &FontRegistry,
-    ctx: &RenderContext,
-    _glyph_id: u16,
-    font_map: &std::collections::HashMap<String, Vec<String>>,
+    family: &str,
+    bold: bool,
+    font_map: Option<&HashMap<String, Vec<String>>>,
     style_name: &str,
+    use_bold_upgrade: bool,
 ) -> Vec<u8> {
     use crate::font::types::{FontQuery, FontStyle, FontWeight};
 
-    let weight = if ctx.bold {
+    let weight = if bold {
         FontWeight::Bold
     } else {
         FontWeight::Normal
     };
 
-    // Try exact match first
+    // Step 1: exact match
     let q = FontQuery {
-        family: ctx.font_name.clone(),
+        family: family.to_string(),
         weight,
         style: FontStyle::Normal,
     };
@@ -498,21 +505,29 @@ fn resolve_glyph_font_data(
         }
     }
 
-    // Parse family name to extract weight/style (e.g., "MiSans Demibold" -> family="MiSans", weight=Demibold)
-    if let Some((parsed_family, parsed_weight)) = parse_font_name(&ctx.font_name) {
+    // Step 2: parse_font_name decomposition (e.g. "MiSans Demibold" → ("MiSans", Semibold))
+    if let Some((parsed_family, parsed_weight)) = parse_font_name(family) {
         let pq = FontQuery {
             family: parsed_family.to_string(),
             weight: parsed_weight,
             style: FontStyle::Normal,
         };
         let pr = registry.query(&pq);
-        tracing::debug!(
-            original = %ctx.font_name,
-            parsed_family = %parsed_family,
-            parsed_weight = ?parsed_weight,
-            found = pr.found.is_some(),
-            "parsed font query result for glyph"
-        );
+
+        // Bold-upgrade: when bold requested & parsed weight < Bold, also try Bold
+        if use_bold_upgrade && bold && parsed_weight < FontWeight::Bold {
+            let bq = FontQuery {
+                family: parsed_family.to_string(),
+                weight: FontWeight::Bold,
+                style: FontStyle::Normal,
+            };
+            let br = registry.query(&bq);
+            if let Some(id) = br.found {
+                if let Some(data) = registry.get_font_data(id) {
+                    return data.to_vec();
+                }
+            }
+        }
 
         if let Some(id) = pr.found {
             if let Some(data) = registry.get_font_data(id) {
@@ -526,10 +541,10 @@ fn resolve_glyph_font_data(
         }
     }
 
-    // Font map fallback for glyph rendering
-    if let Some(fallbacks) = font_map.get(style_name).or_else(|| font_map.get("Default")) {
+    // Step 3: font_map fallback
+    if let Some(fallbacks) = font_map.and_then(|m| m.get(style_name).or_else(|| m.get("Default"))) {
         for fb_name in fallbacks {
-            if fb_name == ctx.font_name.as_str() {
+            if fb_name == family {
                 continue;
             }
             let fb_query = FontQuery {
@@ -540,29 +555,18 @@ fn resolve_glyph_font_data(
             let fb_result = registry.query(&fb_query);
             if let Some(id) = fb_result.found {
                 if let Some(data) = registry.get_font_data(id) {
-                    tracing::warn!(
-                        original = %ctx.font_name,
-                        fallback = %fb_name,
-                        style = %style_name,
-                        "font fallback: using fallback font for glyph"
-                    );
                     return data.to_vec();
                 }
             }
             if let Some(sug) = fb_result.suggestion {
                 if let Some(data) = registry.get_font_data(sug.id) {
-                    tracing::warn!(
-                        original = %ctx.font_name,
-                        fallback = %fb_name,
-                        style = %style_name,
-                        "font fallback: using fallback font suggestion for glyph"
-                    );
                     return data.to_vec();
                 }
             }
         }
     }
 
+    // Step 4: last resort — first available font
     let families = registry.list_families();
     for fallback_family in &families {
         let q = FontQuery {
@@ -572,17 +576,29 @@ fn resolve_glyph_font_data(
         };
         if let Some(id) = registry.query(&q).found {
             if let Some(data) = registry.get_font_data(id) {
-                tracing::warn!(
-                    requested = %ctx.font_name,
-                    fallback = %fallback_family,
-                    "font not found, using first available font as last resort"
-                );
                 return data.to_vec();
             }
         }
     }
 
     Vec::new()
+}
+
+fn resolve_glyph_font_data(
+    registry: &FontRegistry,
+    ctx: &RenderContext,
+    _glyph_id: u16,
+    font_map: &std::collections::HashMap<String, Vec<String>>,
+    style_name: &str,
+) -> Vec<u8> {
+    resolve_font_data_inner(
+        registry,
+        &ctx.font_name,
+        ctx.bold,
+        Some(font_map),
+        style_name,
+        false, // bold_upgrade already handled by parse_font_name fallback
+    )
 }
 
 fn draw_decoration(
