@@ -1,5 +1,7 @@
 //! Frame composition: blend libass layers onto an RGBA canvas.
 
+use wide::u32x4;
+
 use crate::domain::frame::{AssImageData, RgbaFrame};
 
 /// Composite a list of libass images into a single RGBA frame.
@@ -26,10 +28,16 @@ pub fn compose_frame(images: &[AssImageData], width: u32, height: u32) -> RgbaFr
 
         // libass stores color as 0xRRGGBBAA (MSB = R, LSB = alpha in ASS convention).
         // ASS alpha: 0=opaque, 255=transparent. RGBA alpha: 0=transparent, 255=opaque.
-        let cr = (img.color >> 24) & 0xFF;
-        let cg = (img.color >> 16) & 0xFF;
-        let cb = (img.color >> 8) & 0xFF;
-        let color_alpha = 255 - (img.color & 0xFF);
+        let cr = ((img.color >> 24) & 0xFF) as u32;
+        let cg = ((img.color >> 16) & 0xFF) as u32;
+        let cb = ((img.color >> 8) & 0xFF) as u32;
+        let color_alpha = 255 - (img.color & 0xFF) as u32;
+
+        // SIMD constants for Porter-Duff blending
+        let src_r = u32x4::splat(cr);
+        let src_g = u32x4::splat(cg);
+        let src_b = u32x4::splat(cb);
+        let div_255 = u32x4::splat(255u32);
 
         for sy in 0..ih {
             let fy = dy + sy;
@@ -39,15 +47,107 @@ pub fn compose_frame(images: &[AssImageData], width: u32, height: u32) -> RgbaFr
             let alpha_row_start = sy * istride;
             let frame_row_start = fy * stride_bytes;
 
-            for sx in 0..iw {
+            let mut sx = 0usize;
+            // SIMD: process 4 pixels at a time
+            while sx + 4 <= iw {
+                let fx = dx + sx;
+                if fx + 4 > width as usize {
+                    break;
+                }
+
+                let fi = frame_row_start + fx * 4;
+
+                // Load 4 bitmap alpha bytes
+                let ba0 = img.bitmap[alpha_row_start + sx] as u32;
+                let ba1 = img.bitmap[alpha_row_start + sx + 1] as u32;
+                let ba2 = img.bitmap[alpha_row_start + sx + 2] as u32;
+                let ba3 = img.bitmap[alpha_row_start + sx + 3] as u32;
+
+                let a0 = ba0 * color_alpha / 255;
+                let a1 = ba1 * color_alpha / 255;
+                let a2 = ba2 * color_alpha / 255;
+                let a3 = ba3 * color_alpha / 255;
+
+                // Skip if all transparent
+                if a0 == 0 && a1 == 0 && a2 == 0 && a3 == 0 {
+                    sx += 4;
+                    continue;
+                }
+
+                // Load 4 destination pixels — one u32x4 per RGBA channel
+                let dst_r = u32x4::from([
+                    frame[fi] as u32,
+                    frame[fi + 4] as u32,
+                    frame[fi + 8] as u32,
+                    frame[fi + 12] as u32,
+                ]);
+                let dst_g = u32x4::from([
+                    frame[fi + 1] as u32,
+                    frame[fi + 5] as u32,
+                    frame[fi + 9] as u32,
+                    frame[fi + 13] as u32,
+                ]);
+                let dst_b = u32x4::from([
+                    frame[fi + 2] as u32,
+                    frame[fi + 6] as u32,
+                    frame[fi + 10] as u32,
+                    frame[fi + 14] as u32,
+                ]);
+                let dst_a = u32x4::from([
+                    frame[fi + 3] as u32,
+                    frame[fi + 7] as u32,
+                    frame[fi + 11] as u32,
+                    frame[fi + 15] as u32,
+                ]);
+
+                let alpha = u32x4::from([a0, a1, a2, a3]);
+                let inv = u32x4::splat(255) - alpha;
+
+                // Porter-Duff "over" per channel
+                let result_r = src_r * alpha / div_255 + dst_r * inv / div_255;
+                let result_g = src_g * alpha / div_255 + dst_g * inv / div_255;
+                let result_b = src_b * alpha / div_255 + dst_b * inv / div_255;
+                // Alpha: src_A + dst_A * (1 - src_A/255)
+                let result_a = alpha + dst_a * inv / div_255;
+
+                let rr: [u32; 4] = result_r.into();
+                let rg: [u32; 4] = result_g.into();
+                let rb: [u32; 4] = result_b.into();
+                let ra: [u32; 4] = result_a.into();
+
+                frame[fi] = rr[0] as u8;
+                frame[fi + 1] = rg[0] as u8;
+                frame[fi + 2] = rb[0] as u8;
+                frame[fi + 3] = ra[0] as u8;
+
+                frame[fi + 4] = rr[1] as u8;
+                frame[fi + 5] = rg[1] as u8;
+                frame[fi + 6] = rb[1] as u8;
+                frame[fi + 7] = ra[1] as u8;
+
+                frame[fi + 8] = rr[2] as u8;
+                frame[fi + 9] = rg[2] as u8;
+                frame[fi + 10] = rb[2] as u8;
+                frame[fi + 11] = ra[2] as u8;
+
+                frame[fi + 12] = rr[3] as u8;
+                frame[fi + 13] = rg[3] as u8;
+                frame[fi + 14] = rb[3] as u8;
+                frame[fi + 15] = ra[3] as u8;
+
+                sx += 4;
+            }
+
+            // Scalar fallback for remaining pixels
+            while sx < iw {
                 let fx = dx + sx;
                 if fx >= width as usize {
                     break;
                 }
                 let bitmap_alpha = img.bitmap[alpha_row_start + sx] as u32;
-                // Combine per-pixel alpha with per-image color alpha (for fades)
                 let alpha = bitmap_alpha * color_alpha / 255;
                 if alpha == 0 {
+                    sx += 1;
                     continue;
                 }
                 let fi = frame_row_start + fx * 4;
@@ -65,6 +165,7 @@ pub fn compose_frame(images: &[AssImageData], width: u32, height: u32) -> RgbaFr
                     frame[fi + 2] = ((cb * alpha + frame[fi + 2] as u32 * inv) / 255) as u8;
                     frame[fi + 3] = (alpha + da * inv / 255) as u8;
                 }
+                sx += 1;
             }
         }
     }
@@ -81,12 +182,6 @@ mod tests {
     use super::*;
     use crate::domain::frame::ImageType;
 
-    // libass color format: 0xRRGGBBAA (MSB → LSB)
-    // RR = Red, GG = Green, BB = Blue, AA = alpha (ASS: 0=opaque, 255=transparent)
-    // 0x00FF0000 = R=0, G=255, B=0, A=0 (opaque) = GREEN
-    // 0xFF000000 = R=255, G=0, B=0, A=0 (opaque) = RED
-    // 0x0000FF00 = R=0, G=0, B=255, A=0 (opaque) = BLUE
-
     #[test]
     fn single_opaque_green() {
         let img = AssImageData {
@@ -94,14 +189,14 @@ mod tests {
             h: 2,
             stride: 2,
             bitmap: vec![255; 4],
-            color: 0x00FF0000, // RR=0x00, GG=0xFF, BB=0x00, AA=0x00 → GREEN
+            color: 0x00FF0000,
             dst_x: 0,
             dst_y: 0,
             image_type: ImageType::Character,
         };
         let out = compose_frame(&[img], 2, 2);
-        assert_eq!(out.data[1], 255); // G
-        assert_eq!(out.data[3], 255); // A
+        assert_eq!(out.data[1], 255);
+        assert_eq!(out.data[3], 255);
     }
 
     #[test]
@@ -111,7 +206,7 @@ mod tests {
             h: 1,
             stride: 1,
             bitmap: vec![0],
-            color: 0xFF000000, // opaque RED but bitmap is 0
+            color: 0xFF000000,
             dst_x: 0,
             dst_y: 0,
             image_type: ImageType::Character,
@@ -127,45 +222,114 @@ mod tests {
             h: 1,
             stride: 4,
             bitmap: vec![255; 4],
-            color: 0x00FF0000, // GREEN
+            color: 0x00FF0000,
             dst_x: 0,
             dst_y: 0,
             image_type: ImageType::Character,
         };
         let out = compose_frame(&[img], 2, 1);
-        assert_eq!(out.data[1], 255); // G at pixel (0,0)
-        assert_eq!(out.data[5], 255); // G at pixel (1,0)
+        assert_eq!(out.data[1], 255);
+        assert_eq!(out.data[5], 255);
     }
 
     #[test]
     fn blend_bg_red_fg_blue() {
-        // bg: RED at 50% bitmap alpha
         let bg = AssImageData {
             w: 1,
             h: 1,
             stride: 1,
             bitmap: vec![128],
-            color: 0xFF000000, // RR=0xFF, GG=0x00, BB=0x00, AA=0x00 → RED
+            color: 0xFF000000,
             dst_x: 0,
             dst_y: 0,
             image_type: ImageType::Outline,
         };
-        // fg: BLUE at 50% bitmap alpha, composited over bg
         let fg = AssImageData {
             w: 1,
             h: 1,
             stride: 1,
             bitmap: vec![128],
-            color: 0x0000FF00, // RR=0x00, GG=0x00, BB=0xFF, AA=0x00 → BLUE
+            color: 0x0000FF00,
             dst_x: 0,
             dst_y: 0,
             image_type: ImageType::Character,
         };
         let out = compose_frame(&[bg, fg], 1, 1);
-        // bg at bitmap_alpha=128, color_alpha=255 → effective=128: R=(255*128+0*127)/255=128
-        // fg at bitmap_alpha=128, color_alpha=255 → effective=128
-        //   blended over bg: B=(255*128+0*127)/255=128, R=(0*128+128*127)/255=63
-        assert_eq!(out.data[0], 63); // R
-        assert_eq!(out.data[2], 128); // B
+        assert_eq!(out.data[0], 63);
+        assert_eq!(out.data[2], 128);
+    }
+
+    #[test]
+    fn simd_scalar_parity_4px() {
+        let img = AssImageData {
+            w: 4,
+            h: 1,
+            stride: 4,
+            bitmap: vec![64, 128, 192, 255],
+            color: 0x00FF0000,
+            dst_x: 0,
+            dst_y: 0,
+            image_type: ImageType::Character,
+        };
+        let out = compose_frame(&[img], 4, 1);
+        assert_eq!(out.data[1], 64);
+        assert_eq!(out.data[3], 64);
+        assert_eq!(out.data[5], 128);
+        assert_eq!(out.data[7], 128);
+        assert_eq!(out.data[9], 192);
+        assert_eq!(out.data[11], 192);
+        assert_eq!(out.data[13], 255);
+        assert_eq!(out.data[15], 255);
+    }
+
+    #[test]
+    fn simd_scalar_parity_6px() {
+        let mut bitmap = vec![0u8; 6];
+        for i in 0..6 {
+            bitmap[i] = (i * 51) as u8;
+        }
+        let img = AssImageData {
+            w: 6,
+            h: 1,
+            stride: 6,
+            bitmap,
+            color: 0x0000FF00,
+            dst_x: 0,
+            dst_y: 0,
+            image_type: ImageType::Character,
+        };
+        let out = compose_frame(&[img], 6, 1);
+        for i in 0..6 {
+            let expected_alpha = (i * 51) as u8;
+            assert_eq!(out.data[i * 4 + 2], expected_alpha, "B at pixel {i}");
+            assert_eq!(out.data[i * 4 + 3], expected_alpha, "A at pixel {i}");
+        }
+    }
+
+    #[test]
+    fn mixed_transparency_4px() {
+        let img = AssImageData {
+            w: 4,
+            h: 1,
+            stride: 4,
+            bitmap: vec![255, 0, 255, 0],
+            color: 0x00FF0000,
+            dst_x: 0,
+            dst_y: 0,
+            image_type: ImageType::Character,
+        };
+        let out = compose_frame(&[img], 4, 1);
+        assert_eq!(out.data[1], 255);
+        assert_eq!(out.data[3], 255);
+        assert_eq!(out.data[9], 255);
+        assert_eq!(out.data[11], 255);
+        assert_eq!(out.data[4], 0);
+        assert_eq!(out.data[5], 0);
+        assert_eq!(out.data[6], 0);
+        assert_eq!(out.data[7], 0);
+        assert_eq!(out.data[12], 0);
+        assert_eq!(out.data[13], 0);
+        assert_eq!(out.data[14], 0);
+        assert_eq!(out.data[15], 0);
     }
 }

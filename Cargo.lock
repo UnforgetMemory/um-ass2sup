@@ -1243,6 +1243,7 @@ dependencies = [
  "rayon",
  "thiserror",
  "tracing",
+ "wide",
 ]
 
 [[package]]

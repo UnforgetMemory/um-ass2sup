@@ -14,3 +14,4 @@ bdn-xml.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 rayon.workspace = true
+wide.workspace = true
