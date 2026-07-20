@@ -10,7 +10,7 @@ pub use domain::composer::compose_frame;
 pub use domain::error::AssError;
 pub use domain::frame::{AssEventInfo, AssImageData, CroppedFrame, ImageType, RgbaFrame};
 pub use domain::pipeline::ConversionConfig;
-pub use domain::renderer::AssRenderer;
+pub use domain::renderer::{extract_font_families, AssRenderer};
 pub use domain::timeline::generate_timestamps;
 pub use infra::pgs_adapter::{
     create_pipeline, encode_bdn, encode_sup, frame_accurate_pts, quantize_frame,

@@ -9,7 +9,7 @@ use color_quantizer::QuantizedFrame;
 
 use crate::domain::composer::compose_frame;
 use crate::domain::error::AssError;
-use crate::domain::renderer::AssRenderer;
+use crate::domain::renderer::{extract_font_families, AssRenderer};
 use crate::domain::timeline::generate_timestamps;
 use crate::infra::pgs_adapter::{create_pipeline, encode_bdn, encode_sup};
 use crate::infra::vendor::crop_to_tight_bbox;
@@ -171,9 +171,15 @@ impl Ass2Sup {
             }
         }
 
+        let needed_families = extract_font_families(&content);
+
         let mut renderer = AssRenderer::new(config.width, config.height)?;
         renderer.load_ass(&content)?;
-        renderer.configure_fonts(config.default_font.as_deref(), &config.fonts_dirs)?;
+        renderer.configure_fonts(
+            config.default_font.as_deref(),
+            &config.fonts_dirs,
+            &needed_families,
+        )?;
 
         let events = renderer.events();
         if events.is_empty() {

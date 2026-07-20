@@ -1,5 +1,6 @@
 //! Rendering bridge: libass track management and frame rasterization.
 
+use std::collections::HashSet;
 use std::ffi::CString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,115 @@ use crate::domain::frame::{AssEventInfo, AssImageData, ImageType};
 /// On aarch64/Windows `c_char = u8` → required type conversion for `CString::as_ptr()` etc.
 fn cast_ptr_to_i8<T>(p: *const T) -> *const i8 {
     p as *const i8
+}
+
+/// Normalize a font family name for comparison: lowercase, strip spaces/hyphens.
+fn normalize_font_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
+
+/// Extract all font family names referenced in an ASS subtitle file.
+///
+/// Parses `Style:` lines for `Fontname` and `Dialogue:` lines for `\fn` override
+/// tags.  Returns a deduplicated set of normalized names.
+pub fn extract_font_families(content: &str) -> HashSet<String> {
+    let mut families = HashSet::new();
+    let mut in_styles = false;
+    let mut in_events = false;
+    let mut fontname_idx: Option<usize> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("[V4+ Styles]")
+            || trimmed.starts_with("[V4 Styles]")
+            || trimmed.starts_with("[Styles]")
+        {
+            in_styles = true;
+            in_events = false;
+            fontname_idx = None;
+            continue;
+        }
+        if trimmed.starts_with("[Events]") {
+            in_styles = false;
+            in_events = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            in_styles = false;
+            in_events = false;
+        }
+
+        // --- Style section: find Fontname column index -----------------
+        if in_styles && trimmed.starts_with("Format:") {
+            for (i, field) in trimmed[7..].split(',').enumerate() {
+                if field.trim().eq_ignore_ascii_case("Fontname") {
+                    fontname_idx = Some(i);
+                    break;
+                }
+            }
+            continue;
+        }
+
+        // --- Style section: extract Fontname value ---------------------
+        if in_styles && trimmed.starts_with("Style:") {
+            if let Some(idx) = fontname_idx {
+                let after_style = trimmed[6..].trim();
+                let parts: Vec<&str> = after_style.splitn(idx + 2, ',').collect();
+                if parts.len() > idx + 1 {
+                    let fontname = parts[idx + 1].trim().trim_matches('"');
+                    if !fontname.is_empty() && !fontname.eq_ignore_ascii_case("Arial") {
+                        families.insert(normalize_font_name(fontname));
+                    }
+                }
+            }
+            continue;
+        }
+
+        // --- Events section: find \fn override tags --------------------
+        if in_events && trimmed.starts_with("Dialogue:") {
+            // Text is after the 9th comma (0-indexed: field 9)
+            let text = trimmed.split(',').skip(9).collect::<Vec<_>>().join(",");
+            let mut pos = 0;
+            let bytes = text.as_bytes();
+            while pos < bytes.len() {
+                if bytes[pos] == b'\\'
+                    && pos + 2 < bytes.len()
+                    && bytes[pos + 1] == b'f'
+                    && bytes[pos + 2] == b'n'
+                {
+                    let start = pos + 3;
+                    if start < bytes.len() && bytes[start] == b'{' {
+                        // \fn{FontName}
+                        if let Some(end) = text[start + 1..].find('}') {
+                            let fn_name = text[start + 1..start + 1 + end].trim();
+                            if !fn_name.is_empty() && !fn_name.eq_ignore_ascii_case("Arial") {
+                                families.insert(normalize_font_name(fn_name));
+                            }
+                            pos = start + 1 + end + 1;
+                            continue;
+                        }
+                    }
+                    // \fnFontName (no braces)
+                    let end = text[start..]
+                        .find(['\\', '}', '{'])
+                        .unwrap_or(text[start..].len());
+                    let fn_name = text[start..start + end].trim();
+                    if !fn_name.is_empty() && !fn_name.eq_ignore_ascii_case("Arial") {
+                        families.insert(normalize_font_name(fn_name));
+                    }
+                    pos = start + end;
+                    continue;
+                }
+                pos += 1;
+            }
+        }
+    }
+
+    families
 }
 
 /// libass log callback — third arg is a `va_list`, not a string, so we log
@@ -84,8 +194,13 @@ impl FontCache {
         Self::cache_dir().map(|d| d.join("fonts.cache"))
     }
 
-    /// Collect all font files from scan directories and return (name, path, mtime).
-    fn scan_fonts(scan_dirs: &[String]) -> Vec<(String, PathBuf, SystemTime)> {
+    /// Collect font files from scan directories, optionally filtered by needed families.
+    /// When `needed` is non-empty, only fonts whose filename (stem, lowercased, alnum only)
+    /// contains any needed family name are included.
+    fn scan_fonts(
+        scan_dirs: &[String],
+        needed: &HashSet<String>,
+    ) -> Vec<(String, PathBuf, SystemTime)> {
         let mut fonts = Vec::new();
         for dir_path in scan_dirs {
             let dir = std::path::Path::new(dir_path);
@@ -114,6 +229,16 @@ impl FontCache {
                         .and_then(|n| n.to_str())
                         .unwrap_or("font")
                         .to_string();
+                    // If needed families are specified, skip fonts whose filename
+                    // doesn't contain any needed family name.
+                    if !needed.is_empty() {
+                        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                        let stem_norm = normalize_font_name(stem);
+                        let matches = needed.iter().any(|nf| stem_norm.contains(nf));
+                        if !matches {
+                            continue;
+                        }
+                    }
                     let mtime = std::fs::metadata(&path)
                         .and_then(|m| m.modified())
                         .unwrap_or(SystemTime::UNIX_EPOCH);
@@ -356,6 +481,7 @@ impl AssRenderer {
         &mut self,
         default_family: Option<&str>,
         font_dirs: &[String],
+        needed_families: &HashSet<String>,
     ) -> Result<(), AssError> {
         // --- 0) Build list of font directories to scan ------------------------
         let mut scan_dirs: Vec<String> = Vec::new();
@@ -392,8 +518,24 @@ impl AssRenderer {
 
         // --- 1) Try font cache first ---
         if let Some(cached) = FontCache::load() {
-            tracing::info!("Font cache hit — {} font(s) from cache", cached.len());
-            for (name, data) in &cached {
+            let filtered: Vec<&(String, Vec<u8>)> = cached.iter().collect();
+            let filtered: Vec<&&(String, Vec<u8>)> = if needed_families.is_empty() {
+                filtered.iter().collect()
+            } else {
+                filtered
+                    .iter()
+                    .filter(|(name, _)| {
+                        let stem = std::path::Path::new(name)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(name);
+                        let stem_norm = normalize_font_name(stem);
+                        needed_families.iter().any(|nf| stem_norm.contains(nf))
+                    })
+                    .collect()
+            };
+            tracing::info!("Font cache hit — {} font(s) from cache", filtered.len());
+            for (name, data) in &filtered {
                 if let Ok(cname) = CString::new(name.as_str()) {
                     unsafe {
                         (self.libass.ass_add_font)(
@@ -408,7 +550,7 @@ impl AssRenderer {
         } else {
             // --- 2) Cache miss — scan, read, register, cache -------------
             tracing::info!("Registering fonts from {} director(ies)", scan_dirs.len());
-            let fonts_meta = FontCache::scan_fonts(&scan_dirs);
+            let fonts_meta = FontCache::scan_fonts(&scan_dirs, needed_families);
             let font_count = fonts_meta.len();
             if font_count == 0 {
                 tracing::info!("  no font files found");

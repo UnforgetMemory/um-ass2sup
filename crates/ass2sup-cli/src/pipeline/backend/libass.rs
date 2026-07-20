@@ -66,9 +66,27 @@ fn process_libass(
 ) -> Result<Vec<QuantizedFrame>, subtitle_renderer_libass::AssError> {
     use subtitle_renderer_libass::AssRenderer;
 
+    let needed_families = subtitle_renderer_libass::extract_font_families(content);
+    tracing::info!(
+        "Font families needed: {}",
+        if needed_families.is_empty() {
+            "all".to_string()
+        } else {
+            needed_families
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    );
+
     let mut renderer = AssRenderer::new(config.width, config.height)?;
     renderer.load_ass(content)?;
-    renderer.configure_fonts(config.default_font.as_deref(), &config.fonts_dirs)?;
+    renderer.configure_fonts(
+        config.default_font.as_deref(),
+        &config.fonts_dirs,
+        &needed_families,
+    )?;
 
     let events = renderer.events();
     if events.is_empty() {
