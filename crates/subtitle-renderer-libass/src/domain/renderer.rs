@@ -394,9 +394,11 @@ pub struct AssRenderer {
     fonts_configured: bool,
 }
 
-// libass handles are thread-safe (internally mutex-protected)
+// AssRenderer owns raw pointers to libass handles.  Sending between threads
+// is safe (the pointers are moved, not shared).  Sync is NOT implemented
+// because libass's ASS_Renderer is explicitly documented as NOT reentrant —
+// concurrent render_frame calls on the same renderer would race.
 unsafe impl Send for AssRenderer {}
-unsafe impl Sync for AssRenderer {}
 
 impl AssRenderer {
     /// Create a new libass renderer for the given frame dimensions.
@@ -703,14 +705,9 @@ impl AssRenderer {
             let h = img.h.max(0) as u32;
             let stride = img.stride.max(0) as u32;
 
-            // Copy alpha buffer from libass's internal memory
+            // Copy alpha buffer from libass's internal memory via slice::from_raw_parts
             let bitmap = if w > 0 && h > 0 && !img.bitmap.is_null() {
-                let mut buf = Vec::with_capacity((stride * h) as usize);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(img.bitmap, buf.as_mut_ptr(), buf.capacity());
-                    buf.set_len(buf.capacity());
-                }
-                buf
+                unsafe { std::slice::from_raw_parts(img.bitmap, (stride * h) as usize).to_vec() }
             } else {
                 Vec::new()
             };
