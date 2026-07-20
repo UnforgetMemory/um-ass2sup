@@ -4,6 +4,8 @@
 pub mod composer;
 /// Domain error types.
 pub mod error;
+/// Font file cache persisted to disk.
+pub mod font_cache;
 /// Value objects for images, frames, and event metadata.
 pub mod frame;
 /// Pipeline orchestration: ASS parse → render → quantize → encode.
