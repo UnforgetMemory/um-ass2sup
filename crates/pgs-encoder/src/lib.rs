@@ -8,5 +8,6 @@ pub mod types;
 pub mod domain;
 
 pub use color::{swap, ycbcr_to_rgba};
-pub use encoder::{timecode_to_ms, PgsEncoder};
+pub use domain::timing::timecode_to_ms;
+pub use encoder::PgsEncoder;
 pub use types::*;

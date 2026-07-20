@@ -260,23 +260,6 @@ pub fn ms_to_90khz(ms: u64) -> u64 {
     ms * 90
 }
 
-/// Parse an ASS-style timecode string into milliseconds.
-pub fn timecode_to_ms(timecode: &str) -> Option<u64> {
-    let parts: Vec<&str> = timecode.split(':').collect();
-    if parts.len() != 3 {
-        return None;
-    }
-    let h: u64 = parts[0].parse().ok()?;
-    let m: u64 = parts[1].parse().ok()?;
-    let sec_parts: Vec<&str> = parts[2].split('.').collect();
-    if sec_parts.len() != 2 {
-        return None;
-    }
-    let s: u64 = sec_parts[0].parse().ok()?;
-    let cs: u64 = sec_parts[1].parse().ok()?;
-    Some(h * 3600000 + m * 60000 + s * 1000 + cs * 10)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,6 +386,7 @@ mod tests {
 
     #[test]
     fn test_timecode_to_ms() {
+        use crate::domain::timing::timecode_to_ms;
         assert_eq!(timecode_to_ms("0:00:01.00"), Some(1000));
         assert_eq!(timecode_to_ms("1:30:00.00"), Some(5400000));
         assert_eq!(timecode_to_ms("invalid"), None);

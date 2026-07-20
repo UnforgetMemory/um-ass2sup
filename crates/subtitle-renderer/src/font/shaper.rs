@@ -24,9 +24,7 @@ impl SimpleShaper {
         })?;
 
         let charmap = font.charmap();
-        let font_metrics = font.metrics(&[]);
         let metrics = font.glyph_metrics(&[]).scale(font_size);
-        let ascent = font_metrics.ascent * font_size / font_metrics.units_per_em as f32;
 
         let mut glyphs = Vec::with_capacity(text.len());
 
@@ -42,7 +40,7 @@ impl SimpleShaper {
             glyphs.push(ShapedGlyph {
                 glyph_id,
                 x_advance: advance,
-                y_advance: ascent,
+                y_advance: 0.0, // vertical advance is 0 for horizontal text
                 x_offset: 0.0,
                 y_offset: 0.0,
             });
