@@ -40,15 +40,15 @@ pub fn linear_to_bt709(x: f32, y: f32, z: f32) -> (f32, f32, f32) {
     (r, g, b)
 }
 
-/// BT.2020 → linear-light using ITU-R BT.2020 matrix.
+/// BT.2020 → CIE XYZ using ITU-R BT.2020-2 RGB-to-XYZ matrix.
 pub fn bt2020_to_linear(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
-    let x = 0.262_679 * r + 0.677_998 * g + 0.059_323 * b;
-    let y = 0.559_998 * r + 0.336_001 * g + 0.104_001 * b;
-    let z = 0.000_000 * r + 0.009_999 * g + 0.990_001 * b;
+    let x = 0.636_958 * r + 0.144_617 * g + 0.168_881 * b;
+    let y = 0.262_700 * r + 0.677_998 * g + 0.059_302 * b;
+    let z = 0.000_000 * r + 0.028_073 * g + 1.060_985 * b;
     (x, y, z)
 }
 
-/// Linear-light → BT.2020 using ITU-R BT.2020 matrix.
+/// CIE XYZ → BT.2020 using ITU-R BT.2020-2 XYZ-to-RGB matrix.
 pub fn linear_to_bt2020(x: f32, y: f32, z: f32) -> (f32, f32, f32) {
     let r = 1.716_651 * x - 0.355_671 * y - 0.253_341 * z;
     let g = -0.666_684 * x + 1.616_481 * y + 0.015_768 * z;

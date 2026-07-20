@@ -33,8 +33,10 @@ enum KdNode {
 }
 
 struct KdCacheEntry {
-    palette_ptr: usize,
-    palette_len: usize,
+    /// Snapshot of the palette data at cache-build time.
+    /// Used to detect changes (new allocation or content mutation) by
+    /// comparing element-by-element rather than by raw pointer.
+    palette_data: Vec<[u8; 4]>,
     tree: KdNode,
 }
 
@@ -196,20 +198,19 @@ pub fn find_nearest_index(color: &[u8; 4], palette: &[[u8; 4]]) -> u8 {
     }
 
     KD_TREE_CACHE.with_borrow_mut(|cache| {
-        let ptr = palette.as_ptr() as usize;
-        let len = palette.len();
-
         let needs_rebuild = match cache {
-            Some(entry) => entry.palette_ptr != ptr || entry.palette_len != len,
+            Some(entry) => {
+                entry.palette_data.len() != palette.len()
+                    || entry.palette_data.as_slice() != palette
+            }
             None => true,
         };
 
         if needs_rebuild {
-            let indices: Vec<usize> = (0..len).collect();
+            let indices: Vec<usize> = (0..palette.len()).collect();
             let tree = build_kdtree(&indices, palette);
             *cache = Some(KdCacheEntry {
-                palette_ptr: ptr,
-                palette_len: len,
+                palette_data: palette.to_vec(),
                 tree,
             });
         }
