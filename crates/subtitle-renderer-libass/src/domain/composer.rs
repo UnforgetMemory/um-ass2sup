@@ -28,10 +28,10 @@ pub fn compose_frame(images: &[AssImageData], width: u32, height: u32) -> RgbaFr
 
         // libass stores color as 0xRRGGBBAA (MSB = R, LSB = alpha in ASS convention).
         // ASS alpha: 0=opaque, 255=transparent. RGBA alpha: 0=transparent, 255=opaque.
-        let cr = ((img.color >> 24) & 0xFF) as u32;
-        let cg = ((img.color >> 16) & 0xFF) as u32;
-        let cb = ((img.color >> 8) & 0xFF) as u32;
-        let color_alpha = 255 - (img.color & 0xFF) as u32;
+        let cr = (img.color >> 24) & 0xFF;
+        let cg = (img.color >> 16) & 0xFF;
+        let cb = (img.color >> 8) & 0xFF;
+        let color_alpha = 255 - (img.color & 0xFF);
 
         // SIMD constants for Porter-Duff blending
         let src_r = u32x4::splat(cr);

@@ -1,6 +1,7 @@
 //! Pipeline orchestration: ASS parse → render → quantize → encode.
 
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
@@ -9,6 +10,7 @@ use color_quantizer::QuantizedFrame;
 
 use crate::domain::composer::compose_frame;
 use crate::domain::error::AssError;
+use crate::domain::frame::AssEventInfo;
 use crate::domain::renderer::{extract_font_families, AssRenderer};
 use crate::domain::timeline::generate_timestamps;
 use crate::infra::pgs_adapter::{create_pipeline, encode_bdn, encode_sup};
@@ -197,22 +199,43 @@ impl Ass2Sup {
         let mut empty_skipped = 0u64;
         let mut dup_skipped = 0u64;
 
-        let last_event_end = events
+        let mut sorted_events: Vec<&AssEventInfo> = events.iter().collect();
+        sorted_events.sort_by_key(|e| e.start_ms);
+
+        let last_event_end = sorted_events
             .iter()
             .map(|e| e.start_ms + e.duration_ms)
             .max()
             .unwrap_or(0) as u64;
 
-        // Render loop: iterate sorted timestamps with windows(2) for duration.
+        let mut event_cursor = 0usize;
+        let mut active_ends: BinaryHeap<i64> = BinaryHeap::new();
+
         for window in timestamps.windows(2) {
             let ts = window[0];
             let next_ts = window[1];
 
-            // Only render if at least one event is active at this timestamp.
-            let has_active = events
-                .iter()
-                .any(|e| e.start_ms as u64 <= ts && ts < (e.start_ms + e.duration_ms) as u64);
-            if !has_active {
+            while event_cursor < sorted_events.len() {
+                let e = sorted_events[event_cursor];
+                if (e.start_ms as u64) <= ts {
+                    let end = e.start_ms + e.duration_ms;
+                    active_ends.push(-end);
+                    event_cursor += 1;
+                } else {
+                    break;
+                }
+            }
+
+            while let Some(&neg_end) = active_ends.peek() {
+                let end = (-neg_end) as u64;
+                if end <= ts {
+                    active_ends.pop();
+                } else {
+                    break;
+                }
+            }
+
+            if active_ends.is_empty() {
                 continue;
             }
 
