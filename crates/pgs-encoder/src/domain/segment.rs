@@ -135,6 +135,32 @@ impl Segment {
         buf
     }
 
+    /// Lightweight size of the serialized segment, without allocating.
+    ///
+    /// Computes the exact byte length that [`Self::to_bytes`] would produce
+    /// (13-byte header + payload length) using field-length arithmetic instead
+    /// of materializing the buffer. Used for size accounting on the hot path.
+    pub fn serialized_size(&self) -> usize {
+        13 + self.payload_size()
+    }
+
+    fn payload_size(&self) -> usize {
+        match &self.payload {
+            SegmentPayload::End => 0,
+            SegmentPayload::Pcs(ref p) => {
+                let fixed = 11;
+                let per_composition =
+                    |c: &super::composition::ObjectComposition| if c.cropped { 16 } else { 8 };
+                fixed + p.compositions.iter().map(per_composition).sum::<usize>()
+            }
+            SegmentPayload::Wds(ref w) => 1 + w.windows.len() * 9,
+            SegmentPayload::Pds(ref p) => 2 + p.entries.len() * 5,
+            SegmentPayload::Ods(ref o) => {
+                4 + if o.first_in_sequence { 7 } else { 0 } + o.rle_data.len()
+            }
+        }
+    }
+
     fn payload_to_bytes(&self) -> Vec<u8> {
         match &self.payload {
             SegmentPayload::End => Vec::new(),
@@ -213,5 +239,167 @@ impl Segment {
                 buf
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::composition::{CompositionState, ObjectComposition, WindowDef};
+    use crate::domain::palette::PaletteEntry;
+
+    fn make_segment(payload: SegmentPayload) -> Segment {
+        let segment_type = match &payload {
+            SegmentPayload::Pcs(_) => SegmentType::Pcs,
+            SegmentPayload::Wds(_) => SegmentType::Wds,
+            SegmentPayload::Pds(_) => SegmentType::Pds,
+            SegmentPayload::Ods(_) => SegmentType::Ods,
+            SegmentPayload::End => SegmentType::End,
+        };
+        Segment {
+            segment_type,
+            pts: 90000,
+            dts: 89999,
+            payload,
+        }
+    }
+
+    fn assert_size_matches(seg: &Segment) {
+        assert_eq!(seg.serialized_size(), seg.to_bytes().len());
+    }
+
+    #[test]
+    fn serialized_size_matches_to_bytes_for_end() {
+        assert_size_matches(&make_segment(SegmentPayload::End));
+    }
+
+    #[test]
+    fn serialized_size_matches_to_bytes_for_pcs() {
+        let pcs = PcsPayload {
+            width: 1920,
+            height: 1080,
+            frame_rate: 0x10,
+            composition_number: 1,
+            composition_state: CompositionState::EpochStart,
+            palette_update: true,
+            palette_id: 0,
+            num_objects: 2,
+            compositions: vec![
+                ObjectComposition {
+                    object_id: 1,
+                    window_id: 0,
+                    cropped: false,
+                    forced: false,
+                    x: 100,
+                    y: 200,
+                    crop_x: 0,
+                    crop_y: 0,
+                    crop_w: 0,
+                    crop_h: 0,
+                },
+                ObjectComposition {
+                    object_id: 2,
+                    window_id: 0,
+                    cropped: true,
+                    forced: true,
+                    x: 300,
+                    y: 400,
+                    crop_x: 10,
+                    crop_y: 20,
+                    crop_w: 30,
+                    crop_h: 40,
+                },
+            ],
+        };
+        assert_size_matches(&make_segment(SegmentPayload::Pcs(pcs)));
+    }
+
+    #[test]
+    fn serialized_size_matches_to_bytes_for_wds() {
+        let wds = WdsPayload {
+            num_windows: 2,
+            windows: vec![
+                WindowDef {
+                    window_id: 0,
+                    x: 100,
+                    y: 200,
+                    width: 500,
+                    height: 60,
+                },
+                WindowDef {
+                    window_id: 1,
+                    x: 0,
+                    y: 0,
+                    width: 1920,
+                    height: 1080,
+                },
+            ],
+        };
+        assert_size_matches(&make_segment(SegmentPayload::Wds(wds)));
+    }
+
+    #[test]
+    fn serialized_size_matches_to_bytes_for_pds() {
+        let pds = PdsPayload {
+            palette_id: 0,
+            version: 1,
+            entries: vec![
+                PaletteEntry {
+                    index: 0,
+                    y: 16,
+                    cb: 128,
+                    cr: 128,
+                    alpha: 0,
+                },
+                PaletteEntry {
+                    index: 1,
+                    y: 235,
+                    cb: 240,
+                    cr: 128,
+                    alpha: 255,
+                },
+                PaletteEntry {
+                    index: 255,
+                    y: 16,
+                    cb: 16,
+                    cr: 240,
+                    alpha: 128,
+                },
+            ],
+        };
+        assert_size_matches(&make_segment(SegmentPayload::Pds(pds)));
+    }
+
+    #[test]
+    fn serialized_size_matches_to_bytes_for_ods() {
+        // All four (first_in_sequence, last_in_sequence) combinations.
+        for (first, last) in [(true, false), (false, true), (true, true), (false, false)] {
+            let ods = OdsPayload {
+                object_id: 0,
+                object_version: 0,
+                first_in_sequence: first,
+                last_in_sequence: last,
+                width: 100,
+                height: 50,
+                rle_data: vec![0x00, 0x64, 0x00, 0x00, 0x41, 0xFF, 0x00, 0x2A],
+                total_rle_size: 8,
+            };
+            assert_size_matches(&make_segment(SegmentPayload::Ods(ods)));
+        }
+    }
+
+    #[test]
+    fn serialized_size_matches_to_bytes_for_ods_large_rle() {
+        let ods = OdsPayload {
+            object_id: 0,
+            object_version: 1,
+            first_in_sequence: true,
+            last_in_sequence: true,
+            width: 1920,
+            height: 1080,
+            rle_data: vec![0xAB; 4096],
+            total_rle_size: 4096,
+        };
+        assert_size_matches(&make_segment(SegmentPayload::Ods(ods)));
     }
 }

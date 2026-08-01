@@ -194,7 +194,7 @@ impl PgsEncoder {
             }
         };
 
-        let total_size: usize = segments.iter().map(|s| s.to_bytes().len()).sum();
+        let total_size: usize = segments.iter().map(|s| s.serialized_size()).sum();
         if total_size > MAX_DECODE_BUFFER * 3 / 4 {
             self.epoch.update(palette_hash, rle_hash);
             (
