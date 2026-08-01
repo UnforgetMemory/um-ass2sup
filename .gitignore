@@ -71,6 +71,16 @@ criterion-*/
 .perf_test/
 .metrics/
 
+# ── Profiling / performance analysis artifacts / 性能分析产物 ────
+perf.data
+perf.data.old
+flamegraph.svg
+*.flamegraph.svg
+*.cprof
+vgcore.*
+valgrind.out.*
+*.stackdump
+
 # ── Editor / IDE state / 编辑器 / IDE 状态 ───────────────────────
 .idea/
 .vscode/
