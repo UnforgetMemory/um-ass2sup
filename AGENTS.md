@@ -214,7 +214,7 @@ cargo run --release -p ass2sup-cli -- input.ass -o output.sup
 - **700+ unit/integration tests** across workspace (all pass: 700+ ok, 2 ignored)
 - **proptest** in: ass-core, color-quantizer, pgs-encoder, bdn-xml
 - **insta snapshots** in: `crates/ass2sup-cli/tests/snapshots/` (update with `cargo insta review`)
-- **fuzz targets**: `crates/ass-core/fuzz/` (3 targets), `crates/color-quantizer/fuzz/` (1), `crates/pgs-encoder/fuzz/` (1)
+- **fuzz targets**: `crates/ass-core/fuzz/` (4 targets), `crates/color-quantizer/fuzz/` (1), `crates/pgs-encoder/fuzz/` (1)
 - **benches**: `cargo bench --workspace` (criterion, html_reports)
 - **Examples**: `cargo run --release --example parse_ass -p ass-core` (and similar for color-quantizer, pgs-encoder)
 
@@ -394,7 +394,7 @@ Run in foreground (not background) — completion reminder will deliver the resu
 - **PixmapPool**: reuse Pixmap buffers via pool_get/pool_put (8 cached entries, wrapped in Mutex)
 - **AffineTransform**: SIMD (wide::f32x4) bilinear interpolation in `apply_to_pixmap`
 - **composite_over**: SIMD (wide::u32x4) Porter-Duff over for 4-pixel chunks
-- **Parallel rendering**: rayon-based `par_iter()` in `build_display_set` — each worker holds 1 frame at a time (~8.3 MB at 1080p), no intermediate `Vec<RenderedFrame>`
+- **Frame-driven serial render**: the frame loop is single-threaded (rayon is used only at batch-file level in `ass2sup-cli`); each render returns one `RenderedFrame` and holds one frame at a time (~8.3 MB at 1080p), no intermediate `Vec<RenderedFrame>`
 - **Small palette dedup**: `HashSet<u32>` in quantizer, O(n²) → O(n)
 - **k-d tree quantizer**: `find_nearest_index` for palette mapping acceleration (2.57×)
 

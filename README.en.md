@@ -328,11 +328,12 @@ bdn_out/
 ### Multi-core acceleration
 
 ```bash
-# Per-file parallel quantization
-ass2sup input.ass -o output.sup --parallel-frames
-# Multi-file parallel
+# Multi-file parallel (frame rendering is a serial frame-driven pipeline;
+# per-file parallelism is no longer needed or supported)
 ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 ```
+
+> `--parallel-frames` is **deprecated**: since v2.7.4 the render pipeline is a frame-driven serial pipeline; per-file parallel quantization is gone. The flag remains only for backward compatibility — it prints a deprecation warning (visible with `-v`) and is ignored.
 
 ---
 
@@ -354,7 +355,7 @@ ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 | `--check` | Validate only, no write (exit 0/1) | off |
 | `--to-srt` | Output SRT | off |
 | `--to-bdn` | Output BDN XML + PNG | off |
-| `--parallel-frames` | Per-file parallel quantization | off |
+| `--parallel-frames` | ~~Per-file parallel quantization~~ (deprecated, no-op since v2.7.4) | off |
 | `--parallel` | Multi-file parallel | off |
 | `--dry-run` | Validate only, no write | off |
 | `--force` | Convert despite validation failure | off |

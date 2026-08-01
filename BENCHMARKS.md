@@ -103,6 +103,10 @@ cargo bench -p color-quantizer quantizer_large_1920x1080
 
 # Phase 27 — Parallel quantize (2026-06-04)
 
+> **Deprecated as of v2.7.4** — the frame-driven refactor replaced the event-driven
+> pipeline; the rayon `--parallel-frames` path was removed and the flag is now a
+> no-op. This section is preserved as historical benchmark data only.
+
 Added an opt-in `--parallel-frames` flag that distributes the per-frame
 quantize step across rayon worker threads. The subsequent PGS encode step
 stays sequential (encoder carries per-frame mutable state: composition

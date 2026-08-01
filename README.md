@@ -336,11 +336,11 @@ bdn_out/
 ### 多核加速
 
 ```bash
-# 单文件内并行量化
-ass2sup input.ass -o output.sup --parallel-frames
-# 批量文件并行
+# 批量文件并行（帧渲染为串行流水线，单文件内部无需手动并行）
 ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 ```
+
+> `--parallel-frames` 已弃用：自 v2.7.4 起渲染管线改为 frame-driven 串行流水线，单文件内部不再需要/支持并行量化。该标志保留仅为向后兼容，传入时会打印弃用警告并忽略（可用 `-v` 查看）。
 
 ---
 
@@ -362,7 +362,7 @@ ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 | `--check` | 仅校验，不写文件（退出码 0/1） | off |
 | `--to-srt` | 输出 SRT | off |
 | `--to-bdn` | 输出 BDN XML + PNG | off |
-| `--parallel-frames` | 单文件并行量化 | off |
+| `--parallel-frames` | ~~单文件并行量化~~（已弃用，v2.7.4 起为 no-op） | off |
 | `--parallel` | 批量文件并行 | off |
 | `--dry-run` | 仅校验，不写入 | off |
 | `--force` | 校验失败仍继续转换 | off |
