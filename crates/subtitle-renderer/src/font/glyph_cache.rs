@@ -23,7 +23,8 @@ use super::types::RasterizedGlyph;
 /// Cache key: font data allocation pointer + glyph id + exact size bits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GlyphKey {
-    /// `Arc::as_ptr()` of the shared font data (stable per resolved font).
+    /// Thin data pointer of the shared `Arc<[u8]>` font payload (stable per
+    /// resolved font; identical for all Arc clones of the same font).
     pub font: usize,
     /// Swash glyph id.
     pub glyph: u16,
