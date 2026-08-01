@@ -150,6 +150,20 @@ pub fn extract_font_families(content: &str) -> HashSet<String> {
 
 // vsnprintf — C standard library variadic formatting. Used by
 // [`libass_log_callback`] to render libass's printf-style messages.
+//
+// Platform differences:
+// - Unix: `vsnprintf` in libc (auto-linked).
+// - Windows UCRT (VS2015+, default on GH Actions runners): `vsnprintf` is
+//   exported by ucrt; the `#[link(name = "ucrt")]` attribute makes the
+//   import explicit so the MSVC linker resolves it (a bare `extern "C"`
+//   declaration alone fails with LNK2001 on x86_64-pc-windows-msvc).
+#[cfg(not(target_os = "windows"))]
+unsafe extern "C" {
+    fn vsnprintf(s: *mut i8, n: usize, format: *const i8, ap: *mut i8) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+#[link(name = "ucrt")]
 unsafe extern "C" {
     fn vsnprintf(s: *mut i8, n: usize, format: *const i8, ap: *mut i8) -> i32;
 }
@@ -167,7 +181,14 @@ extern "C" fn libass_log_callback(level: i32, fmt: *const i8, va: *mut i8, _data
         return;
     }
     let mut buf = [0i8; 1024];
+    // `_vsnprintf` on MSVC does not null-terminate on truncation, so always
+    // force the last byte to NUL after writing.
+    #[cfg(not(target_os = "windows"))]
     let written = unsafe { vsnprintf(buf.as_mut_ptr(), buf.len(), fmt, va) };
+    #[cfg(target_os = "windows")]
+    let written = unsafe { vsnprintf(buf.as_mut_ptr(), buf.len(), fmt, va) };
+    let last = buf.len() - 1;
+    buf[last] = 0;
     if written <= 0 {
         return;
     }
