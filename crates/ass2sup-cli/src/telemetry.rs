@@ -24,9 +24,11 @@ use tracing_subscriber::{
 /// - **stdout** receives user-facing messages at `INFO` level (or `ERROR` in quiet mode).
 /// - **stderr** receives full diagnostic output with timestamps, controlled by
 ///   `--verbose`/`--debug`/`--quiet`.
+/// - **log_file** (optional) receives the same diagnostic output as stderr,
+///   written to a file with ANSI disabled, for later inspection.
 ///
 /// `RUST_LOG` overrides the stderr filter while preserving the CLI defaults as fallback.
-pub fn init(verbose: bool, quiet: bool, debug: bool, color: &str) {
+pub fn init(verbose: bool, quiet: bool, debug: bool, color: &str, log_file: Option<&str>) {
     let use_color = match color {
         "always" => true,
         "never" => false,
@@ -85,10 +87,33 @@ pub fn init(verbose: bool, quiet: bool, debug: bool, color: &str) {
         .with_thread_ids(false)
         .with_timer(tracing_subscriber::fmt::time::uptime())
         .with_writer(std::io::stderr)
-        .with_filter(env_filter);
+        .with_filter(env_filter.clone());
 
-    let _ = tracing_subscriber::registry()
+    let registry = tracing_subscriber::registry()
         .with(user_layer)
-        .with(diag_layer)
-        .try_init();
+        .with(diag_layer);
+
+    // optional file layer: full diagnostic filter (INFO+ always, regardless
+    // of --verbose/--quiet which target the console), no ANSI, full timestamp.
+    // A log file exists to capture what happened — it must not be silenced by
+    // the console's WARN-only default.
+    if let Some(path) = log_file {
+        if let Ok(file) = std::fs::File::create(path) {
+            let file_filter = EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy();
+            let file_layer = fmt::layer()
+                .with_ansi(false)
+                .with_target(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_thread_ids(false)
+                .with_writer(file)
+                .with_filter(file_filter);
+            let _ = registry.with(file_layer).try_init();
+            return;
+        }
+        eprintln!("warning: cannot open log file '{path}', continuing without file logging");
+    }
+    let _ = registry.try_init();
 }

@@ -172,4 +172,8 @@ pub struct Args {
     /// Colour output mode (auto/always/never).
     #[arg(long, default_value = "auto", value_parser = ["auto", "always", "never"])]
     pub color: String,
+
+    /// Write diagnostic logs (with timestamps) to this file in addition to stderr.
+    #[arg(long, value_name = "PATH")]
+    pub log_file: Option<String>,
 }

@@ -137,6 +137,9 @@ Options:
           [default: auto]
           [possible values: auto, always, never]
 
+      --log-file <PATH>
+          Write diagnostic logs (with timestamps) to this file in addition to stderr
+
   -h, --help
           Print help (see a summary with '-h')
 

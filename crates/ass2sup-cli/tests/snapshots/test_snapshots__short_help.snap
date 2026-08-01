@@ -43,5 +43,6 @@ Options:
       --debug                        Enable trace-level debug output for pipeline diagnosis
       --quiet                        Suppress progress bar
       --color <COLOR>                Colour output mode (auto/always/never) [default: auto] [possible values: auto, always, never]
+      --log-file <PATH>              Write diagnostic logs (with timestamps) to this file in addition to stderr
   -h, --help                         Print help (see more with '--help')
   -V, --version                      Print version

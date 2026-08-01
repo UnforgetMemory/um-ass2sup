@@ -251,6 +251,7 @@ impl ConversionPipeline {
         config: &Config,
         args: &Args,
     ) -> Vec<QuantizedFrame> {
+        let t_start = std::time::Instant::now();
         let ms_per_frame = 1000.0 / config.fps;
 
         let dither = super::super::config::color_space::parse_dither(&args.dither);
@@ -294,10 +295,25 @@ impl ConversionPipeline {
         let _first_event_start = doc.events.iter().map(|e| e.start_ms).min().unwrap_or(0);
         let last_event_end = doc.events.iter().map(|e| e.end_ms).max().unwrap_or(0);
 
+        // ── Stage feedback ────────────────────────────────────────────
+        // Give the user a sense of scale and expected duration before the
+        // (potentially long) render loop starts.
+        let render_ts_vec: Vec<u64> = render_ts.iter().copied().collect();
+        let total_render_ts = render_ts_vec.len() as u64;
+        let video_duration_ms = last_event_end
+            .saturating_sub(doc.events.iter().map(|e| e.start_ms).min().unwrap_or(0))
+            as f64;
+        tracing::info!(
+            "Prepared {} render timestamps (video ~{:.1}s) in {:.2}s — rendering...",
+            total_render_ts,
+            video_duration_ms / 1000.0,
+            t_start.elapsed().as_secs_f64(),
+        );
+
         let pb = if args.quiet {
             indicatif::ProgressBar::hidden()
         } else {
-            progress::create(render_ts.len() as u64, "Rendering")
+            progress::create(total_render_ts, "Rendering")
         };
 
         // ── Render loop ─────────────────────────────────────────────────
@@ -309,7 +325,7 @@ impl ConversionPipeline {
 
         // Iterate sorted render timestamps; track which timestamps are the
         // "last in a run" so we can compute durations correctly.
-        let ts_sorted: Vec<u64> = render_ts.into_iter().collect();
+        let ts_sorted: Vec<u64> = render_ts_vec;
         for window in ts_sorted.windows(2) {
             let ts = window[0];
             let next_ts = window[1];
@@ -395,12 +411,19 @@ impl ConversionPipeline {
         }
 
         pb.finish_and_clear();
+        let render_elapsed = t_start.elapsed();
         tracing::info!(
             rendered = render_count,
             empty_skipped = skip_empty,
             duplicate_skipped = skip_dup,
             unique_frames = quantized.len(),
-            "smart rendering complete"
+            "render+quantize done in {:.2}s (avg {:.1} ms/frame)",
+            render_elapsed.as_secs_f64(),
+            if render_count > 0 {
+                render_elapsed.as_secs_f64() * 1000.0 / render_count as f64
+            } else {
+                0.0
+            },
         );
         quantized
     }
@@ -580,8 +603,15 @@ pub fn convert_file(
         )));
     }
 
+    let t_encode = std::time::Instant::now();
     let segments = ConversionPipeline::encode_sup(&frames, config);
     let output_size = ConversionPipeline::write_sup(segments, output)?;
+    tracing::info!(
+        "Encoded {} segments → {} bytes in {:.2}s",
+        frames.len(),
+        output_size,
+        t_encode.elapsed().as_secs_f64(),
+    );
 
     info!(
         "Output: {} ({} bytes, {} frames)",

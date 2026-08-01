@@ -65,6 +65,7 @@ fn process_libass(
     args: &Args,
 ) -> Result<Vec<QuantizedFrame>, subtitle_renderer_libass::AssError> {
     use subtitle_renderer_libass::AssRenderer;
+    let t_start = std::time::Instant::now();
 
     let needed_families = subtitle_renderer_libass::extract_font_families(content);
     tracing::info!(
@@ -104,7 +105,11 @@ fn process_libass(
     let mut prev_data_hash: Option<u64> = None;
 
     let total_frames = timestamps.len() as u64;
-    tracing::info!("Rendering {total_frames} frames...");
+    tracing::info!(
+        "Rendering {total_frames} frames ({} events, font setup {:.2}s)...",
+        events.len(),
+        t_start.elapsed().as_secs_f64(),
+    );
 
     let pb = if args.quiet {
         indicatif::ProgressBar::hidden()
@@ -204,6 +209,12 @@ fn process_libass(
         }
     }
 
+    let elapsed = t_start.elapsed();
+    tracing::info!(
+        "libass render+quantize done in {:.2}s ({} unique frames)",
+        elapsed.as_secs_f64(),
+        output_frames.len(),
+    );
     debug!(rendered = output_frames.len(), "libass rendering complete");
     Ok(output_frames)
 }

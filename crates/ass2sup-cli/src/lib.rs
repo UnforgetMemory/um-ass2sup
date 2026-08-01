@@ -115,7 +115,13 @@ fn collect_recursive_glob(pattern: &str) -> Vec<PathBuf> {
 
 /// Run the CLI conversion with parsed arguments.
 pub fn run(args: Args) -> Result<(), CliError> {
-    telemetry::init(args.verbose, args.quiet, args.debug, &args.color);
+    telemetry::init(
+        args.verbose,
+        args.quiet,
+        args.debug,
+        &args.color,
+        args.log_file.as_deref(),
+    );
     let use_color = should_use_color(&args.color);
     let inputs = collect_input_files(&args);
 
