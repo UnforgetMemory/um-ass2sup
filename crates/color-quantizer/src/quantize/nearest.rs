@@ -169,6 +169,51 @@ impl KdNode {
             }
         }
     }
+
+    /// Weighted nearest query: `3×R + 4×G + 2×B` squared distance, with the
+    /// branch-and-bound plane bound scaled by the split axis weight so the
+    /// pruned region can never contain a better point. Returns the exact same
+    /// index as a linear weighted scan (including lower-index tie-breaking).
+    fn nearest_weighted(&self, color: &[u8; 4], palette: &[[u8; 4]], best: &mut (usize, u64)) {
+        match self {
+            KdNode::Leaf(indices) => {
+                for &i in indices {
+                    let d = distance_sq_weighted(color, &palette[i]);
+                    if d < best.1 || (d == best.1 && i < best.0) {
+                        *best = (i, d);
+                    }
+                }
+            }
+            KdNode::Split {
+                axis,
+                threshold,
+                left,
+                right,
+            } => {
+                let val = color[*axis];
+                let (near, far) = if val < *threshold {
+                    (left.as_ref(), right.as_ref())
+                } else {
+                    (right.as_ref(), left.as_ref())
+                };
+                near.nearest_weighted(color, palette, best);
+
+                // Weighted branch-and-bound: any point on the far side has
+                // distance >= axis_weight · diff² (all other channel terms are
+                // ≥ 0), so prune when that can't beat the current best.
+                let diff = i64::from(val) - i64::from(*threshold);
+                let axis_weight = match *axis {
+                    0 => 3, // R
+                    1 => 4, // G
+                    _ => 2, // B (alpha is excluded from the weighted metric)
+                };
+                let plane_dist = diff * diff * axis_weight as i64;
+                if (plane_dist as u64) < best.1 {
+                    far.nearest_weighted(color, palette, best);
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -193,8 +238,28 @@ fn find_nearest_linear(color: &[u8; 4], palette: &[[u8; 4]]) -> u8 {
 /// Uses linear scan for small palettes and a cached k-d tree for larger ones.
 #[inline]
 pub fn find_nearest_index(color: &[u8; 4], palette: &[[u8; 4]]) -> u8 {
+    find_nearest_impl(color, palette, false)
+}
+
+/// Find the palette index closest to `color` using the *weighted* Euclidean
+/// metric (3×R, 4×G, 2×B — the same metric `find_nearest_weighted` uses).
+///
+/// Uses the same cached k-d tree as [`find_nearest_index`] — the tree
+/// structure depends only on the palette, so interleaving weighted and
+/// unweighted queries does not thrash the cache. Returns the exact same index
+/// as the linear weighted scan (parity is enforced by tests).
+#[inline]
+pub fn find_nearest_weighted_kd(color: &[u8; 4], palette: &[[u8; 4]]) -> u8 {
+    find_nearest_impl(color, palette, true)
+}
+
+fn find_nearest_impl(color: &[u8; 4], palette: &[[u8; 4]], weighted: bool) -> u8 {
     if palette.len() < LINEAR_THRESHOLD {
-        return find_nearest_linear(color, palette);
+        return if weighted {
+            find_nearest_weighted(color, palette)
+        } else {
+            find_nearest_linear(color, palette)
+        };
     }
 
     KD_TREE_CACHE.with_borrow_mut(|cache| {
@@ -215,11 +280,18 @@ pub fn find_nearest_index(color: &[u8; 4], palette: &[[u8; 4]]) -> u8 {
             });
         }
 
-        let entry = cache.as_ref().unwrap();
-        let first_dist = distance_sq(color, &palette[0]);
-        let mut best = (0usize, first_dist);
-        entry.tree.nearest(color, palette, &mut best);
-        best.0 as u8
+        let entry = cache.as_ref().expect("cache populated above");
+        if weighted {
+            let first_dist = distance_sq_weighted(color, &palette[0]);
+            let mut best = (0usize, first_dist);
+            entry.tree.nearest_weighted(color, palette, &mut best);
+            best.0 as u8
+        } else {
+            let first_dist = distance_sq(color, &palette[0]);
+            let mut best = (0usize, first_dist);
+            entry.tree.nearest(color, palette, &mut best);
+            best.0 as u8
+        }
     })
 }
 
@@ -315,6 +387,79 @@ mod tests {
             idx, 1,
             "green query should map to green entry, got index {idx}"
         );
+    }
+
+    #[test]
+    fn weighted_kd_parity_with_linear() {
+        // Build a 64-entry palette (above the linear threshold) with varied
+        // alpha too, and verify the weighted k-d tree returns the EXACT same
+        // index as the linear weighted scan for a dense colour sweep.
+        let mut pal = Vec::new();
+        for i in 0u16..64 {
+            let v = i as u8;
+            pal.push([
+                v.wrapping_mul(4),
+                v.wrapping_mul(7),
+                v.wrapping_mul(11),
+                if i % 3 == 0 { 255 } else { 200 },
+            ]);
+        }
+        let mut checked = 0usize;
+        for r in 0..12u8 {
+            for g in 0..12u8 {
+                for b in 0..12u8 {
+                    for a in [0u8, 100, 200, 255] {
+                        let c = [r * 21, g * 21, b * 21, a];
+                        let kd = find_nearest_weighted_kd(&c, &pal);
+                        let lin = find_nearest_weighted(&c, &pal);
+                        assert_eq!(
+                            kd, lin,
+                            "weighted parity fail for {:?}: kd={kd}, lin={lin}",
+                            c
+                        );
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 12 * 12 * 12 * 4);
+    }
+
+    #[test]
+    fn weighted_kd_small_palette_falls_back_to_linear() {
+        // Below LINEAR_THRESHOLD the k-d path must delegate to the linear scan
+        // so parity is trivially preserved.
+        let pal = [[100, 0, 0, 255], [0, 100, 0, 255], [0, 0, 100, 255]];
+        for c in [[0u8, 60, 0, 255], [200, 0, 0, 255], [10, 10, 10, 255]] {
+            assert_eq!(
+                find_nearest_weighted_kd(&c, &pal),
+                find_nearest_weighted(&c, &pal)
+            );
+        }
+    }
+
+    #[test]
+    fn weighted_kd_and_unweighted_share_cache_without_thrashing() {
+        // Interleaving weighted and unweighted queries on the SAME palette must
+        // stay correct for both (the cache stores one tree, queried two ways).
+        let mut pal = Vec::new();
+        for i in 0u16..48 {
+            let v = i as u8;
+            pal.push([v.wrapping_mul(5), v.wrapping_mul(3), v.wrapping_mul(7), 255]);
+        }
+        for i in 0..30u8 {
+            let c = [
+                i.wrapping_mul(8),
+                i.wrapping_mul(4),
+                i.wrapping_mul(12),
+                255,
+            ];
+            assert_eq!(find_nearest_index(&c, &pal), find_nearest_linear(&c, &pal));
+            assert_eq!(
+                find_nearest_weighted_kd(&c, &pal),
+                find_nearest_weighted(&c, &pal)
+            );
+        }
     }
 
     #[test]

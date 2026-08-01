@@ -11,6 +11,29 @@
 
 use crate::quantize::nearest::find_nearest_index;
 
+// Thread-local error-diffusion buffers, reused across frames.
+// A 1080p frame needs 4 × w×h × 2 bytes = ~16 MB of i16 error state; pooling
+// avoids allocating + dropping that on every dithered frame. Buffers are fully
+// re-initialised from the source pixels each call, so reuse is safe.
+thread_local! {
+    static FS_BUFFERS: std::cell::RefCell<FsBuffers> = const {
+        std::cell::RefCell::new(FsBuffers {
+            err_r: Vec::new(),
+            err_g: Vec::new(),
+            err_b: Vec::new(),
+            err_a: Vec::new(),
+        })
+    };
+}
+
+#[derive(Default)]
+struct FsBuffers {
+    err_r: Vec<i16>,
+    err_g: Vec<i16>,
+    err_b: Vec<i16>,
+    err_a: Vec<i16>,
+}
+
 /// Apply Floyd–Steinberg error-diffusion dithering.
 ///
 /// `rgba` is a flat RGBA byte buffer in row-major order. Returns flat
@@ -23,11 +46,20 @@ pub fn dither(rgba: &[u8], width: u32, height: u32, palette: &[[u8; 4]]) -> Vec<
         return vec![0; n];
     }
 
-    // Error buffers in i16 for each channel (4× less memory than f64).
-    let mut err_r = vec![0i16; n];
-    let mut err_g = vec![0i16; n];
-    let mut err_b = vec![0i16; n];
-    let mut err_a = vec![0i16; n];
+    // Take the pooled i16 error buffers (one allocation per thread, reused).
+    let (mut err_r, mut err_g, mut err_b, mut err_a) = FS_BUFFERS.with(|b| {
+        let mut b = b.borrow_mut();
+        b.err_r.resize(n, 0);
+        b.err_g.resize(n, 0);
+        b.err_b.resize(n, 0);
+        b.err_a.resize(n, 0);
+        (
+            std::mem::take(&mut b.err_r),
+            std::mem::take(&mut b.err_g),
+            std::mem::take(&mut b.err_b),
+            std::mem::take(&mut b.err_a),
+        )
+    });
 
     // Initialise with source values.
     for (i, chunk) in rgba.chunks_exact(4).enumerate() {
@@ -91,6 +123,15 @@ pub fn dither(rgba: &[u8], width: u32, height: u32, palette: &[[u8; 4]]) -> Vec<
             }
         }
     }
+
+    // Return the buffers to the pool (capacity preserved for the next frame).
+    FS_BUFFERS.with(|b| {
+        let mut b = b.borrow_mut();
+        b.err_r = err_r;
+        b.err_g = err_g;
+        b.err_b = err_b;
+        b.err_a = err_a;
+    });
 
     indices
 }

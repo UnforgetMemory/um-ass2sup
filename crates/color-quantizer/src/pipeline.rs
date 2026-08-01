@@ -275,10 +275,6 @@ impl ColorPipeline {
         // Try to reuse previous palette if all pixels map within threshold.
         if let Some(prev) = prev_frame {
             if !prev.palette.is_empty() {
-                let pixels: Vec<[u8; 4]> = rgba
-                    .chunks_exact(4)
-                    .map(|c| [c[0], c[1], c[2], c[3]])
-                    .collect();
                 // Convert previous Rgba palette to flat [[u8;4]] for internal use.
                 let flat_pal: Vec<[u8; 4]> =
                     prev.palette.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
@@ -291,19 +287,19 @@ impl ColorPipeline {
                 } else {
                     &flat_pal[..]
                 };
-                if quantize::temporal::all_mappable(&pixels, &flat_pal, 30.0) {
-                    // Reuse previous palette: just remap.
-                    let indices = pixels
-                        .iter()
-                        .map(|p| {
+                if quantize::temporal::all_mappable(rgba, &flat_pal, 30.0) {
+                    // Reuse previous palette: just remap, iterating the RGBA
+                    // bytes directly (no intermediate pixel Vec).
+                    let indices = rgba
+                        .chunks_exact(4)
+                        .map(|c| {
+                            let p = [c[0], c[1], c[2], c[3]];
                             if p[3] == 0 {
                                 prev.transparent_index
+                            } else if has_tr {
+                                quantize::nearest::find_nearest_index(&p, pal_for_search) + 1
                             } else {
-                                if has_tr {
-                                    quantize::nearest::find_nearest_index(p, pal_for_search) + 1
-                                } else {
-                                    quantize::nearest::find_nearest_index(p, pal_for_search)
-                                }
+                                quantize::nearest::find_nearest_index(&p, pal_for_search)
                             }
                         })
                         .collect();
