@@ -199,16 +199,24 @@ impl KdNode {
                 near.nearest_weighted(color, palette, best);
 
                 // Weighted branch-and-bound: any point on the far side has
-                // distance >= axis_weight · diff² (all other channel terms are
-                // ≥ 0), so prune when that can't beat the current best.
+                // weighted distance >= axis_weight · diff² (all other channel
+                // terms are ≥ 0), so prune only when that cannot beat OR tie
+                // the current best — searching ties keeps lower-index parity
+                // with the linear scan.
+                //
+                // IMPORTANT: the weighted metric excludes alpha, so a split on
+                // the alpha axis has NO pruning power (alpha weight must be 0,
+                // not 2 — a far-side point differing only in alpha has
+                // weighted distance 0 and must never be pruned).
                 let diff = i64::from(val) - i64::from(*threshold);
                 let axis_weight = match *axis {
                     0 => 3, // R
                     1 => 4, // G
-                    _ => 2, // B (alpha is excluded from the weighted metric)
+                    2 => 2, // B
+                    _ => 0, // alpha: excluded from the weighted metric
                 };
                 let plane_dist = diff * diff * axis_weight as i64;
-                if (plane_dist as u64) < best.1 {
+                if (plane_dist as u64) <= best.1 {
                     far.nearest_weighted(color, palette, best);
                 }
             }
@@ -460,6 +468,70 @@ mod tests {
                 find_nearest_weighted(&c, &pal)
             );
         }
+    }
+
+    #[test]
+    fn weighted_kd_tie_heavy_parity() {
+        // Deterministic LCG sweep over tie-heavy palettes (exact duplicates and
+        // near-duplicate entries — realistic after median-cut with 255 colors).
+        // The k-d branch-and-bound must not prune a region whose plane distance
+        // exactly ties the current best, or the lower-index tie-break differs
+        // from the linear scan.
+        let mut seed: u64 = 0x1234_5678_9abc_def0;
+        let mut rnd = || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (seed >> 33) as u32
+        };
+        let mut checked = 0usize;
+        for _trial in 0..60 {
+            let n = 32 + (rnd() % 200) as usize;
+            let mut pal: Vec<[u8; 4]> = Vec::with_capacity(n);
+            for _ in 0..n {
+                let base = [
+                    (rnd() >> 24) as u8,
+                    (rnd() >> 16) as u8,
+                    (rnd() >> 8) as u8,
+                    // Alpha varies (incl. fully transparent) so the tree also
+                    // splits on the alpha axis — the weighted metric excludes
+                    // alpha, so alpha splits must never prune (weight 0).
+                    if rnd() % 3 == 0 {
+                        0
+                    } else {
+                        (rnd() >> 16) as u8 | 128
+                    },
+                ];
+                let c = if rnd() % 4 == 0 {
+                    base
+                } else {
+                    [
+                        base[0].wrapping_add((rnd() % 8) as u8),
+                        base[1].wrapping_add((rnd() % 8) as u8),
+                        base[2].wrapping_add((rnd() % 8) as u8),
+                        base[3].wrapping_add((rnd() % 8) as u8),
+                    ]
+                };
+                pal.push(c);
+            }
+            for _ in 0..500 {
+                let c = [
+                    (rnd() >> 24) as u8,
+                    (rnd() >> 16) as u8,
+                    (rnd() >> 8) as u8,
+                    (rnd() >> 16) as u8,
+                ];
+                let lin = find_nearest_weighted(&c, &pal);
+                let kd = find_nearest_weighted_kd(&c, &pal);
+                assert_eq!(
+                    kd, lin,
+                    "tie-heavy weighted parity fail for {:?}: kd={kd}, lin={lin}",
+                    c
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 60 * 500);
     }
 
     #[test]
