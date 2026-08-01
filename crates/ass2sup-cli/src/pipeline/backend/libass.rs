@@ -189,6 +189,14 @@ fn process_libass(
 
     pb.finish_and_clear();
 
+    if output_frames.is_empty() {
+        return Err(subtitle_renderer_libass::AssError::Ass(
+            "libass rendered 0 frames — no fonts available or no visible events; \
+             check that fonts are installed and the ASS file contains visible dialogue"
+                .into(),
+        ));
+    }
+
     // Fix up last frame duration
     if let Some(last) = output_frames.last_mut() {
         if last.pts_ms + last.duration_ms < last_event_end {

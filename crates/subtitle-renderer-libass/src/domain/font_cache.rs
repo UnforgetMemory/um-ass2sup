@@ -5,7 +5,8 @@
 //!
 //! ```text
 //! [magic: 4 bytes] "ASFC"
-//! [version: 4 bytes LE] 1
+//! [version: 4 bytes LE] 2  (bumped when scan semantics change, e.g. v1 → v2
+//!   added recursive directory walking — old flat-only caches are stale)
 //! [entry_count: 4 bytes LE]
 //! entries[]:
 //!   [name_len: 4 bytes LE][name: name_len bytes]
@@ -71,6 +72,10 @@ impl FontCache {
     /// Collect font files from scan directories, optionally filtered by needed families.
     /// When `needed` is non-empty, only fonts whose filename (stem, lowercased, alnum only)
     /// contains any needed family name are included.
+    ///
+    /// Directories are walked **recursively** — system font trees (e.g.
+    /// `/usr/share/fonts/truetype/dejavu/` or `~/.local/share/fonts/truetype/MiSans/`)
+    /// almost always nest font files one or more levels deep.
     pub fn scan_fonts(
         scan_dirs: &[String],
         needed: &HashSet<String>,
@@ -81,46 +86,60 @@ impl FontCache {
             if !dir.is_dir() {
                 continue;
             }
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if !path.is_file() {
-                        continue;
-                    }
-                    let ext = path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .map(|e| e.to_lowercase())
-                        .unwrap_or_default();
-                    if !matches!(
-                        ext.as_str(),
-                        "ttf" | "otf" | "ttc" | "otc" | "woff" | "woff2"
-                    ) {
-                        continue;
-                    }
-                    let name = path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("font")
-                        .to_string();
-                    // If needed families are specified, skip fonts whose filename
-                    // doesn't contain any needed family name.
-                    if !needed.is_empty() {
-                        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-                        let stem_norm = normalize_font_name(stem);
-                        let matches = needed.iter().any(|nf| stem_norm.contains(nf));
-                        if !matches {
-                            continue;
-                        }
-                    }
-                    let mtime = std::fs::metadata(&path)
-                        .and_then(|m| m.modified())
-                        .unwrap_or(SystemTime::UNIX_EPOCH);
-                    fonts.push((name, path, mtime));
-                }
-            }
+            Self::collect_font_files_impl(dir, needed, &mut fonts);
         }
         fonts
+    }
+
+    /// Recursively walk `dir`, pushing matching font files into `fonts`.
+    fn collect_font_files_impl(
+        dir: &Path,
+        needed: &HashSet<String>,
+        fonts: &mut Vec<(String, PathBuf, SystemTime)>,
+    ) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                Self::collect_font_files_impl(&path, needed, fonts);
+                continue;
+            }
+            if !path.is_file() {
+                continue;
+            }
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+                .unwrap_or_default();
+            if !matches!(
+                ext.as_str(),
+                "ttf" | "otf" | "ttc" | "otc" | "woff" | "woff2"
+            ) {
+                continue;
+            }
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("font")
+                .to_string();
+            // If needed families are specified, skip fonts whose filename
+            // doesn't contain any needed family name.
+            if !needed.is_empty() {
+                let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                let stem_norm = normalize_font_name(stem);
+                let matches = needed.iter().any(|nf| stem_norm.contains(nf));
+                if !matches {
+                    continue;
+                }
+            }
+            let mtime = std::fs::metadata(&path)
+                .and_then(|m| m.modified())
+                .unwrap_or(SystemTime::UNIX_EPOCH);
+            fonts.push((name, path, mtime));
+        }
     }
 
     /// Check if a cached entry is still valid by comparing mtime.
@@ -144,7 +163,7 @@ impl FontCache {
 
         let mut version = [0u8; 4];
         file.read_exact(&mut version).ok()?;
-        if u32::from_le_bytes(version) != 1 {
+        if u32::from_le_bytes(version) != 2 {
             return None;
         }
 
@@ -214,7 +233,7 @@ impl FontCache {
 
         let mut buf = Vec::new();
         buf.extend_from_slice(b"ASFC");
-        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&2u32.to_le_bytes());
         buf.extend_from_slice(&(fonts.len() as u32).to_le_bytes());
 
         for (name, fpath, mtime) in fonts {
@@ -243,5 +262,62 @@ impl FontCache {
         }
 
         let _ = std::fs::write(&path, &buf);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scan_fonts_walks_nested_directories() {
+        let tmp = std::env::temp_dir().join(format!("ass2sup-fontscan-{}", std::process::id()));
+        let nested = tmp.join("truetype").join("MiSans");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("MiSans-Regular.ttf"), b"fake").unwrap();
+        std::fs::write(nested.join("MiSans-Bold.ttf"), b"fake").unwrap();
+        std::fs::write(tmp.join("flat.otf"), b"fake").unwrap();
+        std::fs::write(tmp.join("ignore.txt"), b"nope").unwrap();
+
+        let fonts = FontCache::scan_fonts(&[tmp.to_string_lossy().to_string()], &HashSet::new());
+        let names: Vec<String> = fonts.iter().map(|(n, _, _)| n.clone()).collect();
+        assert!(
+            names.contains(&"MiSans-Regular.ttf".to_string()),
+            "nested ttf missing: {names:?}"
+        );
+        assert!(
+            names.contains(&"MiSans-Bold.ttf".to_string()),
+            "nested ttf missing: {names:?}"
+        );
+        assert!(
+            names.contains(&"flat.otf".to_string()),
+            "flat otf missing: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.contains("ignore")),
+            "non-font included: {names:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn scan_fonts_filters_by_needed_stem() {
+        let tmp = std::env::temp_dir().join(format!("ass2sup-fontfilter-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("MiSans-Regular.ttf"), b"fake").unwrap();
+        std::fs::write(tmp.join("DejaVuSans.ttf"), b"fake").unwrap();
+
+        let mut needed = HashSet::new();
+        needed.insert("misans".to_string());
+        let fonts = FontCache::scan_fonts(&[tmp.to_string_lossy().to_string()], &needed);
+        let names: Vec<String> = fonts.iter().map(|(n, _, _)| n.clone()).collect();
+        assert_eq!(
+            names,
+            vec!["MiSans-Regular.ttf".to_string()],
+            "filter mismatch: {names:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

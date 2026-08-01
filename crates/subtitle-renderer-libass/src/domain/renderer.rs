@@ -33,6 +33,12 @@ fn is_valid_font_name(name: &str) -> bool {
     if name.is_empty() || name.len() > 64 {
         return false;
     }
+    // Reject ASS hex colour references (&H...), which is how Style-tail
+    // garbage leaks in (e.g. "48,&H00000000,&H000000FF" or its normalized
+    // "48h00000000h000000ff..." form).
+    if name.contains("&H") || name.to_ascii_uppercase().contains("H0000000") {
+        return false;
+    }
     name.chars().any(|c| c.is_ascii_alphabetic())
 }
 
@@ -82,10 +88,14 @@ pub fn extract_font_families(content: &str) -> HashSet<String> {
         // --- Style section: extract Fontname value ---------------------
         if in_styles && trimmed.starts_with("Style:") {
             if let Some(idx) = fontname_idx {
+                // `after_style` = "Name,Fontname,Fontsize,..."; the Fontname
+                // column sits at index `idx` (0-based). Using `split(',').nth(idx)`
+                // (not splitn(idx + 2) + parts[idx + 1]) is required — the old
+                // code grabbed the entire Style tail starting at Fontsize, which
+                // normalized into garbage like `48h00000000h000000ffh...`.
                 let after_style = trimmed[6..].trim();
-                let parts: Vec<&str> = after_style.splitn(idx + 2, ',').collect();
-                if parts.len() > idx + 1 {
-                    let fontname = parts[idx + 1].trim().trim_matches('"');
+                if let Some(fontname) = after_style.split(',').nth(idx) {
+                    let fontname = fontname.trim().trim_matches('"');
                     if is_valid_font_name(fontname) && !fontname.eq_ignore_ascii_case("Arial") {
                         families.insert(normalize_font_name(fontname));
                     }
@@ -138,16 +148,35 @@ pub fn extract_font_families(content: &str) -> HashSet<String> {
     families
 }
 
-/// libass log callback — third arg is a `va_list`, not a string, so we log
-/// by level only.  The actual message content is lost, but level-based
-/// filtering correctly suppresses INFO-level font-select noise while still
-/// surfacing WARN/ERROR to the user.
-extern "C" fn libass_log_callback(level: i32, _fmt: *const i8, _va: *mut i8, _data: *mut i8) {
+// vsnprintf — C standard library variadic formatting. Used by
+// [`libass_log_callback`] to render libass's printf-style messages.
+unsafe extern "C" {
+    fn vsnprintf(s: *mut i8, n: usize, format: *const i8, ap: *mut i8) -> i32;
+}
+
+/// libass log callback — `fmt` is a printf-style format string and `va` the
+/// matching `va_list`. The message is formatted with `vsnprintf` so the real
+/// libass warning/error text reaches the user (previously it was dropped and
+/// replaced with a generic "libass warning" placeholder).
+#[allow(
+    clippy::missing_safety_doc,
+    reason = "extern C callback invoked by libass"
+)]
+extern "C" fn libass_log_callback(level: i32, fmt: *const i8, va: *mut i8, _data: *mut i8) {
+    if fmt.is_null() {
+        return;
+    }
+    let mut buf = [0i8; 1024];
+    let written = unsafe { vsnprintf(buf.as_mut_ptr(), buf.len(), fmt, va) };
+    if written <= 0 {
+        return;
+    }
+    let msg = unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) }.to_string_lossy();
     match level {
-        0 | 1 => tracing::error!("[libass] libass error"),
-        2 => tracing::warn!("[libass] libass warning"),
-        3 => tracing::debug!("[libass] libass info"),
-        _ => tracing::trace!("[libass] libass debug"),
+        0 | 1 => tracing::error!("[libass] {msg}"),
+        2 => tracing::warn!("[libass] {msg}"),
+        3 => tracing::debug!("[libass] {msg}"),
+        _ => tracing::trace!("[libass] {msg}"),
     }
 }
 
@@ -323,11 +352,10 @@ impl AssRenderer {
 
         // --- 1) Try font cache first ---
         if let Some(cached) = FontCache::load() {
-            let filtered: Vec<&(String, Vec<u8>)> = cached.iter().collect();
-            let filtered: Vec<&&(String, Vec<u8>)> = if all_needed.is_empty() {
-                filtered.iter().collect()
+            let filtered: Vec<&(String, Vec<u8>)> = if all_needed.is_empty() {
+                cached.iter().collect()
             } else {
-                filtered
+                cached
                     .iter()
                     .filter(|(name, _)| {
                         let stem = std::path::Path::new(name)
@@ -339,8 +367,20 @@ impl AssRenderer {
                     })
                     .collect()
             };
-            tracing::info!("Font cache hit — {} font(s) from cache", filtered.len());
-            for (name, data) in &filtered {
+            // If the filename filter matches nothing (e.g. Windows ships
+            // msyh.ttc for "Microsoft YaHei", so stem-based matching fails),
+            // fall back to the full cache rather than registering zero fonts.
+            let selected: Vec<&(String, Vec<u8>)> = if filtered.is_empty() {
+                tracing::warn!(
+                    "filtered cache matched 0 fonts (needed {:?}) — using full cache",
+                    all_needed
+                );
+                cached.iter().collect()
+            } else {
+                filtered
+            };
+            tracing::info!("Font cache hit — {} font(s) from cache", selected.len());
+            for (name, data) in selected {
                 if let Ok(cname) = CString::new(name.as_str()) {
                     unsafe {
                         (self.libass.ass_add_font)(
@@ -357,10 +397,25 @@ impl AssRenderer {
             tracing::info!("Registering fonts from {} director(ies)", scan_dirs.len());
             let mut all_needed = needed_families.clone();
             all_needed.extend(Self::fallback_fonts());
-            let fonts_meta = FontCache::scan_fonts(&scan_dirs, &all_needed);
+            let mut fonts_meta = FontCache::scan_fonts(&scan_dirs, &all_needed);
+            // Filename-based matching is unreliable (font filenames rarely
+            // equal family names, e.g. msyh.ttc vs "Microsoft YaHei"). If the
+            // filtered scan finds nothing, fall back to a full scan so libass
+            // always has fonts available — zero fonts means every frame renders
+            // empty and the output is an empty SUP.
+            if fonts_meta.is_empty() && !all_needed.is_empty() {
+                tracing::warn!(
+                    "filtered scan matched 0 fonts (needed {:?}) — falling back to full scan",
+                    all_needed
+                );
+                fonts_meta = FontCache::scan_fonts(&scan_dirs, &HashSet::new());
+            }
             let font_count = fonts_meta.len();
             if font_count == 0 {
-                tracing::info!("  no font files found");
+                tracing::warn!(
+                    "no font files found in {:?} — libass may render empty frames",
+                    scan_dirs
+                );
             } else {
                 tracing::info!("  found {font_count} font file(s), reading in parallel...");
 
@@ -599,5 +654,74 @@ impl std::fmt::Debug for AssRenderer {
             .field("track_loaded", &(!self.track.is_null()))
             .field("num_events", &self.num_events())
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn full_style_content() -> String {
+        let mut s = String::new();
+        s.push_str("[V4+ Styles]\n");
+        s.push_str("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n");
+        s.push_str("Style: Default,SimHei,48,&H00000000,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,10,10,10,1\n");
+        s.push_str("[Events]\n");
+        s.push_str(
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",
+        );
+        s.push_str("Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Hello\n");
+        s
+    }
+
+    /// Regression: the Style field split previously used `splitn(idx + 2, ',')`
+    /// and read `parts[idx + 1]`, which grabbed the *entire tail* of the Style
+    /// line starting at Fontsize (e.g. `48,&H00000000,...`) instead of the
+    /// Fontname column. Normalized, that garbage surfaced as
+    /// `48h00000000h000000ffh...` in the "Font families needed" log.
+    #[test]
+    fn style_line_extracts_fontname_column_only() {
+        let families = extract_font_families(&full_style_content());
+        assert!(
+            families.contains("simhei"),
+            "expected normalized SimHei in families, got: {:?}",
+            families
+        );
+        assert!(
+            families
+                .iter()
+                .all(|f| f.len() <= 32 && f.chars().all(|c| c.is_alphanumeric())),
+            "families contain garbage from Style tail: {:?}",
+            families
+        );
+    }
+
+    #[test]
+    fn style_line_fontsize_not_confused_for_fontname() {
+        // Fontname is the FIRST column after the style name; the old code
+        // returned "Verdana,40" normalized garbage here.
+        let content = "[V4+ Styles]\nFormat: Name,Fontname,Fontsize\nStyle: S1,Verdana,40\n";
+        let families = extract_font_families(content);
+        assert_eq!(
+            families.iter().collect::<Vec<_>>(),
+            vec![&"verdana".to_string()]
+        );
+    }
+
+    #[test]
+    fn override_tag_fontname_extracted() {
+        let content =
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\fnArial Black}hi\n";
+        let families = extract_font_families(content);
+        assert!(families.contains("arialblack"));
+    }
+
+    #[test]
+    fn no_alpha_garbage_rejected() {
+        assert!(!is_valid_font_name("48,&H00000000,&H000000FF"));
+        assert!(!is_valid_font_name("48h00000000h000000ffh00000000"));
+        assert!(!is_valid_font_name(""));
+        assert!(is_valid_font_name("SimHei"));
+        assert!(is_valid_font_name("Microsoft YaHei"));
     }
 }

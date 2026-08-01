@@ -283,6 +283,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::needless_range_loop,
+        reason = "indexes also drive expected_alpha computation"
+    )]
     fn simd_scalar_parity_6px() {
         let mut bitmap = vec![0u8; 6];
         for i in 0..6 {

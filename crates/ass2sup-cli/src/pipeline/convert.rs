@@ -571,6 +571,15 @@ pub fn convert_file(
     }
 
     let frames = backend::render_and_quantize(&content, &doc, config, args)?;
+
+    if frames.is_empty() {
+        return Err(CliError::Conversion(format!(
+            "Rendered 0 frames for '{}' — nothing to encode. Check that the ASS \
+             file has visible dialogue and that fonts are available.",
+            input.display()
+        )));
+    }
+
     let segments = ConversionPipeline::encode_sup(&frames, config);
     let output_size = ConversionPipeline::write_sup(segments, output)?;
 
