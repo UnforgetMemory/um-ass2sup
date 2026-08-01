@@ -310,7 +310,11 @@ impl ConversionPipeline {
             t_start.elapsed().as_secs_f64(),
         );
 
-        let mut progress = ProgressReporter::new(total_render_ts, "Rendering", args.quiet);
+        let mut progress = ProgressReporter::new(
+            total_render_ts,
+            "Rendering",
+            args.quiet || config.parallel.files,
+        );
 
         // ── Render loop ─────────────────────────────────────────────────
         let mut quantized: Vec<QuantizedFrame> = Vec::new();
@@ -409,17 +413,15 @@ impl ConversionPipeline {
         progress.finish_and_clear();
         let render_elapsed = t_start.elapsed();
         tracing::info!(
-            rendered = render_count,
-            empty_skipped = skip_empty,
-            duplicate_skipped = skip_dup,
-            unique_frames = quantized.len(),
-            "render+quantize done in {:.2}s (avg {:.1} ms/frame)",
-            render_elapsed.as_secs_f64(),
-            if render_count > 0 {
-                render_elapsed.as_secs_f64() * 1000.0 / render_count as f64
-            } else {
-                0.0
-            },
+            "{}",
+            crate::cli::progress::RenderSummary {
+                elapsed_secs: render_elapsed.as_secs_f64(),
+                rendered: render_count,
+                empty_skipped: Some(skip_empty),
+                duplicate_skipped: Some(skip_dup),
+                unique_frames: quantized.len(),
+            }
+            .summary_line()
         );
         quantized
     }

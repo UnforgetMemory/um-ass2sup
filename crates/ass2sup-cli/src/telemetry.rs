@@ -85,7 +85,7 @@ pub fn init(verbose: bool, quiet: bool, debug: bool, color: &str, log_file: Opti
         .with_file(debug)
         .with_line_number(debug)
         .with_thread_ids(false)
-        .with_timer(tracing_subscriber::fmt::time::uptime())
+        .with_timer(tracing_subscriber::fmt::time())
         .with_writer(std::io::stderr)
         .with_filter(env_filter.clone());
 

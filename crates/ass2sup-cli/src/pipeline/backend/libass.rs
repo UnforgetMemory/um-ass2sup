@@ -111,7 +111,11 @@ fn process_libass(
         t_start.elapsed().as_secs_f64(),
     );
 
-    let mut progress = ProgressReporter::new(total_frames, "Rendering", args.quiet);
+    let mut progress = ProgressReporter::new(
+        total_frames,
+        "Rendering",
+        args.quiet || config.parallel.files,
+    );
 
     let last_event_end = events
         .iter()
@@ -207,9 +211,15 @@ fn process_libass(
 
     let elapsed = t_start.elapsed();
     tracing::info!(
-        "libass render+quantize done in {:.2}s ({} unique frames)",
-        elapsed.as_secs_f64(),
-        output_frames.len(),
+        "{}",
+        crate::cli::progress::RenderSummary {
+            elapsed_secs: elapsed.as_secs_f64(),
+            rendered: 0, // libass pipeline dedups upstream; CLI sees only unique frames
+            empty_skipped: None,
+            duplicate_skipped: None,
+            unique_frames: output_frames.len(),
+        }
+        .summary_line()
     );
     debug!(rendered = output_frames.len(), "libass rendering complete");
     Ok(output_frames)
