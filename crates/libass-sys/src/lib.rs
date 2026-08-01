@@ -320,3 +320,97 @@ impl Libass {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// CRT functions — vsnprintf is resolved at runtime (never via raw-dylib /
+// static IAT imports). Linking vsnprintf into the EXE's import table is what
+// made the Windows binary crash silently at startup (or on first call): the
+// `#[link(kind = "raw-dylib")]` form produces `__imp_`-style references that
+// do not reliably match ucrtbase.dll's export table. Loading it via libloading
+// at runtime mirrors how [`Libass`] loads ass.dll, so the process always
+// starts and formatting degrades gracefully if the symbol is unavailable.
+// ---------------------------------------------------------------------------
+
+/// Signature of `vsnprintf(char *s, size_t n, const char *fmt, va_list ap)`.
+pub type VsnprintfFn =
+    unsafe extern "C" fn(s: *mut i8, n: usize, format: *const i8, ap: *mut i8) -> i32;
+
+/// Runtime-resolved C runtime functions needed by renderer callbacks.
+///
+/// Unlike [`Libass`], loading these is *best-effort*: the process must keep
+/// starting even when a symbol cannot be resolved (e.g. exotic CRT layouts),
+/// so callers receive `None` and degrade gracefully instead of crashing.
+#[derive(Clone, Copy)]
+pub struct CrtFunctions {
+    /// `vsnprintf` for formatting libass's printf-style log messages.
+    pub vsnprintf: VsnprintfFn,
+}
+
+impl CrtFunctions {
+    fn load() -> Result<Self, LoadingError> {
+        #[cfg(target_os = "windows")]
+        {
+            // Try (DLL, symbol) pairs in order of likelihood:
+            //   1. ucrtbase.dll / "vsnprintf"   — modern UCRT (Win10 1809+)
+            //   2. msvcrt.dll   / "_vsnprintf"  — legacy CRT (underscore form)
+            // Some UCRT builds only export `__stdio_common_vsprintf` (an internal
+            // helper) rather than `vsnprintf` itself, so we also probe that as a
+            // last resort — see rust-lang raw-dylib startup-crash reports where
+            // a non-exported IAT symbol aborts the process before main().
+            let candidates: &[(&str, &[u8])] = &[
+                ("ucrtbase.dll", b"vsnprintf\0"),
+                ("msvcrt.dll", b"_vsnprintf\0"),
+                ("ucrtbase.dll", b"__stdio_common_vsprintf\0"),
+            ];
+            let mut last_err = String::from("no CRT library names to try");
+            for &(name, sym) in candidates {
+                let lib = match unsafe { Library::new(name) } {
+                    Ok(l) => l,
+                    Err(e) => {
+                        last_err = format!("cannot load {name}: {e}");
+                        continue;
+                    }
+                };
+                // SAFETY: symbol is a C function pointer with the declared signature.
+                match unsafe { lib.get::<VsnprintfFn>(sym) } {
+                    Ok(s) => {
+                        let vsnprintf = *s;
+                        // Keep the library handle alive for the process lifetime.
+                        std::mem::forget(lib);
+                        return Ok(Self { vsnprintf });
+                    }
+                    Err(e) => {
+                        let sym_name =
+                            String::from_utf8_lossy(sym.strip_suffix(&[0]).unwrap_or(sym));
+                        last_err = format!("cannot find {sym_name} in {name}: {e}");
+                    }
+                }
+            }
+            Err(LoadingError(last_err))
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let lib = unsafe { Library::new("libc.so.6") }
+                .or_else(|_| unsafe { Library::new("libc.so") })
+                .map_err(|e| LoadingError(format!("cannot load libc: {e}")))?;
+            // SAFETY: symbol is a C function pointer with the declared signature.
+            let vsnprintf: libloading::Symbol<VsnprintfFn> = unsafe {
+                lib.get(b"vsnprintf\0")
+                    .map_err(|e| LoadingError(format!("cannot find vsnprintf: {e}")))?
+            };
+            let vsnprintf = *vsnprintf;
+            // Keep the library handle alive for the process lifetime.
+            std::mem::forget(lib);
+            Ok(Self { vsnprintf })
+        }
+    }
+
+    /// Return the runtime-resolved CRT functions.
+    ///
+    /// Returns `None` when the symbol cannot be resolved — callers must
+    /// degrade gracefully (log by level only) rather than crash.
+    pub fn global() -> Option<&'static Self> {
+        static INSTANCE: OnceLock<Option<CrtFunctions>> = OnceLock::new();
+        INSTANCE.get_or_init(|| CrtFunctions::load().ok()).as_ref()
+    }
+}

@@ -148,35 +148,15 @@ pub fn extract_font_families(content: &str) -> HashSet<String> {
     families
 }
 
-// vsnprintf — C standard library variadic formatting. Used by
-// [`libass_log_callback`] to render libass's printf-style messages.
-//
-// Platform differences:
-// - Unix: `vsnprintf` in libc (auto-linked).
-// - Windows UCRT (VS2015+, default on GH Actions runners): `vsnprintf` is
-//   exported by ucrt; the `#[link(name = "ucrt")]` attribute makes the
-//   import explicit so the MSVC linker resolves it (a bare `extern "C"`
-//   declaration alone fails with LNK2001 on x86_64-pc-windows-msvc).
-#[cfg(not(target_os = "windows"))]
-unsafe extern "C" {
-    fn vsnprintf(s: *mut i8, n: usize, format: *const i8, ap: *mut i8) -> i32;
-}
-
-#[cfg(target_os = "windows")]
-// Direct import from the Universal CRT DLL. `raw-dylib` resolves the exact
-// export name (`vsnprintf`) at link time and generates `__imp_`-style
-// references that match ucrtbase.dll's export table — the plain `#[link]`
-// form pulls in msvcrt.lib's forwarding stub, which ends up referencing
-// `__imp_vsnprintf`/`__imp__vsnprintf` that the default libs never satisfy.
-#[link(name = "ucrtbase", kind = "raw-dylib")]
-unsafe extern "C" {
-    fn vsnprintf(s: *mut i8, n: usize, format: *const i8, ap: *mut i8) -> i32;
-}
-
 /// libass log callback — `fmt` is a printf-style format string and `va` the
-/// matching `va_list`. The message is formatted with `vsnprintf` so the real
-/// libass warning/error text reaches the user (previously it was dropped and
-/// replaced with a generic "libass warning" placeholder).
+/// matching `va_list`. The message is formatted with [`libass_sys::CrtFunctions::global`]
+/// so the real libass warning/error text reaches the user (previously it was
+/// dropped and replaced with a generic "libass warning" placeholder).
+///
+/// `vsnprintf` is resolved at runtime (libloading), never statically linked
+/// into the import table — a static `raw-dylib` import made the Windows
+/// binary exit silently at startup. If the symbol is unavailable we degrade
+/// to level-only logging rather than crash.
 #[allow(
     clippy::missing_safety_doc,
     reason = "extern C callback invoked by libass"
@@ -185,10 +165,22 @@ extern "C" fn libass_log_callback(level: i32, fmt: *const i8, va: *mut i8, _data
     if fmt.is_null() {
         return;
     }
+    let Some(crt) = libass_sys::CrtFunctions::global() else {
+        // CRT symbol unavailable — do not crash; show the raw format string
+        // (unexpanded) so the user still gets the message text.
+        let fmt_raw = unsafe { std::ffi::CStr::from_ptr(fmt) }.to_string_lossy();
+        match level {
+            0 | 1 => tracing::error!("[libass] {fmt_raw}"),
+            2 => tracing::warn!("[libass] {fmt_raw}"),
+            3 => tracing::debug!("[libass] {fmt_raw}"),
+            _ => tracing::trace!("[libass] {fmt_raw}"),
+        }
+        return;
+    };
     let mut buf = [0i8; 1024];
-    // vsnprintf on MSVC does not null-terminate on truncation, so always
+    // vsnprintf does not null-terminate on truncation on all CRTs, so always
     // force the last byte to NUL after writing.
-    let written = unsafe { vsnprintf(buf.as_mut_ptr(), buf.len(), fmt, va) };
+    let written = unsafe { (crt.vsnprintf)(buf.as_mut_ptr(), buf.len(), fmt, va) };
     let last = buf.len() - 1;
     buf[last] = 0;
     if written <= 0 {
