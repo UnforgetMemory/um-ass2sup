@@ -10,7 +10,7 @@ use color_quantizer::QuantizedFrame;
 use tracing::debug;
 
 use crate::cli::args::Args;
-use crate::cli::progress;
+use crate::cli::progress::ProgressReporter;
 use crate::config::Config;
 use crate::error::CliError;
 
@@ -111,11 +111,7 @@ fn process_libass(
         t_start.elapsed().as_secs_f64(),
     );
 
-    let pb = if args.quiet {
-        indicatif::ProgressBar::hidden()
-    } else {
-        progress::create(total_frames, "Rendering")
-    };
+    let mut progress = ProgressReporter::new(total_frames, "Rendering", args.quiet);
 
     let last_event_end = events
         .iter()
@@ -131,14 +127,14 @@ fn process_libass(
             .iter()
             .any(|e| e.start_ms as u64 <= ts && ts < (e.start_ms + e.duration_ms) as u64);
         if !has_active {
-            pb.inc(1);
+            progress.inc();
             continue;
         }
 
         let images = match renderer.render_frame(ts as i64)? {
             Some(imgs) if !imgs.is_empty() => imgs,
             _ => {
-                pb.inc(1);
+                progress.inc();
                 continue;
             }
         };
@@ -152,7 +148,7 @@ fn process_libass(
         ) {
             Some(c) => c,
             None => {
-                pb.inc(1);
+                progress.inc();
                 continue;
             }
         };
@@ -183,16 +179,16 @@ fn process_libass(
             if let Some(last) = output_frames.last_mut() {
                 last.duration_ms = ts + q.duration_ms - last.pts_ms;
             }
-            pb.inc(1);
+            progress.inc();
             continue;
         }
 
         prev_data_hash = Some(hash);
         output_frames.push(q);
-        pb.inc(1);
+        progress.inc();
     }
 
-    pb.finish_and_clear();
+    progress.finish_and_clear();
 
     if output_frames.is_empty() {
         return Err(subtitle_renderer_libass::AssError::Ass(

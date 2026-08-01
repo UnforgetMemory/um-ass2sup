@@ -18,7 +18,7 @@ use crate::error::CliError;
 use crate::pipeline::backend;
 
 #[cfg(feature = "native-backend")]
-use crate::cli::progress;
+use crate::cli::progress::ProgressReporter;
 #[cfg(feature = "native-backend")]
 use crate::util;
 #[cfg(feature = "native-backend")]
@@ -310,11 +310,7 @@ impl ConversionPipeline {
             t_start.elapsed().as_secs_f64(),
         );
 
-        let pb = if args.quiet {
-            indicatif::ProgressBar::hidden()
-        } else {
-            progress::create(total_render_ts, "Rendering")
-        };
+        let mut progress = ProgressReporter::new(total_render_ts, "Rendering", args.quiet);
 
         // ── Render loop ─────────────────────────────────────────────────
         let mut quantized: Vec<QuantizedFrame> = Vec::new();
@@ -332,7 +328,7 @@ impl ConversionPipeline {
 
             let has_active = doc.events.iter().any(|e| e.start_ms <= ts && ts < e.end_ms);
             if !has_active {
-                pb.inc(1);
+                progress.inc();
                 continue;
             }
 
@@ -340,7 +336,7 @@ impl ConversionPipeline {
             let frame = match renderer.render_ass(doc, ts) {
                 Some(f) => f,
                 None => {
-                    pb.inc(1);
+                    progress.inc();
                     continue;
                 }
             };
@@ -354,7 +350,7 @@ impl ConversionPipeline {
                         // The previous (or next) unique frame will have its
                         // duration extended to cover this gap in encode_sup.
                         skip_empty += 1;
-                        pb.inc(1);
+                        progress.inc();
                         continue;
                     }
                 };
@@ -392,14 +388,14 @@ impl ConversionPipeline {
                         last_q.duration_ms = ts + q.duration_ms - last_q.pts_ms;
                     }
                     skip_dup += 1;
-                    pb.inc(1);
+                    progress.inc();
                     continue;
                 }
             }
 
             prev_data_hash = Some(data_hash);
             quantized.push(q);
-            pb.inc(1);
+            progress.inc();
         }
 
         // Fix up durations for the final stretch: extend the last frame
@@ -410,7 +406,7 @@ impl ConversionPipeline {
             }
         }
 
-        pb.finish_and_clear();
+        progress.finish_and_clear();
         let render_elapsed = t_start.elapsed();
         tracing::info!(
             rendered = render_count,
