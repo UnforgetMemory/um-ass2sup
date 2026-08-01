@@ -14,6 +14,7 @@ use crate::effects::{
     apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_over,
     composite_subregion,
 };
+use crate::font::glyph_cache::GlyphKey;
 use crate::font::rasterizer::GlyphRasterizer;
 use crate::font::registry::FontRegistry;
 use crate::font::types::RasterizedGlyph;
@@ -23,11 +24,18 @@ use crate::transform::AffineTransform;
 
 use crate::renderer::PixmapPool;
 
-/// Shared rendering resources: font registry, pixmap pool, and font fallback map.
+/// Shared rendering resources: font registry, pixmap pool, font fallback map,
+/// a persistent font-resolution cache, and a cross-frame glyph cache.
 pub struct FontRegistryRenderResources {
     pub registry: Mutex<FontRegistry>,
     pub pixmap_pool: Mutex<PixmapPool>,
     pub font_map: std::collections::HashMap<String, Vec<String>>,
+    /// Persistent (font, bold, style) → resolved font bytes. Replaces the
+    /// per-event cache: resolution runs the expensive fallback chain once per
+    /// distinct font instead of once per event per frame.
+    pub font_data_cache: Mutex<std::collections::HashMap<String, std::sync::Arc<[u8]>>>,
+    /// Cross-frame glyph rasterization cache (LRU, byte-budgeted).
+    pub glyph_cache: Mutex<crate::font::glyph_cache::GlyphCache>,
 }
 
 impl FontRegistryRenderResources {
@@ -37,6 +45,11 @@ impl FontRegistryRenderResources {
             registry: Mutex::new(FontRegistry::new()),
             pixmap_pool: Mutex::new(PixmapPool::new(8)),
             font_map: std::collections::HashMap::new(),
+            font_data_cache: Mutex::new(std::collections::HashMap::new()),
+            // 64 MiB byte budget: a CJK glyph at 48 px is ~2–4 KB, so this
+            // holds tens of thousands of glyphs — ample for a full movie's
+            // unique glyph set while bounding memory.
+            glyph_cache: Mutex::new(crate::font::glyph_cache::GlyphCache::new(64 << 20)),
         }
     }
 
@@ -73,29 +86,40 @@ pub fn render_event_font_registry(
     if w == 0 || h == 0 {
         return;
     }
-    let mut ctx = ctx.clone();
-
-    match &event.effect {
+    // Clone the render context only when a position-animation effect (Banner/
+    // Scroll) actually mutates x/y — the common case (no such effect) borrows
+    // the caller's context without copying its Strings.
+    let ctx_owned = match &event.effect {
         Effect::Banner {
             delay,
             left_to_right,
             ..
         } if *delay > 0 => {
+            let mut c = ctx.clone();
             let elapsed = (timestamp_ms.saturating_sub(event_start_ms)) as f32;
-            ctx.x += elapsed / *delay as f32 * if *left_to_right { 1.0 } else { -1.0 };
+            c.x += elapsed / *delay as f32 * if *left_to_right { 1.0 } else { -1.0 };
+            Some(c)
         }
         Effect::ScrollUp { delay, top, bottom } if *delay > 0 => {
+            let mut c = ctx.clone();
             let elapsed = (timestamp_ms.saturating_sub(event_start_ms)) as f32;
-            ctx.y =
+            c.y =
                 (config.height as f32 - *bottom as f32 - elapsed / *delay as f32).max(*top as f32);
+            Some(c)
         }
         Effect::ScrollDown { delay, top, bottom } if *delay > 0 => {
+            let mut c = ctx.clone();
             let elapsed = (timestamp_ms.saturating_sub(event_start_ms)) as f32;
-            ctx.y =
+            c.y =
                 (*top as f32 + elapsed / *delay as f32).min(config.height as f32 - *bottom as f32);
+            Some(c)
         }
-        _ => {}
-    }
+        _ => None,
+    };
+    let ctx: &RenderContext = match &ctx_owned {
+        Some(c) => c,
+        None => ctx,
+    };
 
     let plain_text = process_ass_text_escapes(&strip_override_blocks(&event.text_raw));
     if plain_text.is_empty() {
@@ -107,7 +131,7 @@ pub fn render_event_font_registry(
         super::font_registry_karaoke::render_karaoke_font_registry(
             pixmap,
             event,
-            &ctx,
+            ctx,
             config,
             &registry,
             timestamp_ms,
@@ -118,15 +142,13 @@ pub fn render_event_font_registry(
 
     let drawing_level = crate::renderer::drawing::parse_drawing_level(&event.text_raw);
     if drawing_level > 0 {
-        render_drawing(pixmap, &plain_text, &ctx);
+        render_drawing(pixmap, &plain_text, ctx);
         return;
     }
 
-    // Per-event font data cache: font_name → raw font data (Vec<u8>).
-    // This avoids re-running the expensive fallback chain (parse_font_name,
-    // list_families() allocation, loop) for every glyph in the same event.
-    let mut font_cache: std::collections::HashMap<String, Vec<u8>> =
-        std::collections::HashMap::new();
+    // Font-data resolution is served by the persistent cache in
+    // `resources.font_data_cache` (keyed by font name + bold + style), so the
+    // expensive fallback chain runs once per distinct font, not per event.
 
     let registry = resources.registry.lock();
     let available_width = config.width as f32 - ctx.margin_l - ctx.margin_r;
@@ -143,7 +165,7 @@ pub fn render_event_font_registry(
     let shaped_lines = if ctx.writing_mode == 2 || ctx.writing_mode == 3 {
         shape_vertical(
             &plain_text,
-            &ctx,
+            ctx,
             &registry,
             available_width,
             available_height,
@@ -154,7 +176,7 @@ pub fn render_event_font_registry(
     } else {
         shape_horizontal(
             &plain_text,
-            &ctx,
+            ctx,
             config,
             &registry,
             available_width,
@@ -244,15 +266,28 @@ pub fn render_event_font_registry(
             "rendering line"
         );
         for g in &sl.glyphs {
-            let font_data = font_cache.entry(ctx.font_name.clone()).or_insert_with(|| {
-                resolve_glyph_font_data(
-                    &registry,
-                    &ctx,
-                    g.glyph_id,
-                    &resources.font_map,
-                    event.style.as_str(),
-                )
-            });
+            let font_data = {
+                let cache_key = format!(
+                    "{}:{}:{}",
+                    ctx.font_name.to_lowercase(),
+                    ctx.bold,
+                    event.style
+                );
+                resources
+                    .font_data_cache
+                    .lock()
+                    .entry(cache_key)
+                    .or_insert_with(|| {
+                        resolve_glyph_font_data(
+                            &registry,
+                            ctx,
+                            g.glyph_id,
+                            &resources.font_map,
+                            event.style.as_str(),
+                        )
+                    })
+                    .clone()
+            };
             if font_data.is_empty() {
                 tracing::warn!(
                     glyph_id = g.glyph_id,
@@ -268,29 +303,40 @@ pub fn render_event_font_registry(
                 y = sl.line_y + g.y_offset - oyf,
                 "rasterizing glyph"
             );
-            match GlyphRasterizer::rasterize(font_data, g.glyph_id, ctx.font_size) {
-                Ok(rasterized) => {
-                    tracing::debug!(
-                        width = rasterized.width,
-                        height = rasterized.height,
-                        "rasterized glyph successfully"
-                    );
-                    composite_glyph(
-                        &mut layer,
-                        &rasterized,
-                        cx + g.x_offset,
-                        sl.line_y + g.y_offset - oyf,
-                        ctx.primary_color,
-                    );
+            // Cross-frame glyph cache: the same glyph at the same size is
+            // rasterized identically across frames (fade/alpha changes happen
+            // at composite time, not rasterization time), so cache by font
+            // allocation identity + glyph id + exact size bits.
+            let gkey = GlyphKey {
+                font: font_data.as_ptr() as usize,
+                glyph: g.glyph_id,
+                size: ctx.font_size.to_bits(),
+            };
+            let rasterized = {
+                let mut gc = resources.glyph_cache.lock();
+                if let Some(hit) = gc.get(&gkey) {
+                    hit
+                } else {
+                    match GlyphRasterizer::rasterize(&font_data, g.glyph_id, ctx.font_size) {
+                        Ok(r) => gc.insert(gkey, r),
+                        Err(e) => {
+                            tracing::warn!(
+                                glyph_id = g.glyph_id,
+                                error = %e,
+                                "failed to rasterize glyph"
+                            );
+                            continue;
+                        }
+                    }
                 }
-                Err(e) => {
-                    tracing::warn!(
-                        glyph_id = g.glyph_id,
-                        error = %e,
-                        "failed to rasterize glyph"
-                    );
-                }
-            }
+            };
+            composite_glyph(
+                &mut layer,
+                &rasterized,
+                cx + g.x_offset,
+                sl.line_y + g.y_offset - oyf,
+                ctx.primary_color,
+            );
             cx += g.x_advance + ctx.spacing;
         }
         let total_w = sl.glyphs.iter().map(|g| g.x_advance).sum::<f32>();
@@ -317,13 +363,17 @@ pub fn render_event_font_registry(
     }
     drop(registry);
 
-    // Save pre-outline fill data for shadow creation (shadow must not include outline).
-    let fill_data = layer.data().to_vec();
-
     // ── Outline / border pass ──
     // Tint fill with outline_color, blur to expand, then place under fill.
     // Only for border_style != 3 (OpaqueBox) and outline_width > 0.
     let has_outline = ctx.border_style != 3 && ctx.outline_width > 0.1;
+    // Save pre-outline fill data for shadow creation (shadow must not include
+    // outline). Only needed when an outline pass will tint a copy of it.
+    let fill_data = if has_outline {
+        layer.data().to_vec()
+    } else {
+        Vec::new()
+    };
     if has_outline {
         let mut o_px = match resources.pool_get(lw, lh) {
             Some(p) => p,
@@ -390,14 +440,17 @@ pub fn render_event_font_registry(
         && !ctx.clip_enabled
         && ctx.clip_drawing_commands.is_none();
 
-    // Check if layer has any visible pixels
-    let non_zero = layer.data().iter().filter(|&&b| b > 0).count();
-    tracing::debug!(
-        layer_w = lw,
-        layer_h = lh,
-        non_zero_pixels = non_zero,
-        "layer content before compositing"
-    );
+    // Layer content stats are only used by a debug! log — skip the full-layer
+    // scan when debug tracing is disabled (the default).
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        let non_zero = layer.data().iter().filter(|&&b| b > 0).count();
+        tracing::debug!(
+            layer_w = lw,
+            layer_h = lh,
+            non_zero_pixels = non_zero,
+            "layer content before compositing"
+        );
+    }
 
     if simple {
         if ctx.alpha_multiplier < 0.999 {
@@ -405,9 +458,9 @@ pub fn render_event_font_registry(
         }
         composite_subregion(pixmap.data_mut(), layer.data(), w, h, ox, oy, lw, lh);
     } else {
-        let fd = transform_layer(layer.data(), lw, lh, w, h, &ctx);
+        let fd = transform_layer(layer.data(), lw, lh, w, h, ctx);
         let mut result = if ctx.clip_enabled {
-            apply_clip_to_data(fd, w, h, &ctx, config)
+            apply_clip_to_data(fd, w, h, ctx, config)
         } else {
             fd
         };
@@ -471,6 +524,9 @@ fn composite_glyph(
 /// Steps (in order): exact match → suggestion → parse_font_name → bold_upgrade →
 /// font_map → all-families-last-resort.  Each step beyond exact+suggestion is
 /// gated by its corresponding parameter.
+///
+/// Returns the resolved font bytes as a cheaply-cloneable `Arc`; an empty
+/// `Arc` (`is_empty()`) means no font matched.
 pub(crate) fn resolve_font_data_inner(
     registry: &FontRegistry,
     family: &str,
@@ -478,7 +534,7 @@ pub(crate) fn resolve_font_data_inner(
     font_map: Option<&HashMap<String, Vec<String>>>,
     style_name: &str,
     use_bold_upgrade: bool,
-) -> Vec<u8> {
+) -> std::sync::Arc<[u8]> {
     use crate::font::types::{FontQuery, FontStyle, FontWeight};
 
     let weight = if bold {
@@ -495,13 +551,13 @@ pub(crate) fn resolve_font_data_inner(
     };
     let result = registry.query(&q);
     if let Some(id) = result.found {
-        if let Some(data) = registry.get_font_data(id) {
-            return data.to_vec();
+        if let Some(data) = registry.get_font_data_arc(id) {
+            return data;
         }
     }
     if let Some(sug) = result.suggestion {
-        if let Some(data) = registry.get_font_data(sug.id) {
-            return data.to_vec();
+        if let Some(data) = registry.get_font_data_arc(sug.id) {
+            return data;
         }
     }
 
@@ -523,20 +579,20 @@ pub(crate) fn resolve_font_data_inner(
             };
             let br = registry.query(&bq);
             if let Some(id) = br.found {
-                if let Some(data) = registry.get_font_data(id) {
-                    return data.to_vec();
+                if let Some(data) = registry.get_font_data_arc(id) {
+                    return data;
                 }
             }
         }
 
         if let Some(id) = pr.found {
-            if let Some(data) = registry.get_font_data(id) {
-                return data.to_vec();
+            if let Some(data) = registry.get_font_data_arc(id) {
+                return data;
             }
         }
         if let Some(sug) = pr.suggestion {
-            if let Some(data) = registry.get_font_data(sug.id) {
-                return data.to_vec();
+            if let Some(data) = registry.get_font_data_arc(sug.id) {
+                return data;
             }
         }
     }
@@ -554,13 +610,13 @@ pub(crate) fn resolve_font_data_inner(
             };
             let fb_result = registry.query(&fb_query);
             if let Some(id) = fb_result.found {
-                if let Some(data) = registry.get_font_data(id) {
-                    return data.to_vec();
+                if let Some(data) = registry.get_font_data_arc(id) {
+                    return data;
                 }
             }
             if let Some(sug) = fb_result.suggestion {
-                if let Some(data) = registry.get_font_data(sug.id) {
-                    return data.to_vec();
+                if let Some(data) = registry.get_font_data_arc(sug.id) {
+                    return data;
                 }
             }
         }
@@ -575,13 +631,13 @@ pub(crate) fn resolve_font_data_inner(
             style: FontStyle::Normal,
         };
         if let Some(id) = registry.query(&q).found {
-            if let Some(data) = registry.get_font_data(id) {
-                return data.to_vec();
+            if let Some(data) = registry.get_font_data_arc(id) {
+                return data;
             }
         }
     }
 
-    Vec::new()
+    std::sync::Arc::default()
 }
 
 fn resolve_glyph_font_data(
@@ -590,7 +646,7 @@ fn resolve_glyph_font_data(
     _glyph_id: u16,
     font_map: &std::collections::HashMap<String, Vec<String>>,
     style_name: &str,
-) -> Vec<u8> {
+) -> std::sync::Arc<[u8]> {
     resolve_font_data_inner(
         registry,
         &ctx.font_name,

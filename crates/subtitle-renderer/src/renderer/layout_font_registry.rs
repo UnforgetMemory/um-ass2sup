@@ -181,7 +181,7 @@ fn resolve_font_data(
     bold: bool,
     font_map: &std::collections::HashMap<String, Vec<String>>,
     style_name: &str,
-) -> Vec<u8> {
+) -> std::sync::Arc<[u8]> {
     super::font_registry_renderer::resolve_font_data_inner(
         registry,
         family,

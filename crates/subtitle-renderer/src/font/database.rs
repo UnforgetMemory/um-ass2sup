@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::font::error::FontError;
 use crate::font::types::{FontFace, FontId, FontStretch, FontStyle, FontWeight};
@@ -11,7 +12,7 @@ pub struct FontDatabase {
 
 struct FontEntry {
     id: FontId,
-    data: Vec<u8>,
+    data: Arc<[u8]>,
     face: FontFace,
 }
 
@@ -31,10 +32,12 @@ impl FontDatabase {
 
     /// Load a single font file, returns the FontId.
     pub fn load_font_file(&mut self, path: &Path, is_system: bool) -> Result<FontId, FontError> {
-        let data = std::fs::read(path).map_err(|e| FontError::Io {
-            path: path.to_path_buf(),
-            source: e,
-        })?;
+        let data: Arc<[u8]> = std::fs::read(path)
+            .map(Arc::from)
+            .map_err(|e| FontError::Io {
+                path: path.to_path_buf(),
+                source: e,
+            })?;
         let path_str = path.to_string_lossy().into_owned();
         let face = parse_font_metadata(self.next_id.into(), &data, Some(path_str), is_system)?;
         let id = face.id;
@@ -45,6 +48,7 @@ impl FontDatabase {
 
     /// Load font data from bytes (e.g., embedded fonts).
     pub fn load_font_data(&mut self, data: Vec<u8>, is_system: bool) -> Result<FontId, FontError> {
+        let data: Arc<[u8]> = Arc::from(data);
         let face = parse_font_metadata(self.next_id.into(), &data, None, is_system)?;
         let id = face.id;
         self.entries.push(FontEntry { id, data, face });
@@ -73,7 +77,18 @@ impl FontDatabase {
         self.entries
             .iter()
             .find(|e| e.id == id)
-            .map(|e| e.data.as_slice())
+            .map(|e| e.data.as_ref())
+    }
+
+    /// Get raw font data by id as a cheaply-cloneable `Arc`.
+    ///
+    /// Render hot paths clone the `Arc` (one refcount bump) instead of copying
+    /// the whole font file (CJK fonts are 10–40 MB).
+    pub fn get_data_arc(&self, id: FontId) -> Option<Arc<[u8]>> {
+        self.entries
+            .iter()
+            .find(|e| e.id == id)
+            .map(|e| Arc::clone(&e.data))
     }
 
     /// Get FontFace metadata by id.

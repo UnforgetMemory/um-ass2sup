@@ -196,42 +196,50 @@ impl Renderer {
             .max()
             .unwrap_or(0);
 
+        // Styles are immutable per document: build a first-match lookup once
+        // per frame and borrow from it, instead of cloning a Style (8+ Strings)
+        // for every active event on every frame.
+        let mut style_by_name: std::collections::HashMap<&str, &Style> =
+            std::collections::HashMap::new();
+        for s in &doc.styles {
+            style_by_name.entry(s.name.as_str()).or_insert(s);
+        }
+        let default_style = Style {
+            name: ass_core::StyleRef(String::new()),
+            font_name: String::new(),
+            font_size: 0.0,
+            primary_color: AssColor::WHITE,
+            secondary_color: AssColor::WHITE,
+            outline_color: AssColor::BLACK,
+            shadow_color: AssColor::BLACK,
+            bold: false,
+            italic: false,
+            underline: false,
+            strikeout: false,
+            scale_x: 100.0,
+            scale_y: 100.0,
+            spacing: 0.0,
+            angle: 0.0,
+            border_style: BorderStyle::OutlineAndShadow,
+            outline: 0.0,
+            shadow: 0.0,
+            alignment: Alignment::BottomCenter,
+            margins: Margins::default(),
+            encoding: FontEncoding::default(),
+        };
+
         for event in events {
             let event_start = std::time::Instant::now();
             let event_start_ms = event.start_ms;
             let event_end_ms = event.end_ms;
 
-            let style = doc
-                .styles
-                .iter()
-                .find(|s| s.name.as_str() == event.style.as_str())
-                .cloned()
-                .unwrap_or_else(|| Style {
-                    name: event.style.clone(),
-                    font_name: String::new(),
-                    font_size: 0.0,
-                    primary_color: AssColor::WHITE,
-                    secondary_color: AssColor::WHITE,
-                    outline_color: AssColor::BLACK,
-                    shadow_color: AssColor::BLACK,
-                    bold: false,
-                    italic: false,
-                    underline: false,
-                    strikeout: false,
-                    scale_x: 100.0,
-                    scale_y: 100.0,
-                    spacing: 0.0,
-                    angle: 0.0,
-                    border_style: BorderStyle::OutlineAndShadow,
-                    outline: 0.0,
-                    shadow: 0.0,
-                    alignment: Alignment::BottomCenter,
-                    margins: Margins::default(),
-                    encoding: FontEncoding::default(),
-                });
+            let style = style_by_name
+                .get(event.style.as_str())
+                .copied()
+                .unwrap_or(&default_style);
             let ctx = self.build_context(
                 event,
-                &style,
+                style,
                 doc,
                 timestamp_ms,
                 event_start_ms,

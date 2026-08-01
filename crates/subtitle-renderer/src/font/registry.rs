@@ -103,6 +103,12 @@ impl FontRegistry {
         self.db.get_data(id)
     }
 
+    /// Get font data as a cheaply-cloneable `Arc` (one refcount bump instead of
+    /// copying the whole font file).
+    pub fn get_font_data_arc(&self, id: FontId) -> Option<std::sync::Arc<[u8]>> {
+        self.db.get_data_arc(id)
+    }
+
     /// Number of indexed font faces.
     pub fn len(&self) -> usize {
         self.index.len()

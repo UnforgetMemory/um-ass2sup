@@ -214,6 +214,6 @@ fn composite_glyph(
     }
 }
 
-fn resolve_font_data(registry: &FontRegistry, family: &str, bold: bool) -> Vec<u8> {
+fn resolve_font_data(registry: &FontRegistry, family: &str, bold: bool) -> std::sync::Arc<[u8]> {
     super::font_registry_renderer::resolve_font_data_inner(registry, family, bold, None, "", false)
 }

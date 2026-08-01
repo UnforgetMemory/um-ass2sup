@@ -1,6 +1,7 @@
 pub mod database;
 pub mod discovery;
 pub mod error;
+pub mod glyph_cache;
 pub mod index;
 pub mod rasterizer;
 pub mod registry;
