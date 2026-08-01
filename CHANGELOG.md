@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`.gitignore` comprehensive overhaul**: `docs/` now gitignored (auto-generated wiki/reports); `*.sup` exempts `tests/fixtures/*.sup`; `output/` root-anchored as `/output/`; added `links/*.so*` (pre-built libass binary), `.cortexkit/` (agent state), `ass2sup-libass/docs/` (auto-generated doc), `/*.py` (root-level scripts). `git rm --cached` removed 4 tracked files.
 - **Public API doc comments**: Added concise English `///` doc comments to 35+ public items across `ass-core` (override tag sub-parsers), `pgs-encoder` (PgsEncoder, DisplaySetConfig, build_*, rgba_to_ycbcr, rle_decode, SupFile, EpochManager), and `subtitle-renderer` (Renderer, FontRegistryRenderResources, render_event_font_registry, SimpleShaper::shape).
 - **RLE round-trip tests** (`pgs-encoder/tests/test_rle_roundtrip.rs`): Proptest-based random image encode/decode round-trip + 14 edge-case tests.
+- **`subtitle-renderer`: Cross-frame glyph rasterization cache** — new `font/glyph_cache.rs`: LRU cache keyed by (font-data identity, glyph id, exact size bits) with a 64 MiB byte budget. Glyph bitmaps are Arc-shared, so identical glyphs at the same size are rasterized once instead of every frame (static dialogue, fade holds, credits stacks). ~2.4× render speedup on the Battleship.Island fixture.
+- **`subtitle-renderer`: Arc-based font data** — `FontDatabase`/`FontRegistry` store font bytes as `Arc<[u8]>`; new `get_data_arc()`/`get_font_data_arc()`; `resolve_font_data_inner` returns an `Arc` (8 full-font `to_vec()` copies removed — CJK fonts are 10–40 MB). Persistent `(font, bold, style) → Arc<[u8]>` resolution cache in `FontRegistryRenderResources` replaces the per-event `font_cache`.
+- **`color-quantizer`: Weighted k-d tree for temporal palette reuse** — `all_mappable` now uses a weighted (3R,4G,2B) k-d query sharing the existing thread-local tree (O(pixels·log palette) vs O(pixels·palette)); exact parity with the linear scan enforced by tests. `quantize_with_prev` iterates RGBA bytes directly (pixel Vec copy removed).
+- **`color-quantizer`: Thread-local Floyd–Steinberg buffer pool** — the four i16 error buffers (~16 MB at 1080p) are reused across frames instead of allocated per frame.
+- **`pgs-encoder`: `Segment::serialized_size`** — computes the exact serialized length with field arithmetic, eliminating a redundant full ODS serialization per frame in the `MAX_DECODE_BUFFER` size guard.
 
 ### Changed
 
@@ -36,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`subtitle-renderer-libass`**: `ConversionConfig.fonts_dir` (single `Option<String>`) → `fonts_dirs` (`Vec<String>`).
 - **`ass2sup-cli`**: Libass backend uses all font directories (`fonts_dirs`) instead of just the first.
 - **`ass2sup-cli`**: `debug!` → `info!` for system font count; added resolution info at conversion start.
+- **`ass2sup-cli`: Bar-first progress display** — the throttled plain-text `Rendered X/Y` lines are downgraded INFO → debug (the indicatif bar is the primary display; lines appear with `-v` or in piped output). ETA now uses an EMA-smoothed throughput rate instead of the jittery cumulative average; the bar message shows `{fps} fps · ETA {s}s` consistent with the log line.
+- **`ass2sup-cli`: Wall-clock diagnostics** — stderr diag timer switched from uptime (`0.000506400s WARN ...`) to wall-clock `fmt::time()`; the `--parallel-frames` deprecation message now renders professionally.
+- **`ass2sup-cli`: Unified render summary** — both backends emit an identical `Render complete: N unique frames in Xs (avg Y ms/frame, rendered Z) · empty E, duplicate D` line via the shared `RenderSummary::summary_line()`.
+- **`ass2sup-cli`: Batch progress** — sequential batch hosts the batch bar and per-file bars on a `MultiProgress` (separate lines); `--parallel` batch gains an aggregate bar; per-file reporter bars are suppressed in parallel batch.
 
 ### Fixed
 
@@ -52,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`build_context`: Division by zero** — when `script_width`/`script_height` is 0 (malformed ASS missing PlayRes), `scale_x`/`scale_y` = inf caused invisible rendering. Now guarded with `.max(1)`.
 - **`create_native_renderer`: Empty PlayRes crash** — previously passed raw 0 values to `RenderConfig`, causing downstream division by zero. Now falls back to output resolution with an info log.
 - **`clip::parse_inverse` removed**: Function was merged into `clip::parse` (both `\clip` and `\iclip` handled in one function), but `parse.rs` still referenced the removed symbol. Removed dead call.
+- **`color-quantizer`: Weighted k-d pruning on alpha splits broke linear parity** — the weighted nearest query pruned far-side regions using axis weight 2 for the alpha axis even though the weighted metric excludes alpha; palettes containing the transparent entry (alpha range dominates) could return a different index than the linear scan, flipping palette-reuse decisions (3 frames diverged on the Battleship.Island fixture). Alpha splits now have weight 0 and tie-level plane distances are searched, restoring byte-identical output.
 
 ---
 
