@@ -128,10 +128,12 @@ Trace: ass-core parse → RenderContext (build_context) → shape_horizontal/ver
 ```
 shape:    SimpleShaper::shape(text, font_data, font_size) → Vec<ShapedGlyph>
           Maps chars→glyph_id via swash FontRef.charmap(), records advance width
-resolve:  FontRegistry.query() → FontId → get_font_data() → Vec<u8>
-          Uses name-parsed weight/style fallback + font_map per-style fallback chain
+resolve:  FontRegistry.query() → FontId → get_font_data_arc() → Arc<[u8]>
+          Uses name-parsed weight/style fallback + font_map per-style fallback chain;
+          persistent (font, bold, style) → Arc<[u8]> cache in FontRegistryRenderResources
 rasterize: GlyphRasterizer::rasterize(font_data, glyph_id, font_size) → RasterizedGlyph
-           Uses swash CacheKey for glyph cache lookup
+           Cross-frame LRU glyph cache (font identity × glyph_id × size bits,
+           64 MiB byte budget) in FontRegistryRenderResources.glyph_cache
 composite: composite_glyph(layer, rasterized, x, y, color) — Porter-Duff over per pixel
 ```
 
@@ -395,7 +397,7 @@ Run in foreground (not background) — completion reminder will deliver the resu
 - **AffineTransform**: SIMD (wide::f32x4) bilinear interpolation in `apply_to_pixmap`
 - **composite_over**: SIMD (wide::u32x4) Porter-Duff over for 4-pixel chunks
 - **Frame-driven serial render**: the frame loop is single-threaded (rayon is used only at batch-file level in `ass2sup-cli`); each render returns one `RenderedFrame` and holds one frame at a time (~8.3 MB at 1080p), no intermediate `Vec<RenderedFrame>`
-- **Small palette dedup**: `HashSet<u32>` in quantizer, O(n²) → O(n)
+- **Small palette dedup**: `HashSet<u32>` in `quantize/palette.rs` (not on the main `pipeline.rs` quantize path, which uses a linear `unique.contains` check for ≤255 unique colors)
 - **k-d tree quantizer**: `find_nearest_index` for palette mapping acceleration (2.57×)
 
 ---
