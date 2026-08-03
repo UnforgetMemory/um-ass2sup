@@ -9,7 +9,7 @@ description = "PGS/SUP binary format encoder for Blu-ray subtitles"
 [dependencies]
 thiserror.workspace = true
 tracing.workspace = true
-color-quantizer = { path = "../color-quantizer" }
+color-quantizer.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

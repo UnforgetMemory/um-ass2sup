@@ -7,7 +7,7 @@ license.workspace = true
 description = "libass-based subtitle rendering backend for ASS to SUP/PGS conversion"
 
 [dependencies]
-libass-sys = { path = "../libass-sys" }
+libass-sys.workspace = true
 color-quantizer.workspace = true
 pgs-encoder.workspace = true
 bdn-xml.workspace = true
