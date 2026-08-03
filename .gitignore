@@ -23,6 +23,8 @@ crates/*/fuzz/Cargo.lock
 **/*.proptest-regressions
 # cargo-fuzz crash inputs / corpus deltas
 **/fuzz/artifacts/
+# cargo-fuzz corpus seed data (generated/growing)
+**/fuzz/corpus/
 # (also covered by target/ above, kept for clarity)
 **/fuzz/target/
 
@@ -39,6 +41,8 @@ scripts/*.py
 docs/
 # ass2sup-libass generated docs (mirrors main workspace pattern)
 ass2sup-libass/docs/
+# ass2sup-libass singular doc dir (consistency)
+ass2sup-libass/doc/
 
 # ── Coverage reports / 覆盖率报告 ────────────────────────────────
 coverage/
