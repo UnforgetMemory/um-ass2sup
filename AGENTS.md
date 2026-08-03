@@ -274,22 +274,21 @@ crates/pgs-encoder/src/
   domain/                         # Pure domain model — no I/O, no encoding knowledge
     composition.rs                # CompositionState, ObjectComposition, WindowDef
     epoch.rs                      # EpochManager — object versioning, epoch lifecycle
-    palette.rs                    # PaletteEntry, YCbCr conversion, color swap
+    palette.rs                    # PaletteEntry, YCbCr conversion, color swap, color_space_for_height
     segment.rs                    # Segment, SegmentPayload (PCS/WDS/PDS/ODS/END), SupFile
     rle.rs                        # RLE encode, chunk_rle_data
-    timing.rs                     # Frame rate codes, ms_to_90khz conversion
+    timing.rs                     # Frame rate codes, frame_accurate_pts (single source), is_ntsc_fps
     mod.rs                        # Re-exports
   encoding/                       # Encoding—how domain objects serialize to binary
-    display_set.rs                # DisplaySet builder: EpochStart/NormalCase/EpochContinue/PaletteOnly
+    display_set/                  # DisplaySet builders, split by kind
+      mod.rs                      # DisplaySetConfig, prepare_rle_and_hash, re-exports
+      basic.rs                    # palette_clear / continue / palette_only builders
+      window.rs                   # single/multi-window builders, find_split_row
+      epoch_split.rs              # epoch-split (3-band) builder
     encoder.rs                    # PgsEncoder — frame → display set pipeline
     sup.rs                        # SUP file writer
     mod.rs                        # Re-exports
-  color.rs                        # Color type re-exports
-  encoder.rs                      # Legacy encoder (partial; new logic in encoding/)
-  epoch.rs                        # Legacy epoch (partial; new logic in domain/epoch.rs)
-  lib.rs                          # Crate root
-  rle.rs                          # Legacy RLE (partial)
-  types.rs                        # Legacy type aliases
+  lib.rs                          # Crate root (re-exports PgsEncoder, timecode_to_ms)
 ```
 
 ### Key Architectural Constraints (from project memory)
@@ -312,13 +311,11 @@ crates/color-quantizer/src/
   color/                          # Color science
     space.rs                      # Color space definitions
     transfer.rs                   # Transfer functions
-    delta_e.rs                    # Perceptual color difference
     tonemap.rs                    # Tone mapping
     mod.rs
   dither/                         # Dithering methods
     floyd_steinberg.rs            # Floyd-Steinberg error diffusion
     ordered.rs                    # Ordered Bayer dither
-    adaptive.rs                   # Adaptive dither
     mod.rs
   quantize/                       # Palette generation
     median_cut.rs                 # Median-cut palette

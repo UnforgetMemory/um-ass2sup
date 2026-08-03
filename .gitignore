@@ -39,6 +39,9 @@ scripts/*.py
 # Test coverage reports / security audit reports / planning docs
 # These are build artifacts: regenerate from source on publish
 docs/
+# ...except ADRs: architecture decision records are versioned design history
+!docs/adr/
+!docs/adr/*.md
 # ass2sup-libass generated docs (mirrors main workspace pattern)
 ass2sup-libass/docs/
 # ass2sup-libass singular doc dir (consistency)

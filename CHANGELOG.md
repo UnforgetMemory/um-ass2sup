@@ -32,6 +32,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`color-quantizer`: Weighted k-d tree for temporal palette reuse** — `all_mappable` now uses a weighted (3R,4G,2B) k-d query sharing the existing thread-local tree (O(pixels·log palette) vs O(pixels·palette)); exact parity with the linear scan enforced by tests. `quantize_with_prev` iterates RGBA bytes directly (pixel Vec copy removed).
 - **`color-quantizer`: Thread-local Floyd–Steinberg buffer pool** — the four i16 error buffers (~16 MB at 1080p) are reused across frames instead of allocated per frame.
 - **`pgs-encoder`: `Segment::serialized_size`** — computes the exact serialized length with field arithmetic, eliminating a redundant full ODS serialization per frame in the `MAX_DECODE_BUFFER` size guard.
+- **Workspace: Rust 2024 edition migration** — all 8 crates + `ass2sup-libass` moved to `edition = "2024"`; match-ergonomics `ref` cleanup, `unsafe extern` blocks, rustfmt 2024 import ordering. See `docs/adr/0001-migrate-rust-2024-edition.md`.
+- **`ass2sup-cli`: `--fps` validation** — `value_parser` rejects `inf`/`nan`/non-positive values at parse time (previously a hang); defensive guards in `generate_frame_timeline` and the render loop for library callers.
+- **`pgs-encoder`: `chunk_rle_data` zero-size guard** — `max_chunk_size == 0` returns the whole buffer instead of spinning forever; regression test added.
+- **`subtitle-renderer`: Hoisted per-event font resolution** — the `(font, bold, style) → Arc<[u8]>` cache lookup moved out of the per-glyph loop (was `format!` + `to_lowercase()` + mutex lock + Arc clone per glyph); glyph loop now borrows the resolved font.
+- **`subtitle-renderer`: Stack-buffered char shaping** — vertical-layout per-char `to_string()` replaced with a stack `encode_utf8` buffer; `wrap_text_lines_simple` uses `String::with_capacity` + `push_str` instead of O(n²) `format!`.
+- **Tracing spans at pipeline boundaries** — `#[instrument]`/spans added to ass-core parse, validator, color-quantizer `quantize`, pgs-encoder encode decision, bdn-xml `generate_xml`/`generate_png`; batch failures logged at `error!` (was `info!`); embedded-font read/load failures, glob/WalkDir entry errors, and font-cache write failures now warn.
+- **`pgs-encoder`: single-source time conversion** — `frame_accurate_pts` consolidated into `domain::timing` (was byte-identical copies in CLI + libass adapter); dead `ms_to_90khz` free fn and `timing::ms_to_90khz` removed; `color_space_for_height` is the single HD/BT.709 heuristic.
+- **Dead code removed** — orphaned `dither/adaptive.rs` (never compiled), unused `color/delta_e.rs`, dead `frame/owned.rs::palette_to_rgba`, unused CLI `parse_color_space`/`parse_tonemap` helpers (now used by `config/mod.rs`), unused `png` dependency in `pgs-encoder`.
+- **Large-file split** — `karaoke.rs` 536→199 lines and `encoder.rs` 552→237 lines (inline tests moved to `tests/`); `encoding/display_set.rs` 568 lines split into `display_set/{mod,basic,window,epoch_split}.rs` with API-compatible re-exports.
+- **Production unwrap/expect eliminated** — `parse_font_name`, `parse` error path, k-d cache, octree insert/merge, EMA sampling now use `let-else`/`?`/`unreachable!` instead of unwrap; palette-index `as u8` narrowed via `u8::try_from`.
+- **ADR-0002**: cross-crate time/colour-space consolidation decisions recorded under `docs/adr/`.
 
 ### Changed
 
@@ -47,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ass2sup-cli`: Batch progress** — sequential batch hosts the batch bar and per-file bars on a `MultiProgress` (separate lines); `--parallel` batch gains an aggregate bar; per-file reporter bars are suppressed in parallel batch.
 
 ### Fixed
+
+- **`ass2sup-cli`: Absolute-path bypass in embedded-font traversal check** (security audit) — `Path::join` replaced the input directory base when an embedded font filename was absolute (e.g. `fontname: /etc/passwd`), slipping past the `ParentDir` component check and allowing an arbitrary file read. Now rejects absolute filenames before joining.
+- **`pgs-encoder`: `PgsEncoder::ms_to_90khz` drifting NTSC formula** (code review) — the method used the legacy `ms × 90000 × 1001 / 1000000` approximation, diverging from the CLI's frame-accurate production path for sub-frame timestamps. Now delegates to `domain::timing::frame_accurate_pts`; unit tests updated to frame-aligned semantics.
+- **`pgs-encoder`: `frame_accurate_pts`/`pts_at_frame` integer truncation** — `frame × 15015 / 4` truncated the 0.75-tick fractional part; now `(frame × 15015 + 2) / 4` rounds, and both call sites share the same rounding.
+- **`subtitle-renderer`: ASS style name in tracing span field** (security audit) — `build_context` recorded the attacker-controlled `style.name` verbatim in structured logs; span now records only the timestamp.
+- **`subtitle-renderer`: `parse_font_name` production `unwrap()`** — replaced with the `?` operator (was the last `unwrap` in a non-test path flagged by the baseline security audit).
 
 - **`subtitle-renderer-libass`: Style font name misparse → empty SUP** — `extract_font_families` used `splitn(idx + 2, ',')` + `parts[idx + 1]`, which grabbed the entire Style line tail starting at Fontsize (e.g. `48,&H00000000,...`) instead of the Fontname column. Normalized, that garbage (`48h00000000h000000ffh...`) appeared in the "Font families needed" log, filtered out every real font during registration, and left libass with zero fonts — every frame rendered empty and the CLI silently wrote a 0-byte SUP. Now splits by the correct column index and rejects hex-colour garbage.
 - **`subtitle-renderer-libass`: libass warnings invisible** — `libass_log_callback` discarded `fmt`/`va` and logged a generic "libass warning" placeholder. Now formats the real message via `vsnprintf`, so users see actual libass diagnostics (e.g. `fontselect: failed to find any fallback...`).
