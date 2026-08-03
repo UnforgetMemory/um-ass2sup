@@ -18,13 +18,13 @@ pub fn parse(s: &str) -> Option<OverrideTag> {
                 y2: n[3],
             });
         }
-        if let Some(comma) = inner.find(',') {
-            if let Ok(scale) = inner[..comma].trim().parse::<f32>() {
-                return Some(OverrideTag::ClipDrawing {
-                    scale,
-                    commands: inner[comma + 1..].trim().to_string(),
-                });
-            }
+        if let Some(comma) = inner.find(',')
+            && let Ok(scale) = inner[..comma].trim().parse::<f32>()
+        {
+            return Some(OverrideTag::ClipDrawing {
+                scale,
+                commands: inner[comma + 1..].trim().to_string(),
+            });
         }
     }
 
@@ -42,13 +42,13 @@ pub fn parse(s: &str) -> Option<OverrideTag> {
                 y2: n[3],
             });
         }
-        if let Some(comma) = inner.find(',') {
-            if let Ok(scale) = inner[..comma].trim().parse::<f32>() {
-                return Some(OverrideTag::ClipInverseDrawing {
-                    scale,
-                    commands: inner[comma + 1..].trim().to_string(),
-                });
-            }
+        if let Some(comma) = inner.find(',')
+            && let Ok(scale) = inner[..comma].trim().parse::<f32>()
+        {
+            return Some(OverrideTag::ClipInverseDrawing {
+                scale,
+                commands: inner[comma + 1..].trim().to_string(),
+            });
         }
     }
     None

@@ -150,11 +150,7 @@ fn checkerboard_2x2() {
         .map(|i| {
             let x = i % w;
             let y = i / w;
-            if (x / 2 + y / 2) % 2 == 0 {
-                0
-            } else {
-                255
-            }
+            if (x / 2 + y / 2) % 2 == 0 { 0 } else { 255 }
         })
         .collect();
     roundtrip(&indices, w, h, 0);
@@ -206,6 +202,25 @@ fn chunk_rle_correctness() {
         reassembled, rle,
         "Reassembled chunks should equal original RLE"
     );
+}
+
+#[test]
+fn chunk_rle_zero_max_size_returns_single_chunk() {
+    // Regression guard: max_chunk_size == 0 used to make `chunk_rle_data`
+    // loop forever (offset never advanced). It must return the whole input
+    // as a single chunk instead of hanging.
+    let data = vec![1u8, 2, 3, 4];
+    let chunks = chunk_rle_data(&data, 0);
+    assert_eq!(
+        chunks.len(),
+        1,
+        "zero max size must yield exactly one chunk"
+    );
+    assert_eq!(chunks[0], data, "chunk content must match the input");
+
+    // Empty input is also safe and yields a single empty chunk.
+    let empty_chunks = chunk_rle_data(&[], 0);
+    assert_eq!(empty_chunks, vec![Vec::<u8>::new()]);
 }
 
 #[test]

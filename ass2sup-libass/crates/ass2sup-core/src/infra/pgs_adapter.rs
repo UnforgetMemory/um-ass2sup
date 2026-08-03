@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
+use color_quantizer::QuantizedFrame;
 use color_quantizer::color::ColorSpace;
 use color_quantizer::pipeline::ColorPipeline;
-use color_quantizer::QuantizedFrame;
 use pgs_encoder::PgsEncoder;
 
 use crate::domain::error::AssError;
@@ -124,7 +124,7 @@ pub fn encode_bdn(
     fps: f64,
     output_dir: &Path,
 ) -> Result<usize, AssError> {
-    use bdn_xml::{ms_to_timecode, BdnEvent, BdnXml};
+    use bdn_xml::{BdnEvent, BdnXml, ms_to_timecode};
 
     let mut bdn = BdnXml::new(name, width, height);
     let mut count = 0usize;
@@ -169,7 +169,6 @@ pub fn encode_bdn(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_ms_to_timecode() {

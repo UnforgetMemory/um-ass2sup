@@ -90,9 +90,13 @@ mod tests {
     #[test]
     fn single_opaque_green() {
         let img = AssImageData {
-            w: 2, h: 2, stride: 2, bitmap: vec![255; 4],
+            w: 2,
+            h: 2,
+            stride: 2,
+            bitmap: vec![255; 4],
             color: 0x00FF0000, // RR=0x00, GG=0xFF, BB=0x00, AA=0x00 → GREEN
-            dst_x: 0, dst_y: 0,
+            dst_x: 0,
+            dst_y: 0,
             image_type: ImageType::Character,
         };
         let out = compose_frame(&[img], 2, 2);
@@ -103,9 +107,13 @@ mod tests {
     #[test]
     fn transparent_alpha_skipped() {
         let img = AssImageData {
-            w: 1, h: 1, stride: 1, bitmap: vec![0],
+            w: 1,
+            h: 1,
+            stride: 1,
+            bitmap: vec![0],
             color: 0xFF000000, // opaque RED but bitmap is 0
-            dst_x: 0, dst_y: 0,
+            dst_x: 0,
+            dst_y: 0,
             image_type: ImageType::Character,
         };
         let out = compose_frame(&[img], 1, 1);
@@ -115,9 +123,13 @@ mod tests {
     #[test]
     fn stride_wider_than_width() {
         let img = AssImageData {
-            w: 2, h: 1, stride: 4, bitmap: vec![255; 4],
+            w: 2,
+            h: 1,
+            stride: 4,
+            bitmap: vec![255; 4],
             color: 0x00FF0000, // GREEN
-            dst_x: 0, dst_y: 0,
+            dst_x: 0,
+            dst_y: 0,
             image_type: ImageType::Character,
         };
         let out = compose_frame(&[img], 2, 1);
@@ -129,23 +141,31 @@ mod tests {
     fn blend_bg_red_fg_blue() {
         // bg: RED at 50% bitmap alpha
         let bg = AssImageData {
-            w: 1, h: 1, stride: 1, bitmap: vec![128],
+            w: 1,
+            h: 1,
+            stride: 1,
+            bitmap: vec![128],
             color: 0xFF000000, // RR=0xFF, GG=0x00, BB=0x00, AA=0x00 → RED
-            dst_x: 0, dst_y: 0,
+            dst_x: 0,
+            dst_y: 0,
             image_type: ImageType::Outline,
         };
         // fg: BLUE at 50% bitmap alpha, composited over bg
         let fg = AssImageData {
-            w: 1, h: 1, stride: 1, bitmap: vec![128],
+            w: 1,
+            h: 1,
+            stride: 1,
+            bitmap: vec![128],
             color: 0x0000FF00, // RR=0x00, GG=0x00, BB=0xFF, AA=0x00 → BLUE
-            dst_x: 0, dst_y: 0,
+            dst_x: 0,
+            dst_y: 0,
             image_type: ImageType::Character,
         };
         let out = compose_frame(&[bg, fg], 1, 1);
         // bg at bitmap_alpha=128, color_alpha=255 → effective=128: R=(255*128+0*127)/255=128
         // fg at bitmap_alpha=128, color_alpha=255 → effective=128
         //   blended over bg: B=(255*128+0*127)/255=128, R=(0*128+128*127)/255=63
-        assert_eq!(out.data[0], 63);  // R
+        assert_eq!(out.data[0], 63); // R
         assert_eq!(out.data[2], 128); // B
     }
 }

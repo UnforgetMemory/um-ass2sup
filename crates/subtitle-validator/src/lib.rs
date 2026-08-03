@@ -114,6 +114,8 @@ impl Validator {
     /// let report = Validator::new().validate(&ass);
     /// println!("{}", report.summary());
     /// ```
+    /// Validate a parsed subtitle document, producing a report.
+    #[tracing::instrument(skip(self, ass), fields(events = ass.events.len()))]
     pub fn validate(&self, ass: &SubtitleDocument) -> ValidationReport {
         rules::validate(ass, &self.overlap_config)
     }

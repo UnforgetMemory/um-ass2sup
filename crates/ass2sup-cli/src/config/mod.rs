@@ -77,24 +77,11 @@ impl Config {
     /// Build a [`Config`] from CLI arguments and an optional ASS metadata
     /// resolution fallback.
     pub fn from_args(args: &super::cli::args::Args) -> Self {
-        let dither = match args.dither.as_str() {
-            "none" => color_quantizer::DitherMethod::None,
-            "ordered" => color_quantizer::DitherMethod::Ordered,
-            _ => color_quantizer::DitherMethod::FloydSteinberg,
-        };
+        let dither = color_space::parse_dither(&args.dither);
 
-        let color_space = match args.color_space.as_str() {
-            "bt709" => color_quantizer::color::ColorSpace::Bt709,
-            "bt2020" => color_quantizer::color::ColorSpace::Bt2020,
-            _ => color_quantizer::color::ColorSpace::Srgb,
-        };
+        let color_space = color_space::parse_color_space(&args.color_space);
 
-        let tonemap = args.tonemap.as_ref().map(|op| match op.as_str() {
-            "hable" => color_quantizer::color::tonemap::ToneMapOperator::Hable,
-            "reinhard" => color_quantizer::color::tonemap::ToneMapOperator::Reinhard,
-            "aces" => color_quantizer::color::tonemap::ToneMapOperator::Aces,
-            _ => color_quantizer::color::tonemap::ToneMapOperator::Reinhard,
-        });
+        let tonemap = args.tonemap.as_deref().map(color_space::parse_tonemap);
 
         Self {
             resolution: Resolution::default(),

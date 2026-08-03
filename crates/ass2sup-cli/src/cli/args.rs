@@ -47,7 +47,7 @@ pub struct Args {
     pub resolution: Option<String>,
 
     /// Frames per second
-    #[arg(short, long, default_value = "23.976")]
+    #[arg(short, long, default_value = "23.976", value_parser = parse_fps)]
     pub fps: f64,
 
     // ── VALIDATION ──
@@ -176,4 +176,53 @@ pub struct Args {
     /// Write diagnostic logs (with timestamps) to this file in addition to stderr.
     #[arg(long, value_name = "PATH")]
     pub log_file: Option<String>,
+}
+
+/// Validate a `--fps` value: must be a finite number greater than zero.
+///
+/// clap's default `f64` parser accepts `inf` and `nan`; with those values the
+/// frame-timeline loops in the conversion pipeline either spin forever
+/// (ms_per_frame → 0) or never terminate on NaN.  Rejecting them at parse time
+/// turns a hang into an immediate, actionable CLI error.
+fn parse_fps(s: &str) -> Result<f64, String> {
+    let value: f64 = s
+        .parse()
+        .map_err(|_| format!("invalid fps value '{s}': expected a number"))?;
+    if !value.is_finite() || value <= 0.0 {
+        return Err(format!(
+            "invalid fps value '{s}': must be a finite number greater than 0"
+        ));
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_fps_rejects_nan() {
+        assert!(parse_fps("nan").is_err());
+        assert!(parse_fps("NaN").is_err());
+    }
+
+    #[test]
+    fn parse_fps_rejects_infinity() {
+        assert!(parse_fps("inf").is_err());
+        assert!(parse_fps("+inf").is_err());
+        assert!(parse_fps("infinity").is_err());
+    }
+
+    #[test]
+    fn parse_fps_rejects_non_positive() {
+        assert!(parse_fps("0").is_err());
+        assert!(parse_fps("0.0").is_err());
+        assert!(parse_fps("-1").is_err());
+    }
+
+    #[test]
+    fn parse_fps_accepts_valid_values() {
+        assert_eq!(parse_fps("23.976").unwrap(), 23.976);
+        assert_eq!(parse_fps("25").unwrap(), 25.0);
+    }
 }

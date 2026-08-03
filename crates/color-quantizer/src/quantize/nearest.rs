@@ -233,7 +233,7 @@ fn find_nearest_linear(color: &[u8; 4], palette: &[[u8; 4]]) -> u8 {
         .iter()
         .enumerate()
         .min_by_key(|(_, p)| distance_sq(color, p))
-        .map(|(i, _)| i as u8)
+        .map(|(i, _)| u8::try_from(i).unwrap_or(0))
         .unwrap_or(0)
 }
 
@@ -288,17 +288,20 @@ fn find_nearest_impl(color: &[u8; 4], palette: &[[u8; 4]], weighted: bool) -> u8
             });
         }
 
-        let entry = cache.as_ref().expect("cache populated above");
+        let Some(entry) = cache.as_ref() else {
+            // Rebuild above always assigns the cache before we reach here.
+            unreachable!("k-d tree cache must be populated before lookup");
+        };
         if weighted {
             let first_dist = distance_sq_weighted(color, &palette[0]);
             let mut best = (0usize, first_dist);
             entry.tree.nearest_weighted(color, palette, &mut best);
-            best.0 as u8
+            u8::try_from(best.0).unwrap_or(0)
         } else {
             let first_dist = distance_sq(color, &palette[0]);
             let mut best = (0usize, first_dist);
             entry.tree.nearest(color, palette, &mut best);
-            best.0 as u8
+            u8::try_from(best.0).unwrap_or(0)
         }
     })
 }
@@ -314,7 +317,7 @@ pub fn find_nearest_weighted(color: &[u8; 4], palette: &[[u8; 4]]) -> u8 {
         .iter()
         .enumerate()
         .min_by_key(|(_, p)| distance_sq_weighted(color, p))
-        .map(|(i, _)| i as u8)
+        .map(|(i, _)| u8::try_from(i).unwrap_or(0))
         .unwrap_or(0)
 }
 

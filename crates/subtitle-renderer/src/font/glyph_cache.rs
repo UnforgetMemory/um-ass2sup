@@ -55,11 +55,11 @@ impl GlyphCache {
     pub fn get(&mut self, key: &GlyphKey) -> Option<Arc<RasterizedGlyph>> {
         let hit = self.map.get(key)?;
         // Refresh recency: move the key to the back of the recency list.
-        if self.order.back() != Some(key) {
-            if let Some(pos) = self.order.iter().position(|k| k == key) {
-                self.order.remove(pos);
-                self.order.push_back(*key);
-            }
+        if self.order.back() != Some(key)
+            && let Some(pos) = self.order.iter().position(|k| k == key)
+        {
+            self.order.remove(pos);
+            self.order.push_back(*key);
         }
         Some(Arc::clone(hit))
     }

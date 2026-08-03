@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-edition = "2021"
+edition = "2024"
 
 members = [
     "crates/libass-sys",

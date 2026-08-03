@@ -122,8 +122,11 @@ pub(crate) fn shape_vertical(
             xb + ci as f32 * lh
         };
         for (j, ch) in col.chars().enumerate() {
-            let gs =
-                SimpleShaper::shape(&ch.to_string(), &font_data, ctx.font_size).unwrap_or_default();
+            // Stack-buffer the single char to avoid a per-char heap
+            // allocation in the vertical-layout hot path.
+            let mut buf = [0u8; 4];
+            let ch_str = ch.encode_utf8(&mut buf);
+            let gs = SimpleShaper::shape(ch_str, &font_data, ctx.font_size).unwrap_or_default();
             for g in gs {
                 r.push(ShapedLine {
                     glyphs: vec![g],
@@ -142,13 +145,17 @@ fn wrap_text_lines_simple(text: &str, font_data: &[u8], fz: f32, sp: f32, mw: f3
     }
     let mut lines = Vec::new();
     for para in text.split('\n') {
-        let mut cl = String::new();
+        let mut cl = String::with_capacity(para.len());
         let mut cw = 0.0;
         for word in para.split_whitespace() {
             let wt = if cl.is_empty() {
                 word.to_string()
             } else {
-                format!(" {word}")
+                let mut s = String::with_capacity(cl.len() + 1 + word.len());
+                s.push_str(&cl);
+                s.push(' ');
+                s.push_str(word);
+                s
             };
             let shaped = SimpleShaper::shape(&wt, font_data, fz).unwrap_or_default();
             let glyph_count = shaped.len() as f32;
@@ -163,7 +170,11 @@ fn wrap_text_lines_simple(text: &str, font_data: &[u8], fz: f32, sp: f32, mw: f3
                 cl = if cl.is_empty() {
                     word.to_string()
                 } else {
-                    format!("{cl} {word}")
+                    let mut s = String::with_capacity(cl.len() + 1 + word.len());
+                    s.push_str(&cl);
+                    s.push(' ');
+                    s.push_str(word);
+                    s
                 };
                 cw += ww;
             }

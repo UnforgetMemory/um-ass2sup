@@ -6,7 +6,7 @@
 
 use ass_core::SubtitleDocument;
 use subtitle_validator::report::{OverlapConfig, OverlapSeverity, RuleId};
-use subtitle_validator::{validate, validate_strict, Validator};
+use subtitle_validator::{Validator, validate, validate_strict};
 
 // ─────────────────────── Helpers ───────────────────────
 

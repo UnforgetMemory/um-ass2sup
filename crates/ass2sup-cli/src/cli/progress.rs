@@ -46,11 +46,12 @@ impl SmoothRate {
     /// Feed one instantaneous rate sample (fps); returns the smoothed rate.
     /// The first sample seeds the EMA directly.
     fn sample(&mut self, inst: f64) -> f64 {
-        self.ema = Some(match self.ema {
+        let ema = match self.ema {
             None => inst,
             Some(prev) => self.alpha * inst + (1.0 - self.alpha) * prev,
-        });
-        self.ema.expect("ema just set")
+        };
+        self.ema = Some(ema);
+        ema
     }
 }
 
@@ -221,12 +222,15 @@ pub fn create(len: u64, message: &str) -> ProgressBar {
         Some(mp) => mp.add(ProgressBar::new(len)),
         None => ProgressBar::with_draw_target(Some(len), ProgressDrawTarget::stderr()),
     });
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
-            .unwrap()
-            .progress_chars("█▓░"),
-    );
+    let style = ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+        .unwrap_or_else(|e| {
+            // Static template: failure is practically impossible, but degrade
+            // gracefully instead of panicking on a format-string typo.
+            tracing::warn!("Failed to build progress-bar template: {e}");
+            ProgressStyle::default_bar()
+        });
+    pb.set_style(style.progress_chars("█▓░"));
     pb.set_message(message.to_string());
     pb.enable_steady_tick(Duration::from_millis(100));
     pb
@@ -305,7 +309,7 @@ mod tests {
         let mut r = SmoothRate::new();
         r.sample(500.0);
         let first = r.sample(10.0); // realistic render rate
-                                    // First blend: 0.3·10 + 0.7·500 = 353 — damped, not equal to the spike.
+        // First blend: 0.3·10 + 0.7·500 = 353 — damped, not equal to the spike.
         assert!(
             first < 400.0 && first > 300.0,
             "outlier not damped: {first}"

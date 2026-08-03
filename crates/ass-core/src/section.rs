@@ -7,12 +7,12 @@
 //! - `[Fonts]` → embedded font references
 
 use crate::{
+    Alignment, AssColor, BorderStyle, EmbeddedFont, Event, EventType, FontEncoding, Margins,
+    ScriptMetadata, Style, StyleRef,
     error::ParseError,
     lexer::{Line, Token},
     override_tag::parse_tags,
     time::Timestamp,
-    Alignment, AssColor, BorderStyle, EmbeddedFont, Event, EventType, FontEncoding, Margins,
-    ScriptMetadata, Style, StyleRef,
 };
 
 /// Parse lines from a `[Script Info]` section.
@@ -199,11 +199,7 @@ fn parse_event_data(event_type: EventType, data: &str) -> Result<Event, ParseErr
 
     let margin = |i: usize| {
         let v: u32 = parts[i].trim().parse().ok()?;
-        if v == 0 {
-            None
-        } else {
-            Some(v)
-        }
+        if v == 0 { None } else { Some(v) }
     };
 
     Ok(Event {
@@ -228,10 +224,10 @@ fn parse_event_data(event_type: EventType, data: &str) -> Result<Event, ParseErr
 pub fn parse_fonts(lines: &[Line]) -> Vec<EmbeddedFont> {
     let mut fonts = Vec::new();
     for line in lines {
-        if let Token::FontLine(ref data) = line.token {
-            if let Some(font) = parse_font_line(data) {
-                fonts.push(font);
-            }
+        if let Token::FontLine(ref data) = line.token
+            && let Some(font) = parse_font_line(data)
+        {
+            fonts.push(font);
         }
     }
     fonts

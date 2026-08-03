@@ -3,10 +3,10 @@
 //! Converts a glyph ID + font data into an alpha bitmap using
 //! `swash::scale::Scaler` and `swash::scale::Render`.
 
+use swash::FontRef;
 use swash::scale::image::Content;
 use swash::scale::{Render, ScaleContext, Source};
 use swash::zeno::Format;
-use swash::FontRef;
 
 use super::error::FontError;
 use super::types::RasterizedGlyph;

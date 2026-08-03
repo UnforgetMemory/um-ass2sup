@@ -227,8 +227,13 @@ impl FontCache {
             Some(p) => p,
             None => return,
         };
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
+        if let Some(dir) = path.parent()
+            && let Err(e) = std::fs::create_dir_all(dir)
+        {
+            tracing::warn!(
+                "Failed to create font-cache directory {}: {e}",
+                dir.display()
+            );
         }
 
         let mut buf = Vec::new();
@@ -261,7 +266,9 @@ impl FontCache {
             }
         }
 
-        let _ = std::fs::write(&path, &buf);
+        if let Err(e) = std::fs::write(&path, &buf) {
+            tracing::warn!("Failed to write font cache {}: {e}", path.display());
+        }
     }
 }
 

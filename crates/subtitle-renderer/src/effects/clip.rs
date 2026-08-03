@@ -1,5 +1,5 @@
 use crate::context::RenderContext;
-use crate::renderer::drawing::{parse_drawing_commands, DrawingCommand};
+use crate::renderer::drawing::{DrawingCommand, parse_drawing_commands};
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform};
 
 /// Apply a rectangular clip mask to RGBA pixel data.

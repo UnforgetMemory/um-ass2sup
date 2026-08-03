@@ -466,11 +466,11 @@ impl AssRenderer {
         }
 
         // --- 2) Set fonts_dir for embedded font extraction (first user dir) ------
-        if let Some(dir) = font_dirs.first() {
-            if let Ok(cdir) = CString::new(dir.as_str()) {
-                unsafe {
-                    (self.libass.ass_set_fonts_dir)(self.library, cast_ptr_to_i8(cdir.as_ptr()));
-                }
+        if let Some(dir) = font_dirs.first()
+            && let Ok(cdir) = CString::new(dir.as_str())
+        {
+            unsafe {
+                (self.libass.ass_set_fonts_dir)(self.library, cast_ptr_to_i8(cdir.as_ptr()));
             }
         }
 
@@ -615,11 +615,7 @@ impl AssRenderer {
         }
         let track = unsafe { &*self.track };
         let res = track.play_res_x.max(0) as u32;
-        if res == 0 {
-            self.width
-        } else {
-            res
-        }
+        if res == 0 { self.width } else { res }
     }
 
     /// Returns the PlayResY from the loaded track, or the configured height.
@@ -629,11 +625,7 @@ impl AssRenderer {
         }
         let track = unsafe { &*self.track };
         let res = track.play_res_y.max(0) as u32;
-        if res == 0 {
-            self.height
-        } else {
-            res
-        }
+        if res == 0 { self.height } else { res }
     }
 
     /// Returns the number of events in the loaded track.
@@ -725,8 +717,7 @@ mod tests {
 
     #[test]
     fn override_tag_fontname_extracted() {
-        let content =
-            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\fnArial Black}hi\n";
+        let content = "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\fnArial Black}hi\n";
         let families = extract_font_families(content);
         assert!(families.contains("arialblack"));
     }

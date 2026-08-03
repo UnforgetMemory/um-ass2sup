@@ -3,7 +3,7 @@ use ass_core::{
     Style, StyleRef, SubtitleDocument, TaggedOverride,
 };
 use subtitle_renderer::{
-    alignment_to_pos, strip_override_blocks, RenderConfig, RenderContext, Renderer,
+    RenderConfig, RenderContext, Renderer, alignment_to_pos, strip_override_blocks,
 };
 
 fn default_ass() -> SubtitleDocument {

@@ -22,6 +22,38 @@ fn test_args_default() {
 }
 
 #[test]
+fn test_fps_rejects_infinite_and_nan() {
+    // NaN / ±inf fps must fail at parse time: they would make the
+    // frame-timeline loops in the pipeline spin forever (see W1).
+    for bad in ["inf", "+inf", "-inf", "infinity", "nan", "NaN"] {
+        let result = Args::try_parse_from(["ass2sup", "input.ass", "--check", "-f", bad]);
+        assert!(result.is_err(), "fps '{bad}' must be rejected");
+    }
+}
+
+#[test]
+fn test_fps_rejects_non_positive() {
+    for bad in ["0", "0.0", "-1", "-23.976"] {
+        let result = Args::try_parse_from(["ass2sup", "input.ass", "-f", bad]);
+        assert!(result.is_err(), "fps '{bad}' must be rejected");
+    }
+}
+
+#[test]
+fn test_fps_accepts_valid_values() {
+    for good in ["23.976", "25", "29.97", "23.976"] {
+        let result = Args::try_parse_from(["ass2sup", "input.ass", "-f", good]);
+        assert!(
+            result.is_ok(),
+            "fps '{good}' must be accepted, got: {:?}",
+            result.err()
+        );
+    }
+    let args = Args::parse_from(["ass2sup", "input.ass", "-f", "29.97"]);
+    assert!((args.fps - 29.97).abs() < 1e-9);
+}
+
+#[test]
 fn test_resolution_parse() {
     let res = Resolution::parse("1920x1080").unwrap();
     assert_eq!(res.width, 1920);

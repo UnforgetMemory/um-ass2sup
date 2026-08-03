@@ -66,11 +66,18 @@ pub fn crop_to_tight_bbox(
 /// generating frames for empty periods.
 /// Uses float-based per-frame computation to avoid drift at non-integer fps.
 pub fn generate_frame_timeline(events: &[Event], fps: f64) -> Vec<u64> {
-    if events.is_empty() || fps <= 0.0 {
+    if events.is_empty() || !fps.is_finite() || fps <= 0.0 {
         return Vec::new();
     }
 
     let ms_per_frame = 1000.0 / fps;
+    // Defensive guard: with a non-finite or non-positive frame step the loop
+    // below would either spin forever (ms_per_frame = 0 for fps = +inf) or
+    // never advance (NaN).  CLI validation rejects such fps values, but
+    // library callers can pass any f64.
+    if !ms_per_frame.is_finite() || ms_per_frame <= 0.0 {
+        return Vec::new();
+    }
 
     // Merge overlapping event time ranges
     let mut ranges: Vec<(u64, u64)> = events.iter().map(|e| (e.start_ms, e.end_ms)).collect();
@@ -78,11 +85,11 @@ pub fn generate_frame_timeline(events: &[Event], fps: f64) -> Vec<u64> {
 
     let mut merged: Vec<(u64, u64)> = Vec::new();
     for (start, end) in ranges {
-        if let Some(last) = merged.last_mut() {
-            if start <= last.1 {
-                last.1 = last.1.max(end);
-                continue;
-            }
+        if let Some(last) = merged.last_mut()
+            && start <= last.1
+        {
+            last.1 = last.1.max(end);
+            continue;
         }
         merged.push((start, end));
     }
@@ -201,5 +208,31 @@ mod tests {
             result.is_empty(),
             "negative fps should return empty timeline"
         );
+    }
+
+    #[test]
+    fn test_nan_fps() {
+        let events = vec![make_event(0, 1000)];
+        let result = generate_frame_timeline(&events, f64::NAN);
+        assert!(result.is_empty(), "NaN fps should return empty timeline");
+    }
+
+    #[test]
+    fn test_infinite_fps() {
+        let events = vec![make_event(0, 1000)];
+        let result = generate_frame_timeline(&events, f64::INFINITY);
+        assert!(
+            result.is_empty(),
+            "infinite fps should return empty timeline (no infinite loop)"
+        );
+    }
+
+    #[test]
+    fn test_infinite_fps_does_not_hang() {
+        // Regression guard for the W1 infinite-loop bug: +inf fps previously
+        // made ms_per_frame = 0, so this loop never terminated.
+        let events = vec![make_event(0, 3_600_000)]; // 1 hour
+        let result = generate_frame_timeline(&events, f64::INFINITY);
+        assert!(result.is_empty());
     }
 }

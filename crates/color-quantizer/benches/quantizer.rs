@@ -1,5 +1,5 @@
 use color_quantizer::{DitherMethod, Quantizer};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
 fn make_test_image(width: u32, height: u32, color_count: usize) -> Vec<u8> {

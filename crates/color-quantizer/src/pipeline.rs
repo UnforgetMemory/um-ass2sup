@@ -6,13 +6,13 @@
 //! (median-cut or octree), nearest-neighbour mapping, dithering,
 //! and temporal palette reuse.
 
-use crate::color::tonemap::{tone_map_rgba, ToneMapOperator};
-use crate::color::ColorSpace;
-use crate::dither;
-use crate::quantize::{self, QuantizeMethod};
 use crate::DitherMethod;
 use crate::QuantizedFrame;
 use crate::Rgba;
+use crate::color::ColorSpace;
+use crate::color::tonemap::{ToneMapOperator, tone_map_rgba};
+use crate::dither;
+use crate::quantize::{self, QuantizeMethod};
 
 /// Convert a flat `[[u8; 4]]` palette slice to `Vec<Rgba>` for the public API.
 #[inline]
@@ -92,6 +92,7 @@ impl ColorPipeline {
     /// Quantise an RGBA frame to an indexed palette image.
     ///
     /// Flows: RGBA → [Tone map] → [Quantise] → [Dither] → QuantizedFrame
+    #[tracing::instrument(skip_all, fields(width, height))]
     pub fn quantize(&self, rgba: &[u8], width: u32, height: u32) -> QuantizedFrame {
         if rgba.is_empty() || width == 0 || height == 0 {
             return QuantizedFrame {
@@ -273,49 +274,49 @@ impl ColorPipeline {
         }
 
         // Try to reuse previous palette if all pixels map within threshold.
-        if let Some(prev) = prev_frame {
-            if !prev.palette.is_empty() {
-                // Convert previous Rgba palette to flat [[u8;4]] for internal use.
-                let flat_pal: Vec<[u8; 4]> =
-                    prev.palette.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
-                // The first palette entry is the transparent colour [0,0,0,0].
-                // Exclude it from nearest-neighbour search so dark opaque
-                // pixels do not accidentally match the transparent entry.
-                let has_tr = flat_pal.first().map(|c| c[3] == 0).unwrap_or(false);
-                let pal_for_search = if has_tr {
-                    &flat_pal[1..]
-                } else {
-                    &flat_pal[..]
+        if let Some(prev) = prev_frame
+            && !prev.palette.is_empty()
+        {
+            // Convert previous Rgba palette to flat [[u8;4]] for internal use.
+            let flat_pal: Vec<[u8; 4]> =
+                prev.palette.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
+            // The first palette entry is the transparent colour [0,0,0,0].
+            // Exclude it from nearest-neighbour search so dark opaque
+            // pixels do not accidentally match the transparent entry.
+            let has_tr = flat_pal.first().map(|c| c[3] == 0).unwrap_or(false);
+            let pal_for_search = if has_tr {
+                &flat_pal[1..]
+            } else {
+                &flat_pal[..]
+            };
+            if quantize::temporal::all_mappable(rgba, &flat_pal, 30.0) {
+                // Reuse previous palette: just remap, iterating the RGBA
+                // bytes directly (no intermediate pixel Vec).
+                let indices = rgba
+                    .chunks_exact(4)
+                    .map(|c| {
+                        let p = [c[0], c[1], c[2], c[3]];
+                        if p[3] == 0 {
+                            prev.transparent_index
+                        } else if has_tr {
+                            quantize::nearest::find_nearest_index(&p, pal_for_search) + 1
+                        } else {
+                            quantize::nearest::find_nearest_index(&p, pal_for_search)
+                        }
+                    })
+                    .collect();
+                return QuantizedFrame {
+                    width,
+                    height,
+                    palette: prev.palette.clone(),
+                    indices,
+                    transparent_index: prev.transparent_index,
+                    x: 0,
+                    y: 0,
+                    color_space: self.color_space,
+                    pts_ms: 0,
+                    duration_ms: 0,
                 };
-                if quantize::temporal::all_mappable(rgba, &flat_pal, 30.0) {
-                    // Reuse previous palette: just remap, iterating the RGBA
-                    // bytes directly (no intermediate pixel Vec).
-                    let indices = rgba
-                        .chunks_exact(4)
-                        .map(|c| {
-                            let p = [c[0], c[1], c[2], c[3]];
-                            if p[3] == 0 {
-                                prev.transparent_index
-                            } else if has_tr {
-                                quantize::nearest::find_nearest_index(&p, pal_for_search) + 1
-                            } else {
-                                quantize::nearest::find_nearest_index(&p, pal_for_search)
-                            }
-                        })
-                        .collect();
-                    return QuantizedFrame {
-                        width,
-                        height,
-                        palette: prev.palette.clone(),
-                        indices,
-                        transparent_index: prev.transparent_index,
-                        x: 0,
-                        y: 0,
-                        color_space: self.color_space,
-                        pts_ms: 0,
-                        duration_ms: 0,
-                    };
-                }
             }
         }
 

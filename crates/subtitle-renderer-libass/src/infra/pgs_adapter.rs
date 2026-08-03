@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
+use color_quantizer::QuantizedFrame;
 use color_quantizer::color::ColorSpace;
 use color_quantizer::pipeline::ColorPipeline;
-use color_quantizer::QuantizedFrame;
 use pgs_encoder::PgsEncoder;
 
 use crate::domain::error::AssError;
@@ -25,9 +25,10 @@ pub fn create_pipeline(max_colors: usize, dither: &str, height: u32) -> ColorPip
         .with_max_colors(max_colors.clamp(1, 255))
         .with_dither(dither_method);
 
-    // HD content uses BT.709 for Blu-ray PGS compliance.
-    if height > 576 {
-        pipeline = pipeline.with_color_space(ColorSpace::Bt709);
+    // HD content uses BT.709 for Blu-ray PGS compliance (shared heuristic).
+    let cs = pgs_encoder::domain::palette::color_space_for_height(height as u16);
+    if cs != ColorSpace::Srgb {
+        pipeline = pipeline.with_color_space(cs);
     }
 
     pipeline
@@ -52,19 +53,10 @@ pub fn quantize_frame(
 
 /// Convert an ms timestamp to a frame-accurate PTS value (90kHz ticks).
 ///
-/// Eliminates the sub-frame drift that naive `ms × 90` conversion
-/// accumulates at NTSC rates (23.976, 29.97). Matches the original
-/// ass2sup's `frame_accurate_pts`.
+/// Delegates to the shared implementation in `pgs_encoder::domain::timing`
+/// so both rendering backends produce byte-identical PTS values.
 pub fn frame_accurate_pts(ms: u64, fps: f64) -> u64 {
-    if pgs_encoder::domain::timing::is_ntsc_fps(fps) {
-        // 23.976 = 24000/1001 → 15015/4 ticks per frame
-        let frame = (ms as f64 * 24.0 / 1001.0).round() as u64;
-        frame * 15015 / 4
-    } else {
-        let ticks_per = 90000.0 / fps;
-        let frame = (ms as f64 * fps / 1000.0).round() as u64;
-        (frame as f64 * ticks_per).round() as u64
-    }
+    pgs_encoder::domain::timing::frame_accurate_pts(ms, fps)
 }
 
 /// Encode a list of quantized frames into a complete SUP binary.
@@ -124,7 +116,7 @@ pub fn encode_bdn(
     fps: f64,
     output_dir: &Path,
 ) -> Result<usize, AssError> {
-    use bdn_xml::{ms_to_timecode, BdnEvent, BdnXml};
+    use bdn_xml::{BdnEvent, BdnXml, ms_to_timecode};
 
     let mut bdn = BdnXml::new(name, width, height);
     let mut count = 0usize;

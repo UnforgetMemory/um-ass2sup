@@ -18,6 +18,7 @@ const MAX_BLUR_RADIUS: f64 = 64.0;
 const MAX_OUTLINE_WIDTH: f64 = 64.0;
 
 /// Build a fully resolved RenderContext for an event at a given timestamp.
+#[tracing::instrument(skip_all, fields(timestamp_ms))]
 pub fn build_context(
     config: &RenderConfig,
     event: &Event,

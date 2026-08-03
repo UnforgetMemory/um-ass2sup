@@ -17,9 +17,12 @@ pub enum RendererError {
 
 mod animation;
 mod build_context;
+mod draw;
 pub(crate) mod drawing;
 pub mod font_registry_karaoke;
 pub mod font_registry_renderer;
+mod font_resolve;
+mod glyph_composite;
 pub mod layout_font_registry;
 pub mod text_layout;
 pub use font_registry_renderer::parse_font_name;
@@ -123,10 +126,10 @@ impl Renderer {
         if result.found.is_some() {
             return true;
         }
-        if let Some(sug) = &result.suggestion {
-            if registry.get_font_data(sug.id).is_some() {
-                return true;
-            }
+        if let Some(sug) = &result.suggestion
+            && registry.get_font_data(sug.id).is_some()
+        {
+            return true;
         }
 
         // Step 2: try parse_font_name decomposition (e.g., "MiSans Demibold"
@@ -165,6 +168,7 @@ impl Renderer {
     }
 
     /// Render an ASS document at a specific timestamp into a RGBA frame.
+    #[tracing::instrument(skip(self, doc), fields(timestamp_ms, events = doc.events.len()))]
     pub fn render_ass(&self, doc: &SubtitleDocument, timestamp_ms: u64) -> Option<RenderedFrame> {
         self.render_ass_inner(doc, timestamp_ms, &mut self.font_registry_render.lock())
     }

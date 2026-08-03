@@ -62,7 +62,7 @@ pub mod time;
 pub mod types;
 
 pub use color::AssColor;
-pub use effect::{parse_effect, Effect};
+pub use effect::{Effect, parse_effect};
 pub use error::{ParseError, Warning, WarningKind, WarningSeverity};
 pub use event::*;
 pub use karaoke::{KaraokeSegment, KaraokeStyle};
@@ -328,12 +328,16 @@ pub enum OverrideTag {
 
 impl SubtitleDocument {
     /// Parse ASS/SSA content from a string (strict mode).
+    #[tracing::instrument(skip(content), level = "debug")]
     pub fn parse(content: &str) -> Result<Self, ParseError> {
         let (doc, errors) = Self::parse_with_recovery(content);
         if errors.is_empty() {
             Ok(doc)
         } else {
-            Err(errors.into_iter().next().unwrap())
+            let Some(first) = errors.into_iter().next() else {
+                unreachable!("non-empty error list must yield a first error")
+            };
+            Err(first)
         }
     }
 

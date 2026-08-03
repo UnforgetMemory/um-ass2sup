@@ -147,15 +147,15 @@ impl Segment {
     fn payload_size(&self) -> usize {
         match &self.payload {
             SegmentPayload::End => 0,
-            SegmentPayload::Pcs(ref p) => {
+            SegmentPayload::Pcs(p) => {
                 let fixed = 11;
                 let per_composition =
                     |c: &super::composition::ObjectComposition| if c.cropped { 16 } else { 8 };
                 fixed + p.compositions.iter().map(per_composition).sum::<usize>()
             }
-            SegmentPayload::Wds(ref w) => 1 + w.windows.len() * 9,
-            SegmentPayload::Pds(ref p) => 2 + p.entries.len() * 5,
-            SegmentPayload::Ods(ref o) => {
+            SegmentPayload::Wds(w) => 1 + w.windows.len() * 9,
+            SegmentPayload::Pds(p) => 2 + p.entries.len() * 5,
+            SegmentPayload::Ods(o) => {
                 4 + if o.first_in_sequence { 7 } else { 0 } + o.rle_data.len()
             }
         }
@@ -164,7 +164,7 @@ impl Segment {
     fn payload_to_bytes(&self) -> Vec<u8> {
         match &self.payload {
             SegmentPayload::End => Vec::new(),
-            SegmentPayload::Pcs(ref p) => {
+            SegmentPayload::Pcs(p) => {
                 let mut buf = Vec::with_capacity(11 + p.compositions.len() * 8);
                 buf.extend_from_slice(&p.width.to_be_bytes());
                 buf.extend_from_slice(&p.height.to_be_bytes());
@@ -191,7 +191,7 @@ impl Segment {
                 }
                 buf
             }
-            SegmentPayload::Wds(ref w) => {
+            SegmentPayload::Wds(w) => {
                 let mut buf = Vec::with_capacity(1 + w.windows.len() * 11);
                 buf.push(w.num_windows);
                 for win in &w.windows {
@@ -203,7 +203,7 @@ impl Segment {
                 }
                 buf
             }
-            SegmentPayload::Pds(ref p) => {
+            SegmentPayload::Pds(p) => {
                 let mut buf = Vec::with_capacity(2 + p.entries.len() * 5);
                 buf.push(p.palette_id);
                 buf.push(p.version);
@@ -216,7 +216,7 @@ impl Segment {
                 }
                 buf
             }
-            SegmentPayload::Ods(ref o) => {
+            SegmentPayload::Ods(o) => {
                 let sequence_flags = match (o.first_in_sequence, o.last_in_sequence) {
                     (true, false) => 0x80u8,
                     (false, true) => 0x40u8,

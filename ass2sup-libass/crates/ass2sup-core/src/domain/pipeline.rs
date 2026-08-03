@@ -1,7 +1,7 @@
 //! Pipeline orchestration: ASS parse → render → quantize → encode.
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
@@ -155,14 +155,19 @@ impl Ass2Sup {
         // Optional font availability check
         if config.check_fonts {
             let issues = Self::check_font_availability(&content, &config.font_fallback_map);
-            if issues.iter().any(|(_, _, resolved)| resolved == "NOT FOUND") {
-                let missing: Vec<_> = issues.iter()
+            if issues
+                .iter()
+                .any(|(_, _, resolved)| resolved == "NOT FOUND")
+            {
+                let missing: Vec<_> = issues
+                    .iter()
                     .filter(|(_, _, r)| r == "NOT FOUND")
                     .map(|(s, f, _)| format!("{}:{}", s, f))
                     .collect();
-                return Err(AssError::Config(
-                    format!("Fonts not found: {}", missing.join(", "))
-                ));
+                return Err(AssError::Config(format!(
+                    "Fonts not found: {}",
+                    missing.join(", ")
+                )));
             }
         }
 
@@ -249,7 +254,11 @@ impl Ass2Sup {
                 q.duration_ms = next_ts.saturating_sub(ts).max(1);
                 q
             } else {
-                let mut q = pipeline.quantize(&cropped_frame.data, cropped_frame.width, cropped_frame.height);
+                let mut q = pipeline.quantize(
+                    &cropped_frame.data,
+                    cropped_frame.width,
+                    cropped_frame.height,
+                );
                 q.x = cropped_frame.x as u16;
                 q.y = cropped_frame.y as u16;
                 q.pts_ms = ts;
@@ -273,10 +282,10 @@ impl Ass2Sup {
         }
 
         // Fix up last frame duration to cover until last_event_end.
-        if let Some(last) = output_frames.last_mut() {
-            if last.pts_ms + last.duration_ms < last_event_end {
-                last.duration_ms = last_event_end.saturating_sub(last.pts_ms);
-            }
+        if let Some(last) = output_frames.last_mut()
+            && last.pts_ms + last.duration_ms < last_event_end
+        {
+            last.duration_ms = last_event_end.saturating_sub(last.pts_ms);
         }
 
         tracing::info!(
@@ -298,7 +307,8 @@ impl Ass2Sup {
         let mut in_styles = false;
         for line in content.lines() {
             let trimmed = line.trim();
-            if trimmed.starts_with("[V4+ Styles]") || trimmed.starts_with("[V4 Styles]")
+            if trimmed.starts_with("[V4+ Styles]")
+                || trimmed.starts_with("[V4 Styles]")
                 || trimmed.starts_with("[Styles]")
             {
                 in_styles = true;
@@ -317,7 +327,8 @@ impl Ass2Sup {
                         let parts: Vec<&str> = after_style.splitn(3, ',').collect();
                         if parts.len() >= 2 && parts[0].trim() == style_name.as_str() {
                             let rest = parts.get(2).copied().unwrap_or("");
-                            let new_line = format!("Style: {}, {},{}", style_name, fallback_font, rest);
+                            let new_line =
+                                format!("Style: {}, {},{}", style_name, fallback_font, rest);
                             tracing::info!(
                                 style = %style_name,
                                 original = %parts[1].trim(),
@@ -342,7 +353,10 @@ impl Ass2Sup {
     /// Check font availability using fc-match.
     /// Returns a list of (style_name, requested_font, resolved_font) for
     /// cases where fc-match returns a different font family.
-    pub fn check_font_availability(content: &str, map: &HashMap<String, String>) -> Vec<(String, String, String)> {
+    pub fn check_font_availability(
+        content: &str,
+        map: &HashMap<String, String>,
+    ) -> Vec<(String, String, String)> {
         let mut issues = Vec::new();
         let mut in_styles = false;
         let mut in_events = false;
@@ -368,11 +382,14 @@ impl Ass2Sup {
             if in_styles && trimmed.starts_with("Style:") {
                 let after_style = trimmed.strip_prefix("Style:").unwrap_or("").trim();
                 let parts: Vec<&str> = after_style.splitn(3, ',').collect();
-                if parts.len() < 2 { continue; }
+                if parts.len() < 2 {
+                    continue;
+                }
                 let style_name = parts[0].trim().to_string();
                 let font_name = parts[1].trim();
 
-                let check_font = map.get(style_name.as_str())
+                let check_font = map
+                    .get(style_name.as_str())
                     .map(|s| s.as_str())
                     .unwrap_or(font_name);
 
@@ -435,14 +452,16 @@ impl Ass2Sup {
             .arg(check_font)
             .output();
         let resolved = match output {
-            Ok(o) if o.status.success() => {
-                String::from_utf8_lossy(&o.stdout).trim().to_string()
-            }
+            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
             _ => String::new(),
         };
 
         if resolved.is_empty() {
-            issues.push((source.to_string(), check_font.to_string(), "NOT FOUND".into()));
+            issues.push((
+                source.to_string(),
+                check_font.to_string(),
+                "NOT FOUND".into(),
+            ));
             tracing::warn!(
                 source = %source,
                 requested = %check_font,

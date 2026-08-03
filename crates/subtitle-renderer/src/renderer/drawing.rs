@@ -10,10 +10,11 @@ const MAX_DRAWING_REPEAT: usize = 10000;
 
 pub(crate) fn parse_drawing_level(text: &str) -> u8 {
     for tag_block in text.chars().collect::<Vec<_>>().windows(4) {
-        if tag_block[0] == '\\' && tag_block[1] == 'p' {
-            if let Some(d) = tag_block.get(2).and_then(|c| c.to_digit(10)) {
-                return d as u8;
-            }
+        if tag_block[0] == '\\'
+            && tag_block[1] == 'p'
+            && let Some(d) = tag_block.get(2).and_then(|c| c.to_digit(10))
+        {
+            return d as u8;
         }
     }
     0
@@ -82,63 +83,60 @@ pub(crate) fn parse_drawing_commands(text: &str) -> Vec<DrawingCommand> {
             }
         }
 
-        if token.len() > 1 {
-            if let Ok(_repeat) = token.parse::<usize>() {
-                if i + 1 < tokens.len() {
-                    let cmd_char = tokens[i + 1];
-                    if matches!(cmd_char, "m" | "l" | "b") {
-                        let args_needed = match cmd_char {
-                            "m" | "l" => 2,
-                            "b" => 6,
-                            _ => 0,
-                        };
-                        for _ in 0.._repeat.min(MAX_DRAWING_REPEAT) {
-                            if i + 1 + args_needed < tokens.len() {
-                                match cmd_char {
-                                    "m" => {
-                                        let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
-                                        let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
-                                        commands.push(DrawingCommand::MoveTo(x, y));
-                                    }
-                                    "l" => {
-                                        let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
-                                        let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
-                                        commands.push(DrawingCommand::LineTo(x, y));
-                                    }
-                                    "b" => {
-                                        let nums: Vec<f32> = (2..=7)
-                                            .filter_map(|j| tokens.get(i + j)?.parse().ok())
-                                            .collect();
-                                        if nums.len() == 6 {
-                                            commands.push(DrawingCommand::BezierTo(
-                                                nums[0], nums[1], nums[2], nums[3], nums[4],
-                                                nums[5],
-                                            ));
-                                        }
-                                    }
-                                    _ => {}
+        if token.len() > 1
+            && let Ok(_repeat) = token.parse::<usize>()
+            && i + 1 < tokens.len()
+        {
+            let cmd_char = tokens[i + 1];
+            if matches!(cmd_char, "m" | "l" | "b") {
+                let args_needed = match cmd_char {
+                    "m" | "l" => 2,
+                    "b" => 6,
+                    _ => 0,
+                };
+                for _ in 0.._repeat.min(MAX_DRAWING_REPEAT) {
+                    if i + 1 + args_needed < tokens.len() {
+                        match cmd_char {
+                            "m" => {
+                                let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
+                                let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
+                                commands.push(DrawingCommand::MoveTo(x, y));
+                            }
+                            "l" => {
+                                let x: f32 = tokens[i + 2].parse().unwrap_or(0.0);
+                                let y: f32 = tokens[i + 3].parse().unwrap_or(0.0);
+                                commands.push(DrawingCommand::LineTo(x, y));
+                            }
+                            "b" => {
+                                let nums: Vec<f32> = (2..=7)
+                                    .filter_map(|j| tokens.get(i + j)?.parse().ok())
+                                    .collect();
+                                if nums.len() == 6 {
+                                    commands.push(DrawingCommand::BezierTo(
+                                        nums[0], nums[1], nums[2], nums[3], nums[4], nums[5],
+                                    ));
                                 }
                             }
+                            _ => {}
                         }
-                        i += 2 + args_needed;
-                        continue;
                     }
                 }
+                i += 2 + args_needed;
+                continue;
             }
         }
 
-        if let (Ok(x), Some("m" | "l")) = (token.parse::<f32>(), last_cmd) {
-            if i + 1 < tokens.len() {
-                if let Ok(y) = tokens[i + 1].parse::<f32>() {
-                    if last_cmd == Some("m") {
-                        commands.push(DrawingCommand::MoveTo(x, y));
-                    } else {
-                        commands.push(DrawingCommand::LineTo(x, y));
-                    }
-                    i += 2;
-                    continue;
-                }
+        if let (Ok(x), Some("m" | "l")) = (token.parse::<f32>(), last_cmd)
+            && i + 1 < tokens.len()
+            && let Ok(y) = tokens[i + 1].parse::<f32>()
+        {
+            if last_cmd == Some("m") {
+                commands.push(DrawingCommand::MoveTo(x, y));
+            } else {
+                commands.push(DrawingCommand::LineTo(x, y));
             }
+            i += 2;
+            continue;
         }
 
         i += 1;

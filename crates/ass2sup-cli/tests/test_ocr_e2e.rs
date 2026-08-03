@@ -4,7 +4,7 @@
 //! and similarity scoring without requiring actual OCR.
 
 use ass2sup_cli::ocr::{
-    extract_text, is_match, normalized_similarity, strip_ass_tags, OcrResult, OcrText,
+    OcrResult, OcrText, extract_text, is_match, normalized_similarity, strip_ass_tags,
 };
 
 #[test]
@@ -144,8 +144,8 @@ fn run_fixture(fixture_name: &str, fixture_path: &std::path::Path, min_similarit
     use std::path::Path;
     use std::process::Command;
 
-    use ass2sup_cli::ocr;
     use ass_core::SubtitleDocument;
+    use ass2sup_cli::ocr;
     use color_quantizer::Quantizer;
     use pgs_encoder::PgsEncoder;
     use subtitle_renderer::{RenderConfig, Renderer};

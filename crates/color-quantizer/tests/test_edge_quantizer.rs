@@ -36,10 +36,12 @@ fn median_cut_all_same_color() {
         128u8, 64, 32, 255, 128, 64, 32, 255, 128, 64, 32, 255, 128, 64, 32, 255,
     ];
     let result = Quantizer::new(16).quantize(&rgba, 2, 2);
-    assert!(result
-        .palette
-        .iter()
-        .all(|p| *p == Rgba::new(128, 64, 32, 255)));
+    assert!(
+        result
+            .palette
+            .iter()
+            .all(|p| *p == Rgba::new(128, 64, 32, 255))
+    );
 }
 
 #[test]

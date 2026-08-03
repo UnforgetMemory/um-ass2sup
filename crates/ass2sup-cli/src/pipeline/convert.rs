@@ -187,7 +187,9 @@ impl ConversionPipeline {
         info!("System fonts loaded: {system_count}");
 
         if system_count == 0 {
-            warn!("No system fonts found — the ASS file may render empty frames. Try --font-dir to provide fonts.");
+            warn!(
+                "No system fonts found — the ASS file may render empty frames. Try --font-dir to provide fonts."
+            );
         }
 
         for dir in &config.font.font_dirs {
@@ -207,6 +209,15 @@ impl ConversionPipeline {
                     return None;
                 }
                 let base = input.parent().unwrap_or(Path::new("."));
+                // Reject absolute paths outright: `Path::join` would replace
+                // `base` entirely, bypassing the component check below.
+                if Path::new(&ef.filename).is_absolute() {
+                    warn!(
+                        "Rejected absolute path in embedded font filename: {}",
+                        ef.filename
+                    );
+                    return None;
+                }
                 let path = base.join(&ef.filename);
                 // Prevent path traversal - reject paths escaping the input directory
                 if path
@@ -219,14 +230,23 @@ impl ConversionPipeline {
                     );
                     return None;
                 }
-                std::fs::read(&path)
-                    .ok()
-                    .map(|data| (ef.font_name.clone(), data))
+                match std::fs::read(&path) {
+                    Ok(data) => Some((ef.font_name.clone(), data)),
+                    Err(e) => {
+                        warn!(
+                            "Failed to read embedded font '{}' ({}): {e}",
+                            ef.font_name, ef.filename
+                        );
+                        None
+                    }
+                }
             })
             .collect();
         let embedded_count = font_data_list.len();
         for (_font_name, font_data) in font_data_list {
-            let _ = renderer.load_user_font_data(font_data);
+            if let Err(e) = renderer.load_user_font_data(font_data) {
+                warn!("Failed to load embedded font '{_font_name}' into renderer: {e}");
+            }
         }
         debug!(embedded_count, "loaded ASS embedded fonts");
 
@@ -259,10 +279,8 @@ impl ConversionPipeline {
             .with_max_colors(config.max_colors)
             .with_dither(dither);
 
-        let effective_cs = if config.color_space == color_quantizer::color::ColorSpace::Srgb
-            && config.resolution.height > 576
-        {
-            color_quantizer::color::ColorSpace::Bt709
+        let effective_cs = if config.color_space == color_quantizer::color::ColorSpace::Srgb {
+            pgs_encoder::domain::palette::color_space_for_height(config.resolution.height as u16)
         } else {
             config.color_space
         };
@@ -384,17 +402,17 @@ impl ConversionPipeline {
             q.y.hash(&mut hasher);
             let data_hash = hasher.finish();
 
-            if let Some(prev) = prev_data_hash {
-                if prev == data_hash {
-                    // Same content as the previous unique frame → merge by
-                    // extending the previous frame's duration.
-                    if let Some(last_q) = quantized.last_mut() {
-                        last_q.duration_ms = ts + q.duration_ms - last_q.pts_ms;
-                    }
-                    skip_dup += 1;
-                    progress.inc();
-                    continue;
+            if let Some(prev) = prev_data_hash
+                && prev == data_hash
+            {
+                // Same content as the previous unique frame → merge by
+                // extending the previous frame's duration.
+                if let Some(last_q) = quantized.last_mut() {
+                    last_q.duration_ms = ts + q.duration_ms - last_q.pts_ms;
                 }
+                skip_dup += 1;
+                progress.inc();
+                continue;
             }
 
             prev_data_hash = Some(data_hash);
@@ -404,10 +422,10 @@ impl ConversionPipeline {
 
         // Fix up durations for the final stretch: extend the last frame
         // to cover until last_event_end.
-        if let Some(last_q) = quantized.last_mut() {
-            if last_q.pts_ms + last_q.duration_ms < last_event_end {
-                last_q.duration_ms = last_event_end.saturating_sub(last_q.pts_ms);
-            }
+        if let Some(last_q) = quantized.last_mut()
+            && last_q.pts_ms + last_q.duration_ms < last_event_end
+        {
+            last_q.duration_ms = last_event_end.saturating_sub(last_q.pts_ms);
         }
 
         progress.finish_and_clear();
@@ -429,16 +447,11 @@ impl ConversionPipeline {
     /// Map an ms timestamp to the PTS of the nearest video frame,
     /// eliminating the sub-frame drift that `ms_to_90khz` accumulates
     /// at NTSC rates (23.976, 29.97).
+    ///
+    /// Delegates to the shared implementation in `pgs_encoder` so both
+    /// rendering backends produce byte-identical PTS values.
     fn frame_accurate_pts(ms: u64, fps: f64) -> u64 {
-        if pgs_encoder::domain::timing::is_ntsc_fps(fps) {
-            // 23.976 = 24000/1001 → 15015/4 ticks per frame
-            let frame = (ms as f64 * 24.0 / 1001.0).round() as u64;
-            frame * 15015 / 4
-        } else {
-            let ticks_per = 90000.0 / fps;
-            let frame = (ms as f64 * fps / 1000.0).round() as u64;
-            (frame as f64 * ticks_per).round() as u64
-        }
+        pgs_encoder::domain::timing::frame_accurate_pts(ms, fps)
     }
 
     /// Encode quantised frames into SUP binary data.

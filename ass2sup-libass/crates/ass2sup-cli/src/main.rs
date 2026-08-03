@@ -86,7 +86,7 @@ fn main() {
         max_colors: args.max_colors.clamp(1, 255),
         dither: args.dither,
         default_font: args.font,
-        fonts_dir: args.font_dir,
+        fonts_dirs: args.font_dir.into_iter().collect(),
         font_fallback_map: parse_font_fallback_map(&args.font_fallback_map),
         check_fonts: args.check_fonts,
     };

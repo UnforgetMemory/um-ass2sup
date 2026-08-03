@@ -1,7 +1,7 @@
 [package]
 name = "color-quantizer"
 version.workspace = true
-edition = "2021"
+edition = "2024"
 rust-version.workspace = true
 license.workspace = true
 description = "Color quantization for PGS subtitle encoding (max 256 colors)"

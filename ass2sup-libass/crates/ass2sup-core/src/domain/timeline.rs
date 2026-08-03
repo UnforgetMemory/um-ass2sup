@@ -97,7 +97,11 @@ mod tests {
     #[test]
     fn static_event_start_and_end() {
         let ts = generate_timestamps(&[make_event(0, 1000, "Hello")], 24.0);
-        assert!(ts.len() >= 2, "static event: need start+end, got {} ts", ts.len());
+        assert!(
+            ts.len() >= 2,
+            "static event: need start+end, got {} ts",
+            ts.len()
+        );
         assert_eq!(ts[0], 0);
         assert!(ts.iter().any(|&t| t == 1000 || t > 900));
     }
@@ -106,19 +110,31 @@ mod tests {
     fn fade_event_has_many_frames() {
         let ts = generate_timestamps(&[make_event(0, 2000, "{\\fad(200,200)}Hello")], 24.0);
         // 2 seconds at 24fps = 48 frames
-        assert!(ts.len() >= 20, "fade event should have ~48 timestamps, got {}", ts.len());
+        assert!(
+            ts.len() >= 20,
+            "fade event should have ~48 timestamps, got {}",
+            ts.len()
+        );
     }
 
     #[test]
     fn move_event_has_many_frames() {
         let ts = generate_timestamps(&[make_event(0, 3000, "{\\move(0,0,100,100)}Hello")], 24.0);
-        assert!(ts.len() >= 30, "move event should have ~72 timestamps, got {}", ts.len());
+        assert!(
+            ts.len() >= 30,
+            "move event should have ~72 timestamps, got {}",
+            ts.len()
+        );
     }
 
     #[test]
     fn transform_event_has_many_frames() {
         let ts = generate_timestamps(&[make_event(0, 3000, "{\\t(0,3000,\\fscx120)}Hello")], 24.0);
-        assert!(ts.len() >= 30, "transform event should have ~72 ts, got {}", ts.len());
+        assert!(
+            ts.len() >= 30,
+            "transform event should have ~72 ts, got {}",
+            ts.len()
+        );
     }
 
     #[test]

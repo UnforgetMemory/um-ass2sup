@@ -5,22 +5,25 @@
 
 use ass_core::{Effect, Event};
 use parking_lot::Mutex;
-use std::collections::HashMap;
-use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform as SkiaTransform};
+use tiny_skia::{FillRule, Pixmap};
 
 use crate::context::{RenderConfig, RenderContext};
 use crate::effects;
-use crate::effects::{
-    apply_alpha_multiplier, apply_clip_mask, apply_drawing_clip_mask, composite_over,
-    composite_subregion,
-};
+use crate::effects::{apply_alpha_multiplier, composite_over, composite_subregion};
 use crate::font::glyph_cache::GlyphKey;
 use crate::font::rasterizer::GlyphRasterizer;
 use crate::font::registry::FontRegistry;
-use crate::font::types::RasterizedGlyph;
 use crate::renderer::layout_font_registry::{shape_horizontal, shape_vertical};
 use crate::renderer::text_layout::{process_ass_text_escapes, strip_override_blocks};
-use crate::transform::AffineTransform;
+
+use crate::renderer::draw::{apply_clip_to_data, draw_decoration, render_drawing, transform_layer};
+use crate::renderer::font_resolve::resolve_glyph_font_data;
+use crate::renderer::glyph_composite::composite_glyph;
+
+// Compatibility re-exports: existing callers reference these via
+// `font_registry_renderer::*`.
+pub use crate::renderer::font_resolve::parse_font_name;
+pub(crate) use crate::renderer::font_resolve::resolve_font_data_inner;
 
 use crate::renderer::PixmapPool;
 
@@ -72,6 +75,7 @@ impl Default for FontRegistryRenderResources {
 
 #[allow(clippy::too_many_arguments)]
 /// Render a single ASS event into a RGBA Pixmap bitmap using the font registry.
+#[tracing::instrument(skip_all, fields(event_start = event.start_ms, event_end = event.end_ms))]
 pub fn render_event_font_registry(
     pixmap: &mut Pixmap,
     event: &Event,
@@ -257,6 +261,36 @@ pub fn render_event_font_registry(
 
     let registry = resources.registry.lock();
     tracing::debug!(shaped_lines = shaped_lines.len(), "rendering shaped lines");
+    // Resolve the event's font data once: the (font, bold, style) key is
+    // constant across every glyph in this event, so computing the key and
+    // running the (expensive) fallback chain inside the glyph loop would
+    // format + lowercase + lock + clone per glyph. Hoisted out of the loop.
+    let font_data = {
+        let cache_key = format!(
+            "{}:{}:{}",
+            ctx.font_name.to_lowercase(),
+            ctx.bold,
+            event.style
+        );
+        resources
+            .font_data_cache
+            .lock()
+            .entry(cache_key)
+            .or_insert_with(|| {
+                resolve_glyph_font_data(
+                    &registry,
+                    ctx,
+                    shaped_lines
+                        .first()
+                        .and_then(|sl| sl.glyphs.first())
+                        .map(|g| g.glyph_id)
+                        .unwrap_or(0),
+                    &resources.font_map,
+                    event.style.as_str(),
+                )
+            })
+            .clone()
+    };
     for sl in &shaped_lines {
         let mut cx = sl.x_start - oxf;
         tracing::debug!(
@@ -266,28 +300,6 @@ pub fn render_event_font_registry(
             "rendering line"
         );
         for g in &sl.glyphs {
-            let font_data = {
-                let cache_key = format!(
-                    "{}:{}:{}",
-                    ctx.font_name.to_lowercase(),
-                    ctx.bold,
-                    event.style
-                );
-                resources
-                    .font_data_cache
-                    .lock()
-                    .entry(cache_key)
-                    .or_insert_with(|| {
-                        resolve_glyph_font_data(
-                            &registry,
-                            ctx,
-                            g.glyph_id,
-                            &resources.font_map,
-                            event.style.as_str(),
-                        )
-                    })
-                    .clone()
-            };
             if font_data.is_empty() {
                 tracing::warn!(
                     glyph_id = g.glyph_id,
@@ -472,436 +484,5 @@ pub fn render_event_font_registry(
     resources.pool_put(layer);
 }
 
-fn composite_glyph(
-    layer: &mut Pixmap,
-    rasterized: &RasterizedGlyph,
-    x: f32,
-    y: f32,
-    color: [u8; 4],
-) {
-    let lw = layer.width();
-    let lh = layer.height();
-    let pix = layer.data_mut();
-
-    tracing::debug!(
-        x,
-        y,
-        rasterized_left = rasterized.left,
-        rasterized_top = rasterized.top,
-        rasterized_width = rasterized.width,
-        rasterized_height = rasterized.height,
-        layer_w = lw,
-        layer_h = lh,
-        "compositing glyph"
-    );
-
-    for py in 0..rasterized.height {
-        for px in 0..rasterized.width {
-            let alpha = rasterized.data[(py * rasterized.width + px) as usize];
-            if alpha == 0 {
-                continue;
-            }
-            let tx = x as i32 + rasterized.left + px as i32;
-            let ty = y as i32 - rasterized.top + py as i32;
-            if tx < 0 || ty < 0 || tx >= lw as i32 || ty >= lh as i32 {
-                tracing::trace!(px, py, tx, ty, "pixel out of bounds");
-                continue;
-            }
-            let pi = ((ty as u32 * lw + tx as u32) * 4) as usize;
-            let f = alpha as f32 / 255.0;
-            let da = pix[pi + 3] as f32 / 255.0;
-            let ra = f + da * (1.0 - f);
-            for c in 0..3 {
-                pix[pi + c] = ((color[c] as f32 * f + pix[pi + c] as f32 * (1.0 - f)) / ra) as u8;
-            }
-            pix[pi + 3] = (ra * 255.0) as u8;
-        }
-    }
-}
-
-/// Consolidated font resolution with configurable fallback chain.
-///
-/// Steps (in order): exact match → suggestion → parse_font_name → bold_upgrade →
-/// font_map → all-families-last-resort.  Each step beyond exact+suggestion is
-/// gated by its corresponding parameter.
-///
-/// Returns the resolved font bytes as a cheaply-cloneable `Arc`; an empty
-/// `Arc` (`is_empty()`) means no font matched.
-pub(crate) fn resolve_font_data_inner(
-    registry: &FontRegistry,
-    family: &str,
-    bold: bool,
-    font_map: Option<&HashMap<String, Vec<String>>>,
-    style_name: &str,
-    use_bold_upgrade: bool,
-) -> std::sync::Arc<[u8]> {
-    use crate::font::types::{FontQuery, FontStyle, FontWeight};
-
-    let weight = if bold {
-        FontWeight::Bold
-    } else {
-        FontWeight::Normal
-    };
-
-    // Step 1: exact match
-    let q = FontQuery {
-        family: family.to_string(),
-        weight,
-        style: FontStyle::Normal,
-    };
-    let result = registry.query(&q);
-    if let Some(id) = result.found {
-        if let Some(data) = registry.get_font_data_arc(id) {
-            return data;
-        }
-    }
-    if let Some(sug) = result.suggestion {
-        if let Some(data) = registry.get_font_data_arc(sug.id) {
-            return data;
-        }
-    }
-
-    // Step 2: parse_font_name decomposition (e.g. "MiSans Demibold" → ("MiSans", Semibold))
-    if let Some((parsed_family, parsed_weight)) = parse_font_name(family) {
-        let pq = FontQuery {
-            family: parsed_family.to_string(),
-            weight: parsed_weight,
-            style: FontStyle::Normal,
-        };
-        let pr = registry.query(&pq);
-
-        // Bold-upgrade: when bold requested & parsed weight < Bold, also try Bold
-        if use_bold_upgrade && bold && parsed_weight < FontWeight::Bold {
-            let bq = FontQuery {
-                family: parsed_family.to_string(),
-                weight: FontWeight::Bold,
-                style: FontStyle::Normal,
-            };
-            let br = registry.query(&bq);
-            if let Some(id) = br.found {
-                if let Some(data) = registry.get_font_data_arc(id) {
-                    return data;
-                }
-            }
-        }
-
-        if let Some(id) = pr.found {
-            if let Some(data) = registry.get_font_data_arc(id) {
-                return data;
-            }
-        }
-        if let Some(sug) = pr.suggestion {
-            if let Some(data) = registry.get_font_data_arc(sug.id) {
-                return data;
-            }
-        }
-    }
-
-    // Step 3: font_map fallback
-    if let Some(fallbacks) = font_map.and_then(|m| m.get(style_name).or_else(|| m.get("Default"))) {
-        for fb_name in fallbacks {
-            if fb_name == family {
-                continue;
-            }
-            let fb_query = FontQuery {
-                family: fb_name.to_string(),
-                weight,
-                style: FontStyle::Normal,
-            };
-            let fb_result = registry.query(&fb_query);
-            if let Some(id) = fb_result.found {
-                if let Some(data) = registry.get_font_data_arc(id) {
-                    return data;
-                }
-            }
-            if let Some(sug) = fb_result.suggestion {
-                if let Some(data) = registry.get_font_data_arc(sug.id) {
-                    return data;
-                }
-            }
-        }
-    }
-
-    // Step 4: last resort — first available font
-    let families = registry.list_families();
-    for fallback_family in &families {
-        let q = FontQuery {
-            family: fallback_family.clone(),
-            weight: FontWeight::Normal,
-            style: FontStyle::Normal,
-        };
-        if let Some(id) = registry.query(&q).found {
-            if let Some(data) = registry.get_font_data_arc(id) {
-                return data;
-            }
-        }
-    }
-
-    std::sync::Arc::default()
-}
-
-fn resolve_glyph_font_data(
-    registry: &FontRegistry,
-    ctx: &RenderContext,
-    _glyph_id: u16,
-    font_map: &std::collections::HashMap<String, Vec<String>>,
-    style_name: &str,
-) -> std::sync::Arc<[u8]> {
-    resolve_font_data_inner(
-        registry,
-        &ctx.font_name,
-        ctx.bold,
-        Some(font_map),
-        style_name,
-        false, // bold_upgrade already handled by parse_font_name fallback
-    )
-}
-
-fn draw_decoration(
-    pixmap: &mut Pixmap,
-    x: f32,
-    y: f32,
-    width: f32,
-    thickness: f32,
-    color: [u8; 4],
-) {
-    let mut pb = tiny_skia::PathBuilder::new();
-    pb.move_to(x, y);
-    pb.line_to(x + width, y);
-    pb.close();
-    if let Some(path) = pb.finish() {
-        let mut p = tiny_skia::Paint::default();
-        p.set_color_rgba8(color[0], color[1], color[2], color[3]);
-        let stroke = tiny_skia::Stroke {
-            width: thickness,
-            ..Default::default()
-        };
-        pixmap.stroke_path(&path, &p, &stroke, tiny_skia::Transform::identity(), None);
-    }
-}
-
-/// Build a 2D affine transform from RenderContext values (scale, shear, rotation)
-/// for transforming a pixmap around its centre.
-fn build_layer_transform(lw: u32, lh: u32, ctx: &RenderContext) -> AffineTransform {
-    let cx = lw as f32 / 2.0;
-    let cy = lh as f32 / 2.0;
-    let sx = ctx.scale_x / 100.0;
-    let sy = ctx.scale_y / 100.0;
-
-    // Order: translate to origin → scale → shear → rotate → translate back
-    // This matches ASS convention where \fscx/\fscy scale the rendered bitmap,
-    // \fax/\fay shear it, and \frz/\fr rotates it, all around the bitmap centre.
-    AffineTransform::translate(cx, cy)
-        .then(&AffineTransform::scale(sx, sy))
-        .then(&AffineTransform::shear(ctx.shear_x, ctx.shear_y))
-        .then(&AffineTransform::rotate(ctx.rotation))
-        .then(&AffineTransform::translate(-cx, -cy))
-}
-
-fn transform_layer(data: &[u8], lw: u32, lh: u32, w: u32, h: u32, ctx: &RenderContext) -> Vec<u8> {
-    let needs_transform = ctx.rotation != 0.0
-        || ctx.shear_x != 0.0
-        || ctx.shear_y != 0.0
-        || (ctx.scale_x - 100.0).abs() > 0.01
-        || (ctx.scale_y - 100.0).abs() > 0.01;
-
-    if ctx.perspective_x != 0.0 || ctx.perspective_y != 0.0 {
-        let t = if needs_transform {
-            build_layer_transform(lw, lh, ctx)
-        } else {
-            AffineTransform::identity()
-        };
-        t.apply_with_perspective(
-            data,
-            lw,
-            lh,
-            w,
-            h,
-            ctx.perspective_x,
-            ctx.perspective_y,
-            ctx.origin_x,
-            ctx.origin_y,
-        )
-    } else if needs_transform {
-        let t = build_layer_transform(lw, lh, ctx);
-        t.apply_to_pixmap(data, lw, lh, w, h)
-    } else {
-        data.to_vec()
-    }
-}
-
-fn apply_clip_to_data(
-    mut data: Vec<u8>,
-    w: u32,
-    h: u32,
-    ctx: &RenderContext,
-    config: &RenderConfig,
-) -> Vec<u8> {
-    if ctx.clip_drawing_commands.is_some() {
-        let sx = config.width as f32 / config.script_width as f32;
-        let sy = config.height as f32 / config.script_height as f32;
-        apply_drawing_clip_mask(&mut data, w, h, ctx, sx, sy);
-    } else {
-        apply_clip_mask(&mut data, w, h, ctx);
-    }
-    data
-}
-
-fn render_drawing(pixmap: &mut Pixmap, text: &str, ctx: &RenderContext) {
-    let cmds = crate::renderer::drawing::parse_drawing_commands(text);
-    if cmds.is_empty() {
-        return;
-    }
-    let mut b = PathBuilder::new();
-    for cmd in &cmds {
-        match cmd {
-            crate::renderer::drawing::DrawingCommand::MoveTo(x, y) => b.move_to(*x, *y),
-            crate::renderer::drawing::DrawingCommand::LineTo(x, y) => b.line_to(*x, *y),
-            crate::renderer::drawing::DrawingCommand::BezierTo(x1, y1, x2, y2, x, y) => {
-                b.cubic_to(*x1, *y1, *x2, *y2, *x, *y)
-            }
-            crate::renderer::drawing::DrawingCommand::Close => b.close(),
-        }
-    }
-    if let Some(path) = b.finish() {
-        let mut p = Paint::default();
-        p.set_color_rgba8(
-            ctx.primary_color[0],
-            ctx.primary_color[1],
-            ctx.primary_color[2],
-            ctx.primary_color[3],
-        );
-        p.anti_alias = true;
-        pixmap.fill_path(
-            &path,
-            &p,
-            FillRule::Winding,
-            SkiaTransform::identity(),
-            None,
-        );
-    }
-}
-
-/// Parse font family name to extract weight/style information.
-/// For example, "MiSans Demibold" -> ("MiSans", Demibold)
-pub fn parse_font_name(family: &str) -> Option<(String, crate::font::types::FontWeight)> {
-    use crate::font::types::FontWeight;
-
-    let parts: Vec<&str> = family.split_whitespace().collect();
-    if parts.len() < 2 {
-        return None;
-    }
-
-    // Try to find weight keyword in the last part(s)
-    let weight_keywords = [
-        ("Thin", FontWeight::Thin),
-        ("ExtraLight", FontWeight::ExtraLight),
-        ("Light", FontWeight::Light),
-        ("Regular", FontWeight::Normal),
-        ("Normal", FontWeight::Normal),
-        ("Medium", FontWeight::Medium),
-        ("Demibold", FontWeight::Semibold),
-        ("SemiBold", FontWeight::Semibold),
-        ("Bold", FontWeight::Bold),
-        ("ExtraBold", FontWeight::ExtraBold),
-        ("Black", FontWeight::Black),
-        ("Heavy", FontWeight::Black),
-    ];
-
-    // Check if last part is a weight keyword
-    let last = parts.last().unwrap();
-    for (keyword, weight) in &weight_keywords {
-        if last.eq_ignore_ascii_case(keyword) {
-            let family_part = parts[..parts.len() - 1].join(" ");
-            return Some((family_part, *weight));
-        }
-    }
-
-    // Check if last two parts form a weight keyword (e.g., "Extra Bold")
-    if parts.len() >= 3 {
-        let last_two = format!("{} {}", parts[parts.len() - 2], parts[parts.len() - 1]);
-        for (keyword, weight) in &weight_keywords {
-            if last_two.eq_ignore_ascii_case(keyword) {
-                let family_part = parts[..parts.len() - 2].join(" ");
-                return Some((family_part, *weight));
-            }
-        }
-    }
-
-    None
-}
-
 #[cfg(test)]
-mod tests {
-    use crate::font::registry::FontRegistry;
-    use crate::font::types::{FontQuery, FontStyle, FontWeight};
-
-    fn dejavu_path() -> &'static std::path::Path {
-        std::path::Path::new("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
-    }
-
-    fn has_dejavu() -> bool {
-        dejavu_path().exists()
-    }
-
-    #[test]
-    fn font_data_cache_roundtrip() {
-        // Verify that font data loaded into the registry is retrievable
-        // via get_font_data — the cache that resolve_glyph_font_data depends on.
-        if !has_dejavu() {
-            eprintln!("SKIP: no DejaVu Sans font found");
-            return;
-        }
-        let data = std::fs::read(dejavu_path()).expect("read DejaVuSans.ttf");
-        let mut registry = FontRegistry::new();
-        let id = registry
-            .load_user_font_data(data.clone())
-            .expect("load font");
-
-        let cached = registry.get_font_data(id);
-        assert!(
-            cached.is_some(),
-            "get_font_data should return Some for loaded font"
-        );
-        assert!(
-            !cached.unwrap().is_empty(),
-            "cached font data should not be empty"
-        );
-    }
-
-    #[test]
-    fn font_data_cache_nonexistent_id() {
-        // get_font_data should return None for an invalid font ID.
-        let registry = FontRegistry::new();
-        let invalid_id = crate::font::types::FontId(9999);
-        let cached = registry.get_font_data(invalid_id);
-        assert!(
-            cached.is_none(),
-            "get_font_data should return None for non-existent ID"
-        );
-    }
-
-    #[test]
-    fn font_data_cache_exact_match_then_fallback() {
-        // Simulate the resolve_glyph_font_data cache path: load a font,
-        // query by name, then retrieve cached data via the found ID.
-        if !has_dejavu() {
-            eprintln!("SKIP: no DejaVu Sans font found");
-            return;
-        }
-        let raw_data = std::fs::read(dejavu_path()).expect("read DejaVuSans.ttf");
-        let mut registry = FontRegistry::new();
-        registry.load_user_font_data(raw_data).expect("load font");
-
-        let q = FontQuery {
-            family: "DejaVu Sans".into(),
-            weight: FontWeight::Normal,
-            style: FontStyle::Normal,
-        };
-        let result = registry.query(&q);
-        assert!(result.found.is_some(), "DejaVu Sans Normal should be found");
-
-        let cached = registry.get_font_data(result.found.unwrap());
-        assert!(cached.is_some(), "cached data for DejaVu Sans should exist");
-    }
-}
+mod tests;

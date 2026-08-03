@@ -78,7 +78,13 @@ fn collect_input_files(args: &Args) -> Vec<PathBuf> {
 fn collect_flat_glob(pattern: &str) -> Vec<PathBuf> {
     match glob::glob(pattern) {
         Ok(entries) => entries
-            .filter_map(|e| e.ok())
+            .filter_map(|e| match e {
+                Ok(p) => Some(p),
+                Err(err) => {
+                    warn!("Skipping glob entry for '{pattern}': {err}");
+                    None
+                }
+            })
             .filter(|e| e.is_file())
             .collect(),
         Err(e) => {
@@ -106,7 +112,16 @@ fn collect_recursive_glob(pattern: &str) -> Vec<PathBuf> {
 
     WalkDir::new(base_dir)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(|e| match e {
+            Ok(entry) => Some(entry),
+            Err(err) => {
+                warn!(
+                    "Skipping directory entry under '{}': {err}",
+                    base_dir.display()
+                );
+                None
+            }
+        })
         .filter(|e| e.file_type().is_file())
         .filter(|e| globber.matches(&e.file_name().to_string_lossy()))
         .map(|e| e.path().to_path_buf())

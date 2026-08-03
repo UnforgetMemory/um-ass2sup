@@ -393,9 +393,10 @@ mod tests {
     #[test]
     fn basic_extraction() {
         let (tags, _) = parse_tags("{\\b1\\fs20}BoldSmall");
-        assert!(tags
-            .iter()
-            .any(|t| matches!(t.tag, OverrideTag::Bold(true))));
+        assert!(
+            tags.iter()
+                .any(|t| matches!(t.tag, OverrideTag::Bold(true)))
+        );
     }
     #[test]
     fn karaoke_extraction() {

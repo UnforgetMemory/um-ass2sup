@@ -1,8 +1,8 @@
 //! Pipeline orchestration: ASS parse → render → quantize → encode.
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
@@ -11,7 +11,7 @@ use color_quantizer::QuantizedFrame;
 use crate::domain::composer::compose_frame;
 use crate::domain::error::AssError;
 use crate::domain::frame::AssEventInfo;
-use crate::domain::renderer::{extract_font_families, AssRenderer};
+use crate::domain::renderer::{AssRenderer, extract_font_families};
 use crate::domain::timeline::generate_timestamps;
 use crate::infra::pgs_adapter::{create_pipeline, encode_bdn, encode_sup};
 use crate::infra::vendor::crop_to_tight_bbox;
@@ -311,10 +311,10 @@ impl Ass2Sup {
         }
 
         // Fix up last frame duration to cover until last_event_end.
-        if let Some(last) = output_frames.last_mut() {
-            if last.pts_ms + last.duration_ms < last_event_end {
-                last.duration_ms = last_event_end.saturating_sub(last.pts_ms);
-            }
+        if let Some(last) = output_frames.last_mut()
+            && last.pts_ms + last.duration_ms < last_event_end
+        {
+            last.duration_ms = last_event_end.saturating_sub(last.pts_ms);
         }
 
         tracing::info!(

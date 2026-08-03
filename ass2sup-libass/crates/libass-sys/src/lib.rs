@@ -142,7 +142,7 @@ pub struct ASS_Track {
     pub layout_res_y: i32,
 }
 
-extern "C" {
+unsafe extern "C" {
     /// Initialise a new libass library instance.
     ///
     /// Returns a pointer to an opaque [`ASS_Library`], or null on failure.

@@ -278,13 +278,13 @@ mod tests {
         ];
         let mut found = false;
         for path in &cjk_paths {
-            if PathBuf::from(path).exists() {
-                if let Ok(id) = db.load_font_file(&PathBuf::from(path), true) {
-                    let face = db.get_face(id).unwrap();
-                    assert!(face.cjk, "Expected CJK font to have cjk=true for {}", path);
-                    found = true;
-                    break;
-                }
+            if PathBuf::from(path).exists()
+                && let Ok(id) = db.load_font_file(&PathBuf::from(path), true)
+            {
+                let face = db.get_face(id).unwrap();
+                assert!(face.cjk, "Expected CJK font to have cjk=true for {}", path);
+                found = true;
+                break;
             }
         }
         if !found {

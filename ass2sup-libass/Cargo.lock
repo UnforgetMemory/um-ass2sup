@@ -273,7 +273,6 @@ name = "pgs-encoder"
 version = "2.7.1"
 dependencies = [
  "color-quantizer",
- "png",
  "thiserror",
  "tracing",
 ]

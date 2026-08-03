@@ -12,5 +12,5 @@ pub mod srt;
 
 pub use batch::convert_batch;
 pub use check::run_check;
-pub use convert::{convert_file, convert_to_bdn, ConversionPipeline, ConversionStats};
+pub use convert::{ConversionPipeline, ConversionStats, convert_file, convert_to_bdn};
 pub use srt::convert_to_srt;

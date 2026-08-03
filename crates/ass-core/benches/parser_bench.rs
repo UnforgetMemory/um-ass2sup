@@ -1,6 +1,6 @@
 //! Benchmarks for ass-core parser performance.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
 fn bench_parse_simple(c: &mut Criterion) {

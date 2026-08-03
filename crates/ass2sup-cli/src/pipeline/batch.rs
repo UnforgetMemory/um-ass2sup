@@ -1,7 +1,7 @@
 //! Batch conversion — process multiple files.
 
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{error, info};
 
 use crate::cli::args::Args;
 use crate::config::Config;
@@ -87,7 +87,7 @@ pub fn convert_batch(
                 successes += 1;
             }
             Err(e) => {
-                info!("[{i}] FAILED: {e}");
+                error!("[{i}] FAILED: {e}");
                 failures += 1;
             }
         }

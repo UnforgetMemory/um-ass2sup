@@ -88,6 +88,13 @@ pub fn rle_encode(
 /// Chunk RLE data into segments with a maximum payload size.
 /// PGS ODS segments have a max payload of ~64KB.
 pub fn chunk_rle_data(data: &[u8], max_chunk_size: usize) -> Vec<Vec<u8>> {
+    // Guard: with max_chunk_size == 0 the loop below would never advance
+    // `offset`, spinning forever. Return the whole buffer as one chunk.
+    // (A full clone here is an acceptable defensive fallback — max=0 is only
+    // reachable via a programming error; production callers use MAX_ODS_CHUNK.)
+    if max_chunk_size == 0 {
+        return vec![data.to_vec()];
+    }
     if data.len() <= max_chunk_size {
         return vec![data.to_vec()];
     }

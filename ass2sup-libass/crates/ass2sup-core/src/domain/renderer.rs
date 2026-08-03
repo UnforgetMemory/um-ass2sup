@@ -84,7 +84,7 @@ impl AssRenderer {
         Ok(())
     }
 
-        /// Configure font lookup.
+    /// Configure font lookup.
     ///
     /// Font provider selection uses `ASS_FONTPROVIDER_AUTODETECT=0` so that libass
     /// picks the platform-native provider (DirectWrite on Windows, fontconfig on
@@ -190,11 +190,11 @@ impl AssRenderer {
         }
 
         // --- 2) Set fonts_dir for embedded font extraction (first user dir) ------
-        if let Some(dir) = font_dirs.first() {
-            if let Ok(cdir) = CString::new(dir.as_str()) {
-                unsafe {
-                    libass_sys::ass_set_fonts_dir(self.library, cdir.as_ptr());
-                }
+        if let Some(dir) = font_dirs.first()
+            && let Ok(cdir) = CString::new(dir.as_str())
+        {
+            unsafe {
+                libass_sys::ass_set_fonts_dir(self.library, cdir.as_ptr());
             }
         }
 
@@ -344,11 +344,7 @@ impl AssRenderer {
         }
         let track = unsafe { &*self.track };
         let res = track.play_res_x.max(0) as u32;
-        if res == 0 {
-            self.width
-        } else {
-            res
-        }
+        if res == 0 { self.width } else { res }
     }
 
     /// Returns the PlayResY from the loaded track, or the configured height.
@@ -358,11 +354,7 @@ impl AssRenderer {
         }
         let track = unsafe { &*self.track };
         let res = track.play_res_y.max(0) as u32;
-        if res == 0 {
-            self.height
-        } else {
-            res
-        }
+        if res == 0 { self.height } else { res }
     }
 
     /// Returns the number of events in the loaded track.

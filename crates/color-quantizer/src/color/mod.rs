@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-pub mod delta_e;
 pub mod space;
 pub mod tonemap;
 pub mod transfer;

@@ -1,4 +1,4 @@
-use color_quantizer::{quantize, DitherMethod, QuantizedFrame, Quantizer, Rgba};
+use color_quantizer::{DitherMethod, QuantizedFrame, Quantizer, Rgba, quantize};
 
 #[test]
 fn test_rgba_new() {
@@ -98,10 +98,12 @@ fn test_quantize_2x2_uniform() {
     ];
     let frame = quantize(&rgba, 2, 2);
     assert_eq!(frame.indices.len(), 4);
-    assert!(frame
-        .palette
-        .iter()
-        .any(|c| c.r == 255 && c.g == 0 && c.b == 0));
+    assert!(
+        frame
+            .palette
+            .iter()
+            .any(|c| c.r == 255 && c.g == 0 && c.b == 0)
+    );
 }
 
 #[test]

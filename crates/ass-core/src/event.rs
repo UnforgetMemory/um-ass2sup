@@ -2,11 +2,11 @@
 
 use std::fmt;
 
+use crate::OverrideTag;
 use crate::effect::Effect;
 use crate::karaoke::KaraokeSegment;
 use crate::span::Span;
 use crate::types::StyleRef;
-use crate::OverrideTag;
 
 /// Event type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

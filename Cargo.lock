@@ -784,7 +784,6 @@ version = "2.7.1"
 dependencies = [
  "color-quantizer",
  "criterion",
- "png",
  "proptest",
  "thiserror",
  "tracing",

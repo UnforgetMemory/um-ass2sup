@@ -4,8 +4,8 @@
 //! Blu-ray Disc Movie XML (BDN) format and to encode quantized subtitle
 //! frames as palette-indexed PNG files suitable for Blu-ray authoring workflows.
 
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::error::BdnError;
 use crate::types::BdnXml;
@@ -36,6 +36,7 @@ use crate::types::BdnXml;
 /// let xml = generate_xml(&doc).expect("failed to generate XML");
 /// assert!(xml.contains("<BDN"));
 /// ```
+#[tracing::instrument(skip(bdn))]
 pub fn generate_xml(bdn: &BdnXml) -> Result<String, BdnError> {
     let mut buf = Vec::new();
     let mut writer = Writer::new(&mut buf);
@@ -201,6 +202,7 @@ pub fn ms_to_timecode(ms: u64, fps: f64) -> String {
 /// let indices = vec![0u8; 1920 * 1080];
 /// let png = generate_png(&palette, &indices, 1920, 1080).unwrap();
 /// ```
+#[tracing::instrument(skip(palette, indices), fields(width, height))]
 pub fn generate_png(
     palette: &[[u8; 4]],
     indices: &[u8],

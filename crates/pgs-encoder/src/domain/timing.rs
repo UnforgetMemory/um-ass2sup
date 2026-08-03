@@ -20,15 +20,22 @@ pub fn is_ntsc_fps(fps: f64) -> bool {
     (fps - 23.976).abs() < 0.01 || (fps - 29.97).abs() < 0.01 || (fps - 59.94).abs() < 0.01
 }
 
-/// Convert milliseconds to 90 kHz PTS ticks.
+/// Map an ms timestamp to the PTS of the nearest video frame,
+/// eliminating the sub-frame drift that naive `ms × 90` conversion
+/// accumulates at NTSC rates (23.976, 29.97, 59.94).
 ///
-/// Uses NTSC-correct formula for 23.976/29.97/59.94 fps,
-/// simple `ms * 90` otherwise.
-pub fn ms_to_90khz(ms: u64, fps: f64) -> u64 {
+/// Single authoritative implementation shared by both rendering backends
+/// (native + libass) to keep PTS values byte-identical across paths.
+pub fn frame_accurate_pts(ms: u64, fps: f64) -> u64 {
     if is_ntsc_fps(fps) {
-        (ms as u128 * 90000 * 1001 / 1000000) as u64
+        // 23.976 = 24000/1001 → 15015/4 ticks per frame; `+ 2 / 4` rounds
+        // instead of truncating the 0.75-tick fractional part.
+        let frame = (ms as f64 * 24.0 / 1001.0).round() as u64;
+        (frame * 15015 + 2) / 4
     } else {
-        ms * 90
+        let ticks_per = 90000.0 / fps;
+        let frame = (ms as f64 * fps / 1000.0).round() as u64;
+        (frame as f64 * ticks_per).round() as u64
     }
 }
 

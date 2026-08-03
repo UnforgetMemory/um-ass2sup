@@ -68,7 +68,12 @@ impl Octree {
                 });
                 self.nodes[node_idx].children[child_idx] = Some(new_idx);
             }
-            node_idx = self.nodes[node_idx].children[child_idx].unwrap();
+            let Some(&next_idx) = self.nodes[node_idx].children[child_idx].as_ref() else {
+                // Newly allocated child was just stored above; unreachable in
+                // practice, but keep the hot path allocation-free.
+                break;
+            };
+            node_idx = next_idx;
         }
     }
 
@@ -116,7 +121,9 @@ pub fn quantize(pixels: &[[u8; 4]], max_colors: usize) -> Vec<[u8; 4]> {
     // Keep top max_colors leaves; merge others upward.
     while leaves.len() > max_colors {
         // Merge the smallest leaf into its parent.
-        let smallest = leaves.pop().unwrap();
+        let Some(smallest) = leaves.pop() else {
+            break;
+        };
         let parent_idx = tree
             .nodes
             .iter()

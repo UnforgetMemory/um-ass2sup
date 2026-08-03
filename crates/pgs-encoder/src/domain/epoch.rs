@@ -55,10 +55,10 @@ impl EpochManager {
     /// (first frame or explicit reset) or when the max-frames-per-epoch limit
     /// has been reached.
     pub fn decide_kind(&self, palette_hash: u64, rle_hash: u64) -> DisplaySetKind {
-        if self.max_frames_per_epoch > 0 && self.frame_count >= self.max_frames_per_epoch {
-            return DisplaySetKind::EpochStart;
-        }
-        if self.prev_object_rle_hash.is_none() {
+        let kind = if (self.max_frames_per_epoch > 0
+            && self.frame_count >= self.max_frames_per_epoch)
+            || self.prev_object_rle_hash.is_none()
+        {
             DisplaySetKind::EpochStart
         } else if rle_hash
             != self
@@ -74,7 +74,9 @@ impl EpochManager {
             DisplaySetKind::PaletteOnly
         } else {
             DisplaySetKind::EpochContinue
-        }
+        };
+        tracing::trace!(?kind, "epoch display-set kind decision");
+        kind
     }
 
     /// Store hashes and advance counters after a frame is processed.
@@ -184,7 +186,7 @@ mod tests {
         let mut mgr = EpochManager::new().with_max_frames(2);
         mgr.update(100, 200); // frame_count → 1
         mgr.update(100, 200); // frame_count → 2, then reset to 0
-                              // After reset, hashes should be None → EpochStart
+        // After reset, hashes should be None → EpochStart
         assert_eq!(mgr.frame_count, 0);
         assert!(mgr.prev_palette_hash.is_none());
         assert!(mgr.prev_object_rle_hash.is_none());

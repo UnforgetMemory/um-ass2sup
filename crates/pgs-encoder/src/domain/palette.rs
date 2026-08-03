@@ -1,5 +1,5 @@
-use color_quantizer::color::ColorSpace;
 use color_quantizer::Rgba;
+use color_quantizer::color::ColorSpace;
 
 /// A single entry in a PGS palette (YCbCrA format).
 #[derive(Debug, Clone, Copy, PartialEq)]

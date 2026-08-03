@@ -1,4 +1,4 @@
-use bdn_xml::{generate_png, generate_xml, ms_to_timecode, BdnEvent, BdnXml, QuantizedFrame};
+use bdn_xml::{BdnEvent, BdnXml, QuantizedFrame, generate_png, generate_xml, ms_to_timecode};
 
 #[test]
 fn test_bdn_xml_new_1080p() {

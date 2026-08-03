@@ -72,13 +72,13 @@ pub fn parse_ocr_json(json_str: &str) -> Result<OcrResult, OcrError> {
 
     if let Some(arr) = value.as_array() {
         for item in arr {
-            if let Some(arr) = item.as_array() {
-                if arr.len() >= 3 {
-                    let text = arr[1].as_str().unwrap_or("").to_string();
-                    let confidence = arr[2].as_f64().unwrap_or(1.0) as f32;
-                    if !text.is_empty() {
-                        texts.push(OcrText { text, confidence });
-                    }
+            if let Some(arr) = item.as_array()
+                && arr.len() >= 3
+            {
+                let text = arr[1].as_str().unwrap_or("").to_string();
+                let confidence = arr[2].as_f64().unwrap_or(1.0) as f32;
+                if !text.is_empty() {
+                    texts.push(OcrText { text, confidence });
                 }
             }
         }

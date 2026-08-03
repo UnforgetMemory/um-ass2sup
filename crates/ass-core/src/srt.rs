@@ -13,8 +13,8 @@
 //! override tag format (`{\b1}`, etc.).
 
 use crate::{
-    error::ParseError, time::Timestamp, Effect, Event, EventType, ScriptMetadata, Style, StyleRef,
-    SubtitleDocument, SubtitleFormat,
+    Effect, Event, EventType, ScriptMetadata, Style, StyleRef, SubtitleDocument, SubtitleFormat,
+    error::ParseError, time::Timestamp,
 };
 
 /// Parse SRT content into a `SubtitleDocument`.

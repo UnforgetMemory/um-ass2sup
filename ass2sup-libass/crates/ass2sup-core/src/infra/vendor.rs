@@ -182,7 +182,7 @@ mod tests {
     fn test_crop_simple() {
         let mut rgba = vec![0u8; 16 * 16 * 4];
         // Set pixel at (5,5) to white, opaque
-        rgba[(5 * 16 + 5) * 4 + 0] = 255;
+        rgba[(5 * 16 + 5) * 4] = 255;
         rgba[(5 * 16 + 5) * 4 + 1] = 255;
         rgba[(5 * 16 + 5) * 4 + 2] = 255;
         rgba[(5 * 16 + 5) * 4 + 3] = 255;

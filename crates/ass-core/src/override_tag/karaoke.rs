@@ -19,13 +19,13 @@ pub fn parse(s: &str) -> Option<OverrideTag> {
         else {
             ("k", rest)
         };
-        if let Some(style) = KaraokeStyle::from_tag(tag) {
-            if let Ok(dur) = num_str.parse::<u64>() {
-                return Some(OverrideTag::Karaoke {
-                    style,
-                    duration: dur * 10,
-                });
-            }
+        if let Some(style) = KaraokeStyle::from_tag(tag)
+            && let Ok(dur) = num_str.parse::<u64>()
+        {
+            return Some(OverrideTag::Karaoke {
+                style,
+                duration: dur * 10,
+            });
         }
     }
     None
