@@ -31,7 +31,7 @@ color-quantizer = { path = "crates/color-quantizer", version = "2.7.1" }
 bdn-xml = { path = "crates/bdn-xml", version = "2.7.1" }
 pgs-encoder = { path = "crates/pgs-encoder", version = "2.7.1" }
 libass-sys = { path = "crates/libass-sys", version = "2.7.1" }
-subtitle-renderer-libass = { path = "crates/subtitle-renderer-libass" }
+subtitle-renderer-libass = { path = "crates/subtitle-renderer-libass", version = "2.7.1" }
 
 thiserror = "2"
 tracing = "0.1"
