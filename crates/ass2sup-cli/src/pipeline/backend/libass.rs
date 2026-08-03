@@ -114,7 +114,7 @@ fn process_libass(
     let mut progress = ProgressReporter::new(
         total_frames,
         "Rendering",
-        args.quiet || config.parallel.files,
+        args.quiet || args.parallel,
     );
 
     let last_event_end = events
