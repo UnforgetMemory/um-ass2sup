@@ -12,6 +12,69 @@ use crate::domain::frame::{AssImageData, RgbaFrame};
 /// bitmap alpha for the effective opacity. Images are composited in list
 /// order using Porter-Duff "over". Handles stride > w for padded bitmaps.
 pub fn compose_frame(images: &[AssImageData], width: u32, height: u32) -> RgbaFrame {
+    compose_frame_at(images, width, height, 0, 0)
+}
+
+/// Composite libass images into a sub-frame covering only the union bounding
+/// box of the images, skipping the full-frame allocation entirely.
+///
+/// Returns `(frame, offset_x, offset_y)` where the returned buffer covers
+/// exactly the images' union bbox (clamped to the frame) and `offset_x/y` is
+/// that bbox's origin in full-frame coordinates. For subtitle workloads the
+/// bbox is a tiny fraction of 1920×1080, so this avoids a per-frame 8.3 MB
+/// allocation plus a full-frame crop scan. The composited pixels are
+/// byte-identical to `compose_frame(...)` followed by cropping to the bbox.
+pub fn compose_frame_bbox(
+    images: &[AssImageData],
+    width: u32,
+    height: u32,
+) -> Option<(RgbaFrame, u32, u32)> {
+    let (bw, bh, ox, oy) = union_bbox(images, width, height)?;
+    let frame = compose_frame_at(images, bw, bh, ox, oy);
+    Some((frame, ox, oy))
+}
+
+/// Compute the union bounding box of all images, clamped to the frame.
+/// Returns `None` when no image has any visible extent inside the frame.
+fn union_bbox(images: &[AssImageData], width: u32, height: u32) -> Option<(u32, u32, u32, u32)> {
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    let mut any = false;
+    for img in images {
+        if img.w == 0 || img.h == 0 || img.bitmap.is_empty() {
+            continue;
+        }
+        let x0 = img.dst_x;
+        let y0 = img.dst_y;
+        let x1 = img.dst_x.saturating_add(img.w).min(width);
+        let y1 = img.dst_y.saturating_add(img.h).min(height);
+        if x1 <= x0 || y1 <= y0 {
+            continue;
+        }
+        min_x = min_x.min(x0);
+        min_y = min_y.min(y0);
+        max_x = max_x.max(x1);
+        max_y = max_y.max(y1);
+        any = true;
+    }
+    if !any {
+        return None;
+    }
+    Some((max_x - min_x, max_y - min_y, min_x, min_y))
+}
+
+/// Shared composition core. `ox`/`oy` is the origin of the target buffer in
+/// full-frame coordinates (0,0 for a full frame; the union-bbox origin when
+/// compositing a sub-frame). Pixel output is identical in both cases.
+fn compose_frame_at(
+    images: &[AssImageData],
+    width: u32,
+    height: u32,
+    ox: u32,
+    oy: u32,
+) -> RgbaFrame {
     let stride_bytes = width as usize * 4;
     let mut frame = vec![0u8; stride_bytes * height as usize];
 
@@ -23,8 +86,9 @@ pub fn compose_frame(images: &[AssImageData], width: u32, height: u32) -> RgbaFr
         let iw = img.w as usize;
         let ih = img.h as usize;
         let istride = img.stride as usize;
-        let dx = img.dst_x as usize;
-        let dy = img.dst_y as usize;
+        // Target position relative to this buffer's origin.
+        let dx = img.dst_x.saturating_sub(ox) as usize;
+        let dy = img.dst_y.saturating_sub(oy) as usize;
 
         // libass stores color as 0xRRGGBBAA (MSB = R, LSB = alpha in ASS convention).
         // ASS alpha: 0=opaque, 255=transparent. RGBA alpha: 0=transparent, 255=opaque.
@@ -335,5 +399,74 @@ mod tests {
         assert_eq!(out.data[13], 0);
         assert_eq!(out.data[14], 0);
         assert_eq!(out.data[15], 0);
+    }
+
+    #[test]
+    fn bbox_compose_matches_full_frame_cropped() {
+        // The bbox-compose path must produce byte-identical pixels to the
+        // full-frame compose + crop: two images at offset positions, one
+        // with a wider stride (padding).
+        let imgs = vec![
+            AssImageData {
+                w: 3,
+                h: 2,
+                stride: 4,
+                bitmap: vec![255, 128, 0, 255, 255, 255, 64, 0], // rows of 3 + 1 pad
+                color: 0x00FF0000, // opaque green (A=0 → color_alpha 255)
+                dst_x: 100,
+                dst_y: 50,
+                image_type: ImageType::Character,
+            },
+            AssImageData {
+                w: 2,
+                h: 1,
+                stride: 2,
+                bitmap: vec![200, 255],
+                color: 0x000000FF, // opaque blue
+                dst_x: 101,
+                dst_y: 51,
+                image_type: ImageType::Outline,
+            },
+        ];
+
+        let full = compose_frame(&imgs, 1920, 1080);
+        let (sub, ox, oy) = compose_frame_bbox(&imgs, 1920, 1080).expect("bbox");
+        assert_eq!((ox, oy), (100, 50));
+        assert_eq!((sub.width, sub.height), (3, 2));
+
+        // Compare every pixel of the sub-frame against the same region of the
+        // full frame.
+        for y in 0..sub.height {
+            for x in 0..sub.width {
+                let fx = (ox + x) as usize;
+                let fy = (oy + y) as usize;
+                let full_idx = (fy * 1920 + fx) * 4;
+                let sub_idx = ((y * sub.width + x) as usize) * 4;
+                assert_eq!(
+                    &full.data[full_idx..full_idx + 4],
+                    &sub.data[sub_idx..sub_idx + 4],
+                    "pixel mismatch at ({x},{y})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bbox_compose_none_when_all_empty() {
+        let img = AssImageData {
+            w: 4,
+            h: 4,
+            stride: 4,
+            bitmap: vec![0; 16],
+            color: 0x00FF0000,
+            dst_x: 10,
+            dst_y: 10,
+            image_type: ImageType::Character,
+        };
+        // All-zero bitmaps still have extent — union bbox is computed from
+        // geometry, so this must return Some; only no-extent images return
+        // None.
+        assert!(compose_frame_bbox(&[img], 1920, 1080).is_some());
+        assert!(compose_frame_bbox(&[], 1920, 1080).is_none());
     }
 }

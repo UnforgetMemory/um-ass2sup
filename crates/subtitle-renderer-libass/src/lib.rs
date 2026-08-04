@@ -6,7 +6,7 @@ pub mod infra;
 
 // ── Re-exports for external consumers (ass2sup-cli) ──────────────
 
-pub use domain::composer::compose_frame;
+pub use domain::composer::{compose_frame, compose_frame_bbox};
 pub use domain::error::AssError;
 pub use domain::frame::{AssEventInfo, AssImageData, CroppedFrame, ImageType, RgbaFrame};
 pub use domain::pipeline::ConversionConfig;
