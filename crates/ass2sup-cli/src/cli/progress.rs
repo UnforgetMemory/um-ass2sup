@@ -6,6 +6,7 @@
 
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::cell::RefCell;
+use std::io::IsTerminal;
 use std::time::Duration;
 
 thread_local! {
@@ -64,6 +65,21 @@ fn eta_from_rate(rate: f64, remaining: u64) -> f64 {
     }
 }
 
+/// Choose the log level for the throttled plain-text progress line.
+///
+/// On a real terminal the indicatif bar is the primary display and the text
+/// line only needs to surface with `-v` (DEBUG). When stderr is not a terminal
+/// (pipe, redirect, Windows PowerShell capture) the bar is hidden entirely, so
+/// the text line must be emitted at INFO — which the default stdout layer
+/// forwards — to guarantee visible progress without any flags.
+fn log_level_for(stderr_is_tty: bool) -> tracing::Level {
+    if stderr_is_tty {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::INFO
+    }
+}
+
 /// A progress reporter that drives both an optional indicatif bar (when the
 /// terminal supports it) and a throttled plain-text log.
 ///
@@ -82,6 +98,7 @@ pub struct ProgressReporter {
     last_log: std::time::Instant,
     last_log_frames: u64,
     quiet: bool,
+    stderr_is_tty: bool,
     rate: SmoothRate,
     message: String,
 }
@@ -94,6 +111,12 @@ impl ProgressReporter {
 
     /// Create a reporter for `total` units of work.
     pub fn new(total: u64, message: &str, quiet: bool) -> Self {
+        Self::new_with_tty(total, message, quiet, std::io::stderr().is_terminal())
+    }
+
+    /// Create a reporter with an explicit stderr-TTY flag (used by tests to
+    /// exercise both the bar-first and the text-only progress paths).
+    pub fn new_with_tty(total: u64, message: &str, quiet: bool, stderr_is_tty: bool) -> Self {
         let bar = if quiet {
             indicatif::ProgressBar::hidden()
         } else {
@@ -107,9 +130,16 @@ impl ProgressReporter {
             last_log: std::time::Instant::now(),
             last_log_frames: 0,
             quiet,
+            stderr_is_tty,
             rate: SmoothRate::new(),
             message: message.to_string(),
         }
+    }
+
+    /// Level at which the throttled text line is emitted: INFO when the bar
+    /// is invisible (non-TTY stderr), DEBUG when the bar is primary (TTY).
+    pub fn log_level(&self) -> tracing::Level {
+        log_level_for(self.stderr_is_tty)
     }
 
     /// Advance by one unit, emitting a throttled plain-text log when due.
@@ -139,15 +169,30 @@ impl ProgressReporter {
             }
             self.bar
                 .set_message(format!("{} · {rate:.0} fps · ETA {eta:.0}s", self.message));
-            tracing::debug!(
-                "Rendered {}/{} ({:.1}%) elapsed {:.0}s, ETA ~{:.0}s, {:.0} fps",
-                self.processed,
-                self.total,
-                pct,
-                elapsed,
-                eta,
-                rate,
-            );
+            // Static-level dispatch: tracing macro callsites require a constant
+            // level, so choose `info!` (visible on the default stdout layer) or
+            // `debug!` (bar-first TTY mode, only with -v) at compile time.
+            if self.stderr_is_tty {
+                tracing::debug!(
+                    "Rendered {}/{} ({:.1}%) elapsed {:.0}s, ETA ~{:.0}s, {:.0} fps",
+                    self.processed,
+                    self.total,
+                    pct,
+                    elapsed,
+                    eta,
+                    rate,
+                );
+            } else {
+                tracing::info!(
+                    "Rendered {}/{} ({:.1}%) elapsed {:.0}s, ETA ~{:.0}s, {:.0} fps",
+                    self.processed,
+                    self.total,
+                    pct,
+                    elapsed,
+                    eta,
+                    rate,
+                );
+            }
             self.last_log = std::time::Instant::now();
             self.last_log_frames = self.processed;
         }
@@ -386,5 +431,54 @@ mod tests {
             s.summary_line(),
             "Render complete: 0 unique frames in 0.00s"
         );
+    }
+
+    #[test]
+    fn log_level_for_non_tty_returns_info() {
+        // The bug being fixed: when stderr is not a terminal the indicatif
+        // bar is hidden, so the throttled text line must be emitted at INFO
+        // (which the default stdout layer forwards) to be visible without -v.
+        assert_eq!(log_level_for(false), tracing::Level::INFO);
+    }
+
+    #[test]
+    fn log_level_for_tty_returns_debug() {
+        // On a real terminal the bar is the primary display; the text line
+        // stays DEBUG so it only surfaces with -v and never duplicates the
+        // bar's own output.
+        assert_eq!(log_level_for(true), tracing::Level::DEBUG);
+    }
+
+    #[test]
+    fn reporter_uses_info_level_when_stderr_is_not_tty() {
+        // Deterministic wiring check: the reporter must route its throttled
+        // text line through log_level_for() using its stored tty flag.
+        let mut r = ProgressReporter::new_with_tty(1000, "Rendering", false, false);
+        assert_eq!(r.log_level(), tracing::Level::INFO);
+        for _ in 0..500 {
+            r.inc();
+        }
+        assert_eq!(r.processed(), 500);
+    }
+
+    #[test]
+    fn reporter_keeps_debug_level_when_stderr_is_tty() {
+        let mut r = ProgressReporter::new_with_tty(1000, "Rendering", false, true);
+        assert_eq!(r.log_level(), tracing::Level::DEBUG);
+        for _ in 0..500 {
+            r.inc();
+        }
+        assert_eq!(r.processed(), 500);
+    }
+
+    #[test]
+    fn reporter_quiet_non_tty_still_logs_nothing() {
+        // --quiet must suppress text progress even when stderr is not a
+        // terminal (bar hidden + text hidden: fully silent).
+        let mut r = ProgressReporter::new_with_tty(1000, "Rendering", true, false);
+        for _ in 0..1000 {
+            r.inc();
+        }
+        assert_eq!(r.processed(), 1000);
     }
 }
