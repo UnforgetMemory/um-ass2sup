@@ -11,11 +11,11 @@
 //! one `Arc` per resolved font. Glyph bitmaps are stored as `Arc` so the hot
 //! path pays one refcount bump per hit, not a copy.
 //!
-//! Eviction is a simple LRU (recency list + hash map) capped by total bytes,
-//! not entry count — CJK glyph bitmaps are much larger than Latin ones, so a
-//! byte budget bounds memory correctly.
+//! Eviction is a recency-tracked cache (epoch counter + hash map) capped by
+//! total bytes, not entry count — CJK glyph bitmaps are much larger than Latin
+//! ones, so a byte budget bounds memory correctly.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::types::RasterizedGlyph;
@@ -32,12 +32,21 @@ pub struct GlyphKey {
     pub size: u32,
 }
 
-/// LRU glyph bitmap cache with a byte-budgeted memory cap.
+/// Recency-tracked glyph bitmap cache with a byte-budgeted memory cap.
+///
+/// `get`/`insert` are O(1): recency is a monotonic epoch counter stored next
+/// to each entry, so a hit only bumps a `u64`. Eviction (only when over the
+/// byte budget) scans the map once for the oldest epoch — rare and amortised.
 pub struct GlyphCache {
-    map: HashMap<GlyphKey, Arc<RasterizedGlyph>>,
-    order: VecDeque<GlyphKey>,
+    map: HashMap<GlyphKey, (Arc<RasterizedGlyph>, u64)>,
     bytes: usize,
     cap: usize,
+    /// Monotonic recency counter; bumped on every access.
+    ///
+    /// `wrapping_add` is used deliberately: wrapping back to 0 would require
+    /// ~1.8e19 accesses (584k years at 1M accesses/sec), which is unreachable
+    /// in practice, so the monotonicity assumption in `evict` holds.
+    seq: u64,
 }
 
 impl GlyphCache {
@@ -45,23 +54,18 @@ impl GlyphCache {
     pub fn new(cap: usize) -> Self {
         Self {
             map: HashMap::new(),
-            order: VecDeque::new(),
             bytes: 0,
             cap,
+            seq: 0,
         }
     }
 
     /// Look up a glyph; on hit, returns a shared `Arc` and refreshes recency.
     pub fn get(&mut self, key: &GlyphKey) -> Option<Arc<RasterizedGlyph>> {
-        let hit = self.map.get(key)?;
-        // Refresh recency: move the key to the back of the recency list.
-        if self.order.back() != Some(key)
-            && let Some(pos) = self.order.iter().position(|k| k == key)
-        {
-            self.order.remove(pos);
-            self.order.push_back(*key);
-        }
-        Some(Arc::clone(hit))
+        let entry = self.map.get_mut(key)?;
+        entry.1 = self.seq;
+        self.seq = self.seq.wrapping_add(1);
+        Some(Arc::clone(&entry.0))
     }
 
     /// Insert a glyph, evicting least-recently-used entries while over budget.
@@ -69,17 +73,12 @@ impl GlyphCache {
     pub fn insert(&mut self, key: GlyphKey, glyph: RasterizedGlyph) -> Arc<RasterizedGlyph> {
         let bytes = glyph_size(&glyph);
         // Replace an existing entry for the same key (budget stays stable).
-        if let Some(prev) = self.map.get(&key) {
+        if let Some((prev, _)) = self.map.get(&key) {
             self.bytes = self.bytes.saturating_sub(glyph_size(prev));
         }
         let arc = Arc::new(glyph);
-        self.map.insert(key, Arc::clone(&arc));
-        if self.order.back() != Some(&key) {
-            if let Some(pos) = self.order.iter().position(|k| k == &key) {
-                self.order.remove(pos);
-            }
-            self.order.push_back(key);
-        }
+        self.map.insert(key, (Arc::clone(&arc), self.seq));
+        self.seq = self.seq.wrapping_add(1);
         self.bytes += bytes;
         self.evict();
         arc
@@ -104,12 +103,15 @@ impl GlyphCache {
         // Never evict the last entry, even if a single glyph alone exceeds the
         // budget (with a 64 MiB cap this only matters in tests / pathological
         // fonts); eviction frees room for the *next* insert.
-        while self.bytes > self.cap && self.order.len() > 1 {
+        while self.bytes > self.cap && self.map.len() > 1 {
             let oldest = self
-                .order
-                .pop_front()
-                .expect("order non-empty while evicting");
-            if let Some(evicted) = self.map.remove(&oldest) {
+                .map
+                .iter()
+                .min_by_key(|(_, (_, seq))| *seq)
+                .map(|(k, _)| *k);
+            if let Some(k) = oldest
+                && let Some((evicted, _)) = self.map.remove(&k)
+            {
                 self.bytes = self.bytes.saturating_sub(glyph_size(&evicted));
             }
         }
