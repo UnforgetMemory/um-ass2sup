@@ -3,7 +3,7 @@
 //! Wraps the [`subtitle_renderer_libass`] crate to render ASS content
 //! through libass, then crops, quantises, and returns [`QuantizedFrame`]s.
 
-use std::collections::HashMap;
+use std::collections::{BinaryHeap, HashMap};
 
 use ass_core::SubtitleDocument;
 use color_quantizer::QuantizedFrame;
@@ -13,6 +13,52 @@ use crate::cli::args::Args;
 use crate::cli::progress::ProgressReporter;
 use crate::config::Config;
 use crate::error::CliError;
+
+/// Sweep-line active-event tracker.
+///
+/// Replaces the previous O(n×m) `events.iter().any(...)` scan per timestamp
+/// with a single sort plus a min-heap of active end times. Semantics match the
+/// original half-open interval `start <= ts < start + duration`.
+struct ActiveEventTracker {
+    /// `(start, end)` pairs, sorted by start.
+    starts: Vec<(u64, u64)>,
+    /// Min-heap of active end times, stored negated (`u64::MAX - end`).
+    active_ends: BinaryHeap<u64>,
+    /// Next unprocessed index into `starts`.
+    next: usize,
+}
+
+impl ActiveEventTracker {
+    fn new(events: impl IntoIterator<Item = (u64, u64)>) -> Self {
+        let mut starts: Vec<(u64, u64)> = events.into_iter().collect();
+        starts.sort_unstable_by_key(|(start, _)| *start);
+        Self {
+            starts,
+            active_ends: BinaryHeap::new(),
+            next: 0,
+        }
+    }
+
+    /// Advance the sweep line to `ts` and report whether any event is active
+    /// in the half-open interval `[ts, next_ts)` — i.e. `start <= ts < end`.
+    fn advance(&mut self, ts: u64) -> bool {
+        // Add events that start at or before this timestamp.
+        while self.next < self.starts.len() && self.starts[self.next].0 <= ts {
+            // Min-heap via negated end time.
+            self.active_ends.push(u64::MAX - self.starts[self.next].1);
+            self.next += 1;
+        }
+        // Drop events that have already ended (end <= ts).
+        while let Some(&neg_end) = self.active_ends.peek() {
+            if u64::MAX - neg_end <= ts {
+                self.active_ends.pop();
+            } else {
+                break;
+            }
+        }
+        !self.active_ends.is_empty()
+    }
+}
 
 /// Render and quantize using the libass C library.
 pub fn render_and_quantize(
@@ -111,11 +157,8 @@ fn process_libass(
         t_start.elapsed().as_secs_f64(),
     );
 
-    let mut progress = ProgressReporter::new(
-        total_frames,
-        "Rendering",
-        args.quiet || args.parallel,
-    );
+    let mut progress =
+        ProgressReporter::new(total_frames, "Rendering", args.quiet || args.parallel);
 
     let last_event_end = events
         .iter()
@@ -123,13 +166,22 @@ fn process_libass(
         .max()
         .unwrap_or(0) as u64;
 
-    for window in timestamps.windows(2) {
+    // Sweep-line active-event tracker: sort events by start once, then walk
+    // the timeline maintaining a min-heap of active end times. Replaces the
+    // previous O(n×m) `events.iter().any(...)` scan per timestamp (n events ×
+    // m timestamps ≈ 15.5M comparisons for a 2h movie).
+    let mut tracker = ActiveEventTracker::new(
+        events
+            .iter()
+            .map(|e| (e.start_ms as u64, (e.start_ms + e.duration_ms) as u64)),
+    );
+    let timestamps_iter = timestamps.windows(2);
+
+    for window in timestamps_iter {
         let ts = window[0];
         let next_ts = window[1];
 
-        let has_active = events
-            .iter()
-            .any(|e| e.start_ms as u64 <= ts && ts < (e.start_ms + e.duration_ms) as u64);
+        let has_active = tracker.advance(ts);
         if !has_active {
             progress.inc();
             continue;
@@ -143,19 +195,32 @@ fn process_libass(
             }
         };
 
-        let rgba = subtitle_renderer_libass::compose_frame(&images, config.width, config.height);
-
-        let cropped = match subtitle_renderer_libass::crop_to_tight_bbox(
-            &rgba.data,
+        let (rgba, bbox_x, bbox_y) = match subtitle_renderer_libass::compose_frame_bbox(
+            &images,
             config.width,
             config.height,
         ) {
-            Some(c) => c,
+            Some(v) => v,
             None => {
                 progress.inc();
                 continue;
             }
         };
+
+        // Crop to the tight non-transparent bbox. The compose step already
+        // limited the buffer to the images' union bbox, so this scan is over a
+        // small region (not the full 1920×1080 frame); the returned offsets
+        // are relative to the bbox buffer and must be shifted back to
+        // full-frame coordinates.
+        let cropped =
+            match subtitle_renderer_libass::crop_to_tight_bbox(&rgba.data, rgba.width, rgba.height)
+            {
+                Some((data, x, y, w, h)) => (data, x + bbox_x, y + bbox_y, w, h),
+                None => {
+                    progress.inc();
+                    continue;
+                }
+            };
 
         let cropped_frame = subtitle_renderer_libass::CroppedFrame {
             data: cropped.0,
@@ -203,10 +268,10 @@ fn process_libass(
     }
 
     // Fix up last frame duration
-    if let Some(last) = output_frames.last_mut() {
-        if last.pts_ms + last.duration_ms < last_event_end {
-            last.duration_ms = last_event_end.saturating_sub(last.pts_ms);
-        }
+    if let Some(last) = output_frames.last_mut()
+        && last.pts_ms + last.duration_ms < last_event_end
+    {
+        last.duration_ms = last_event_end.saturating_sub(last.pts_ms);
     }
 
     let elapsed = t_start.elapsed();
@@ -223,4 +288,80 @@ fn process_libass(
     );
     debug!(rendered = output_frames.len(), "libass rendering complete");
     Ok(output_frames)
+}
+
+#[cfg(test)]
+mod tracker_tests {
+    use super::ActiveEventTracker;
+
+    /// Reference O(n×m) implementation of the original loop condition:
+    /// event is active at `ts` iff `start <= ts && ts < start + duration`.
+    fn reference_active(events: &[(u64, u64)], ts: u64) -> bool {
+        events.iter().any(|(start, end)| *start <= ts && ts < *end)
+    }
+
+    #[test]
+    fn matches_reference_scan_on_battleship_timeline() {
+        // Property test across a realistic spread of timestamps: the sweep
+        // tracker must agree with the original linear scan at every point.
+        let events = [
+            (0, 1000),
+            (500, 600),
+            (1000, 2000),
+            (1000, 1000), // zero-duration: never active
+            (2500, 3000),
+            (9000, 10000),
+        ];
+        let mut tracker = ActiveEventTracker::new(events.iter().copied());
+        for ts in (0..=10000).step_by(37) {
+            assert_eq!(
+                tracker.advance(ts),
+                reference_active(&events, ts),
+                "mismatch at ts={ts}"
+            );
+        }
+    }
+
+    #[test]
+    fn event_starting_exactly_at_ts_is_active() {
+        let events = [(100, 200)];
+        let mut tracker = ActiveEventTracker::new(events.iter().copied());
+        assert!(tracker.advance(100)); // start <= ts
+        assert!(tracker.advance(199)); // still inside [start, end)
+        assert!(!tracker.advance(200)); // end <= ts → not active
+    }
+
+    #[test]
+    fn zero_duration_event_never_active() {
+        let events = [(100, 100)];
+        let mut tracker = ActiveEventTracker::new(events.iter().copied());
+        assert!(!tracker.advance(100));
+    }
+
+    #[test]
+    fn overlapping_events_share_activity() {
+        let events = [(0, 100), (50, 150), (120, 130)];
+        let mut tracker = ActiveEventTracker::new(events.iter().copied());
+        assert!(tracker.advance(0));
+        assert!(tracker.advance(60)); // inside first two
+        assert!(tracker.advance(125)); // only the middle one
+        assert!(!tracker.advance(200)); // all ended
+    }
+
+    #[test]
+    fn no_events_never_active() {
+        let mut tracker = ActiveEventTracker::new(std::iter::empty());
+        assert!(!tracker.advance(0));
+        assert!(!tracker.advance(1_000_000));
+    }
+
+    #[test]
+    fn unsorted_input_is_handled() {
+        let events = [(500, 600), (0, 100), (200, 300)];
+        let mut tracker = ActiveEventTracker::new(events.iter().copied());
+        assert!(tracker.advance(0));
+        assert!(tracker.advance(250));
+        assert!(tracker.advance(550));
+        assert!(!tracker.advance(1000));
+    }
 }
