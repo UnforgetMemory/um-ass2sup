@@ -131,9 +131,8 @@ fn collect_recursive_glob(pattern: &str) -> Vec<PathBuf> {
 /// Run the CLI conversion with parsed arguments.
 pub fn run(args: Args) -> Result<(), CliError> {
     telemetry::init(
-        args.verbose,
+        &args.log_level,
         args.quiet,
-        args.debug,
         &args.color,
         args.log_file.as_deref(),
     );
@@ -176,46 +175,41 @@ pub fn run(args: Args) -> Result<(), CliError> {
         return pipeline::check::run_check(&inputs, &args);
     }
 
-    // --to-srt mode
-    if args.to_srt {
-        for input in &inputs {
-            let output = args.output.clone().unwrap_or_else(|| {
-                let mut o = input.clone();
-                o.set_extension("srt");
-                o
-            });
-            pipeline::srt::convert_to_srt(input, &output, &args, &config)?;
+    // Output-format dispatch (sup is the default; srt/bdn are alternatives).
+    match args.format.as_str() {
+        "srt" => {
+            for input in &inputs {
+                let output = args.output.clone().unwrap_or_else(|| {
+                    let mut o = input.clone();
+                    o.set_extension("srt");
+                    o
+                });
+                pipeline::srt::convert_to_srt(input, &output, &args, &config)?;
+            }
+            return Ok(());
         }
-        return Ok(());
-    }
-
-    // --to-bdn mode
-    if args.to_bdn {
-        for input in &inputs {
-            let stem = input
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("subtitle");
-            let output_dir = if let Some(ref dir) = args.output_dir {
-                dir.join(stem)
-            } else {
-                PathBuf::from(stem)
-            };
-            pipeline::convert::convert_to_bdn(input, &output_dir, &args, &config)?;
+        "bdn" => {
+            for input in &inputs {
+                let stem = input
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("subtitle");
+                let output_dir = if let Some(ref dir) = args.output_dir {
+                    dir.join(stem)
+                } else {
+                    PathBuf::from(stem)
+                };
+                pipeline::convert::convert_to_bdn(input, &output_dir, &args, &config)?;
+            }
+            return Ok(());
         }
-        return Ok(());
+        _ => {}
     }
 
     info!(
         "ass2sup v{} — ASS/SRT to SUP/PGS converter",
         env!("CARGO_PKG_VERSION")
     );
-
-    // Warn about deprecated --parallel-frames flag
-    #[allow(deprecated)]
-    if args.parallel_frames {
-        warn!("--parallel-frames is deprecated and ignored in frame-driven mode");
-    }
 
     // Single file mode
     if inputs.len() == 1 {

@@ -39,18 +39,11 @@ Options:
       --validate
           Run validation before conversion
 
-      --overlap-warn
-          Enable overlap warning detection
-
-      --overlap-mode <OVERLAP_MODE>
-          Overlap detection mode (strict/lenient)
+      --overlap <OVERLAP>
+          Overlap detection mode (off/strict/lenient); enables detection
           
-          [default: lenient]
-
-      --quantizer <QUANTIZER>
-          Quantizer algorithm (median-cut)
-          
-          [default: median-cut]
+          [default: off]
+          [possible values: off, strict, lenient]
 
       --max-colors <MAX_COLORS>
           Maximum colors in palette (1–255)
@@ -61,6 +54,7 @@ Options:
           Dithering method (none/floyd-steinberg/ordered)
           
           [default: floyd-steinberg]
+          [possible values: none, floyd-steinberg, ordered]
 
       --font <FONT>
           Default font name for SRT input
@@ -68,37 +62,35 @@ Options:
           [default: Arial]
 
       --font-size <FONT_SIZE>
-          Default font size for SRT input
+          Default font size for SRT input (native backend only)
           
           [default: 48.0]
 
       --font-map <STYLE:FALLBACKS>
-          Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
+          Per-style font fallback map (native backend only). Each entry is "StyleName:fallback1,fallback2". Can be repeated multiple times
 
       --font-dir <DIR>
           Additional directories to scan for font files (TTF/OTF/WOFF2)
 
       --no-check-fonts
-          Skip font availability check
+          Skip font availability check (native backend only)
 
   -p, --parallel
           Process files in parallel (batch mode)
 
-      --parallel-frames
-          Render frames in parallel using rayon (single-file mode)
-          
-          ⚠️ DEPRECATED — no-op in frame-driven mode.
-
       --color-space <COLOR_SPACE>
-          Output colour space (srgb/bt709/bt2020)
+          Output colour space (srgb/bt709/bt2020, native backend only)
           
           [default: srgb]
+          [possible values: srgb, bt709, bt2020]
 
       --tonemap <TONEMAP>
-          HDR-to-SDR tone mapping operator (hable/reinhard/aces)
+          HDR-to-SDR tone mapping operator (hable/reinhard/aces, native backend only)
+          
+          [possible values: hable, reinhard, aces]
 
       --compat-vsfilter
-          Enable VSFilter compatibility mode (experimental).
+          Enable VSFilter compatibility mode (native backend only, experimental).
           
           Compensates for font advance-width differences between swash and GDI/VSFilter by scaling font_size by ~0.764×, matching easyavs2bdnxml output dimensions more closely. This is an approximation — exact results depend on the specific font.
 
@@ -107,26 +99,23 @@ Options:
           
           [default: native]
 
-      --to-srt
-          Convert to SRT format instead of SUP/PGS
-
-      --to-bdn
-          Convert to BDN XML + PNG format (Blu-ray authoring)
+      --format <FORMAT>
+          Output format (sup/srt/bdn)
+          
+          [default: sup]
+          [possible values: sup, srt, bdn]
 
       --check
           Parse and validate only, don't convert (exit 0 if OK, 1 if errors)
 
-      --dry-run
-          Dry run: parse and validate only, don't write output
-
       --force
           Force conversion even if validation fails
 
-  -v, --verbose
-          Enable verbose logging
-
-      --debug
-          Enable trace-level debug output for pipeline diagnosis
+      --log-level <LOG_LEVEL>
+          Log level (error/warn/info/debug/trace)
+          
+          [default: info]
+          [possible values: error, warn, info, debug, trace]
 
       --quiet
           Suppress progress bar

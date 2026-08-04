@@ -3,24 +3,22 @@ use ass2sup_cli::telemetry;
 #[test]
 fn test_init_idempotent() {
     // Should not panic on repeated calls
-    telemetry::init(false, false, false, "auto", None);
-    telemetry::init(true, false, true, "never", None);
+    telemetry::init("info", false, "auto", None);
+    telemetry::init("trace", false, "never", None);
 }
 
 #[test]
 fn test_init_accepts_all_color_modes() {
     for color in ["auto", "always", "never"] {
-        telemetry::init(false, false, false, color, None);
+        telemetry::init("info", false, color, None);
     }
 }
 
 #[test]
 fn test_init_accepts_all_flag_combinations() {
-    for debug in [false, true] {
-        for verbose in [false, true] {
-            for quiet in [false, true] {
-                telemetry::init(verbose, quiet, debug, "auto", None);
-            }
+    for level in ["error", "warn", "info", "debug", "trace"] {
+        for quiet in [false, true] {
+            telemetry::init(level, quiet, "auto", None);
         }
     }
 }
@@ -62,11 +60,5 @@ fn test_init_with_log_file_writes_file() {
 #[test]
 fn test_init_invalid_log_file_no_panic() {
     // A path in a nonexistent directory should not panic.
-    telemetry::init(
-        false,
-        false,
-        false,
-        "auto",
-        Some("/nonexistent-dir-xyz/log.log"),
-    );
+    telemetry::init("info", false, "auto", Some("/nonexistent-dir-xyz/log.log"));
 }

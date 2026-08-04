@@ -31,7 +31,8 @@ fn test_bdn_conversion() {
     Command::cargo_bin("ass2sup")
         .unwrap()
         .arg(simple_fixture())
-        .arg("--to-bdn")
+        .arg("--format")
+        .arg("bdn")
         .arg("-d")
         .arg(&out_dir)
         .arg("--no-check-fonts")
@@ -71,7 +72,8 @@ fn test_bdn_missing_file() {
     Command::cargo_bin("ass2sup")
         .unwrap()
         .arg("/nonexistent/path/file.ass")
-        .arg("--to-bdn")
+        .arg("--format")
+        .arg("bdn")
         .arg("-d")
         .arg(tmp.path())
         .assert()
@@ -89,7 +91,8 @@ fn test_bdn_custom_resolution() {
     Command::cargo_bin("ass2sup")
         .unwrap()
         .arg(simple_fixture())
-        .arg("--to-bdn")
+        .arg("--format")
+        .arg("bdn")
         .arg("-r")
         .arg("1280x720")
         .arg("-d")
@@ -109,17 +112,17 @@ fn test_bdn_custom_resolution() {
 }
 
 // ──────────────────────────────────────────────
-// 4. BDN with --to-srt conflict → exit 1
+// 4. BDN format with invalid value → exit 1
 // ──────────────────────────────────────────────
 #[test]
-fn test_bdn_conflicts_with_to_srt() {
+fn test_bdn_invalid_format_value() {
     let tmp = TempDir::new().unwrap();
 
     Command::cargo_bin("ass2sup")
         .unwrap()
         .arg(simple_fixture())
-        .arg("--to-bdn")
-        .arg("--to-srt")
+        .arg("--format")
+        .arg("bogus")
         .arg("-d")
         .arg(tmp.path())
         .assert()

@@ -95,16 +95,15 @@ impl ConversionPipeline {
 
     /// Validate a subtitle document if the CLI flags are set.
     pub fn validate(doc: &SubtitleDocument, args: &Args) -> Result<(), CliError> {
-        if !args.validate && !args.overlap_warn {
+        if !args.validate && args.overlap == "off" {
             return Ok(());
         }
 
-        let overlap_config = match args.overlap_mode.as_str() {
-            "strict" => subtitle_validator::OverlapConfig::strict(),
-            _ => subtitle_validator::OverlapConfig::lenient(),
-        };
-
-        let validator = if args.overlap_warn {
+        let validator = if args.overlap != "off" {
+            let overlap_config = match args.overlap.as_str() {
+                "strict" => subtitle_validator::OverlapConfig::strict(),
+                _ => subtitle_validator::OverlapConfig::lenient(),
+            };
             subtitle_validator::Validator::new().with_overlap_config(overlap_config)
         } else {
             subtitle_validator::Validator::new()
@@ -121,7 +120,7 @@ impl ConversionPipeline {
             warn!("  [{}] {}", finding.rule_id, finding.message);
         }
 
-        if args.overlap_warn && !report.overlaps.is_empty() {
+        if args.overlap != "off" && !report.overlaps.is_empty() {
             warn!("Detected {} overlap(s):", report.overlaps.len());
             for overlap in &report.overlaps {
                 warn!(
@@ -291,8 +290,6 @@ impl ConversionPipeline {
             pipeline = pipeline.with_tonemap(*op);
         }
 
-        let use_palette_reuse = args.quantizer == "median-cut";
-
         // ── Build render timestamps ─────────────────────────────────────
         // Only timestamps where rendering is actually needed:
         // • Event start/end (content appears / disappears)
@@ -378,12 +375,10 @@ impl ConversionPipeline {
                 };
 
             // ── Quantise / palette-reuse ────────────────────────────────
+            // Median-cut is the only quantiser; temporal palette reuse is
+            // always enabled to reduce PDS overhead between adjacent frames.
             let prev_frame_for_reuse = quantized.last();
-            let mut q = if use_palette_reuse {
-                pipeline.quantize_with_prev(&bmp, w, h, prev_frame_for_reuse)
-            } else {
-                pipeline.quantize(&bmp, w, h)
-            };
+            let mut q = pipeline.quantize_with_prev(&bmp, w, h, prev_frame_for_reuse);
             q.x = x as u16;
             q.y = y as u16;
             q.pts_ms = ts;
@@ -595,14 +590,6 @@ pub fn convert_file(
         doc.metadata.play_res_x,
         doc.metadata.play_res_y,
     );
-
-    if config.output.dry_run {
-        info!("Dry run complete -- skipping render/encode");
-        return Ok(ConversionStats {
-            events_processed: doc.events.len() as u64,
-            ..Default::default()
-        });
-    }
 
     let frames = backend::render_and_quantize(&content, &doc, config, args)?;
 

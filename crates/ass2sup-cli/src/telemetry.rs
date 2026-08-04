@@ -3,13 +3,15 @@
 //! **stdout** — user-facing output (simplified, no timestamps).
 //! **stderr** — diagnostic tracing (timestamps, targets, optional file/line).
 //!
-//! Level mapping:
+//! Level mapping (`--log-level`):
 //!
-//! | CLI flags     | stdout filter | stderr filter |
+//! | `--log-level` | stdout filter | stderr filter |
 //! |---------------|---------------|---------------|
-//! | (default)     | `INFO`        | `WARN`        |
-//! | `--verbose`   | `INFO`        | `DEBUG`       |
-//! | `--debug`     | `INFO`        | `TRACE` (+ file/line) |
+//! | `error`       | `ERROR`       | `ERROR`       |
+//! | `warn`        | `INFO`        | `WARN`        |
+//! | `info` (default)| `INFO`      | `WARN`        |
+//! | `debug`       | `INFO`        | `DEBUG`       |
+//! | `trace`       | `INFO`        | `TRACE` (+ file/line) |
 //! | `--quiet`     | `ERROR`       | `ERROR`       |
 
 use tracing_subscriber::{
@@ -23,28 +25,31 @@ use tracing_subscriber::{
 ///
 /// - **stdout** receives user-facing messages at `INFO` level (or `ERROR` in quiet mode).
 /// - **stderr** receives full diagnostic output with timestamps, controlled by
-///   `--verbose`/`--debug`/`--quiet`.
+///   `--log-level` and `--quiet`.
 /// - **log_file** (optional) receives the same diagnostic output as stderr,
 ///   written to a file with ANSI disabled, for later inspection.
 ///
 /// `RUST_LOG` overrides the stderr filter while preserving the CLI defaults as fallback.
-pub fn init(verbose: bool, quiet: bool, debug: bool, color: &str, log_file: Option<&str>) {
+pub fn init(log_level: &str, quiet: bool, color: &str, log_file: Option<&str>) {
     let use_color = match color {
         "always" => true,
         "never" => false,
         _ => std::io::IsTerminal::is_terminal(&std::io::stdout()),
     };
 
-    // stderr filter: diagnostic depth controlled by --verbose/--debug/--quiet
-    let diag_level = if debug {
-        LevelFilter::TRACE
-    } else if verbose {
-        LevelFilter::DEBUG
-    } else if quiet {
+    // stderr filter: diagnostic depth controlled by --log-level/--quiet
+    let diag_level = if quiet {
         LevelFilter::ERROR
     } else {
-        LevelFilter::WARN
+        match log_level {
+            "error" => LevelFilter::ERROR,
+            "warn" => LevelFilter::WARN,
+            "debug" => LevelFilter::DEBUG,
+            "trace" => LevelFilter::TRACE,
+            _ => LevelFilter::WARN,
+        }
     };
+    let debug = log_level == "trace";
 
     let env_filter = EnvFilter::builder()
         .with_default_directive(diag_level.into())

@@ -88,24 +88,24 @@ fn test_cli_validate_flag() {
 }
 
 // ──────────────────────────────────────────────
-// 5. Dry run: --dry-run → exit 0, no output file
+// 5. Check mode: --check → exit 0, no output file
 // ──────────────────────────────────────────────
 #[test]
-fn test_cli_dry_run() {
+fn test_cli_check_no_output() {
     let tmp = TempDir::new().unwrap();
     let output = tmp.path().join("out.sup");
 
     Command::cargo_bin("ass2sup")
         .unwrap()
         .arg(simple_fixture())
-        .arg("--dry-run")
+        .arg("--check")
         .arg("-o")
         .arg(&output)
         .arg("--quiet")
         .assert()
         .success();
 
-    assert!(!output.exists(), "dry-run should NOT create output file");
+    assert!(!output.exists(), "--check should NOT create output file");
 }
 
 // ──────────────────────────────────────────────
@@ -204,7 +204,8 @@ fn test_cli_srt_to_srt_self_check() {
     Command::cargo_bin("ass2sup")
         .unwrap()
         .arg(&input)
-        .arg("--to-srt")
+        .arg("--format")
+        .arg("srt")
         .arg("-o")
         .arg(&output)
         .arg("--quiet")

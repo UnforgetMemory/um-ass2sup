@@ -13,9 +13,11 @@ fn test_args_default() {
     assert_eq!(args.dither, "floyd-steinberg");
     assert_eq!(args.font, "Arial");
     assert_eq!(args.color, "auto");
+    assert_eq!(args.log_level, "info");
+    assert_eq!(args.format, "sup");
+    assert_eq!(args.overlap, "off");
     assert!(!args.validate);
     assert!(!args.parallel);
-    assert!(!args.verbose);
     assert!(!args.quiet);
     assert!(args.resolution.is_none());
     assert!(args.output.is_none());
@@ -51,6 +53,75 @@ fn test_fps_accepts_valid_values() {
     }
     let args = Args::parse_from(["ass2sup", "input.ass", "-f", "29.97"]);
     assert!((args.fps - 29.97).abs() < 1e-9);
+}
+
+#[test]
+fn test_enum_args_reject_invalid_values() {
+    // Unknown values for enumerated string args must fail at parse time
+    // instead of silently falling back to a default.
+    for (flag, value) in [
+        ("--overlap", "bogus"),
+        ("--dither", "bogus"),
+        ("--color-space", "bogus"),
+        ("--tonemap", "bogus"),
+        ("--format", "bogus"),
+        ("--log-level", "bogus"),
+    ] {
+        let result = Args::try_parse_from(["ass2sup", "input.ass", flag, value]);
+        assert!(result.is_err(), "{flag} '{value}' must be rejected");
+    }
+}
+
+#[test]
+fn test_enum_args_accept_valid_values() {
+    let args = Args::parse_from([
+        "ass2sup",
+        "input.ass",
+        "--overlap",
+        "strict",
+        "--dither",
+        "ordered",
+        "--color-space",
+        "bt709",
+        "--tonemap",
+        "hable",
+        "--format",
+        "srt",
+        "--log-level",
+        "debug",
+    ]);
+    assert_eq!(args.overlap, "strict");
+    assert_eq!(args.dither, "ordered");
+    assert_eq!(args.color_space, "bt709");
+    assert_eq!(args.tonemap.as_deref(), Some("hable"));
+    assert_eq!(args.format, "srt");
+    assert_eq!(args.log_level, "debug");
+}
+
+#[test]
+fn test_removed_flags_are_unknown() {
+    // --quantizer and --parallel-frames no longer exist: passing them must
+    // produce a clap parse error rather than being silently accepted.
+    for flag in ["--quantizer", "--parallel-frames"] {
+        let result = Args::try_parse_from(["ass2sup", "input.ass", flag, "median-cut"]);
+        assert!(
+            result.is_err(),
+            "{flag} must be rejected as an unknown argument"
+        );
+    }
+}
+
+#[cfg(all(feature = "native-backend", feature = "libass-backend"))]
+#[test]
+fn test_backend_rejects_unknown_value_when_both_backends_compiled() {
+    // Only meaningful in dual-backend builds, where --backend actually
+    // selects a renderer. Single-backend builds accept any value (no-op).
+    for value in ["bogus", "cairo", ""] {
+        let result = Args::try_parse_from(["ass2sup", "input.ass", "--backend", value]);
+        assert!(result.is_err(), "--backend '{value}' must be rejected");
+    }
+    let args = Args::parse_from(["ass2sup", "input.ass", "--backend", "libass"]);
+    assert_eq!(args.backend.as_deref(), Some("libass"));
 }
 
 #[test]

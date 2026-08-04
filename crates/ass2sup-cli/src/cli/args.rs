@@ -55,25 +55,17 @@ pub struct Args {
     #[arg(long)]
     pub validate: bool,
 
-    /// Enable overlap warning detection
-    #[arg(long)]
-    pub overlap_warn: bool,
-
-    /// Overlap detection mode (strict/lenient)
-    #[arg(long, default_value = "lenient")]
-    pub overlap_mode: String,
+    /// Overlap detection mode (off/strict/lenient); enables detection
+    #[arg(long, default_value = "off", value_parser = ["off", "strict", "lenient"])]
+    pub overlap: String,
 
     // ── QUANTISATION ──
-    /// Quantizer algorithm (median-cut)
-    #[arg(long, default_value = "median-cut")]
-    pub quantizer: String,
-
     /// Maximum colors in palette (1–255)
     #[arg(long, default_value = "255")]
     pub max_colors: usize,
 
     /// Dithering method (none/floyd-steinberg/ordered)
-    #[arg(long, default_value = "floyd-steinberg")]
+    #[arg(long, default_value = "floyd-steinberg", value_parser = ["none", "floyd-steinberg", "ordered"])]
     pub dither: String,
 
     // ── FONT ──
@@ -81,12 +73,12 @@ pub struct Args {
     #[arg(long, default_value = "Arial")]
     pub font: String,
 
-    /// Default font size for SRT input
+    /// Default font size for SRT input (native backend only)
     #[arg(long, default_value = "48.0")]
     pub font_size: f64,
 
-    /// Per-style font fallback map. Each entry is "StyleName:fallback1,fallback2".
-    /// Can be repeated multiple times.
+    /// Per-style font fallback map (native backend only). Each entry is
+    /// "StyleName:fallback1,fallback2". Can be repeated multiple times.
     #[arg(long, value_name = "STYLE:FALLBACKS")]
     pub font_map: Vec<String>,
 
@@ -94,7 +86,7 @@ pub struct Args {
     #[arg(long, value_name = "DIR")]
     pub font_dir: Vec<PathBuf>,
 
-    /// Skip font availability check.
+    /// Skip font availability check (native backend only).
     #[arg(long)]
     pub no_check_fonts: bool,
 
@@ -103,23 +95,17 @@ pub struct Args {
     #[arg(short, long)]
     pub parallel: bool,
 
-    /// Render frames in parallel using rayon (single-file mode)
-    ///
-    /// ⚠️ DEPRECATED — no-op in frame-driven mode.
-    #[arg(long)]
-    #[deprecated(since = "0.6.0", note = "use frame-driven pipeline (no-op)")]
-    pub parallel_frames: bool,
-
     // ── COLOUR ──
-    /// Output colour space (srgb/bt709/bt2020).
-    #[arg(long, default_value = "srgb")]
+    /// Output colour space (srgb/bt709/bt2020, native backend only).
+    #[arg(long, default_value = "srgb", value_parser = ["srgb", "bt709", "bt2020"])]
     pub color_space: String,
 
-    /// HDR-to-SDR tone mapping operator (hable/reinhard/aces).
-    #[arg(long)]
+    /// HDR-to-SDR tone mapping operator (hable/reinhard/aces, native backend
+    /// only).
+    #[arg(long, value_parser = ["hable", "reinhard", "aces"])]
     pub tonemap: Option<String>,
 
-    /// Enable VSFilter compatibility mode (experimental).
+    /// Enable VSFilter compatibility mode (native backend only, experimental).
     ///
     /// Compensates for font advance-width differences between swash and
     /// GDI/VSFilter by scaling font_size by ~0.764×, matching easyavs2bdnxml
@@ -131,39 +117,27 @@ pub struct Args {
     // -- BACKEND SELECTION --
     /// Render backend to use (native, libass).  Only available when both
     /// backends are compiled in (--features native-backend,libass-backend).
-    #[arg(long, default_value = "native")]
+    #[arg(long, default_value = "native", value_parser = parse_backend)]
     pub backend: Option<String>,
 
     // ── FORMAT SELECTION ──
-    /// Convert to SRT format instead of SUP/PGS.
-    #[arg(long)]
-    pub to_srt: bool,
-
-    /// Convert to BDN XML + PNG format (Blu-ray authoring).
-    #[arg(long, conflicts_with = "to_srt")]
-    pub to_bdn: bool,
+    /// Output format (sup/srt/bdn).
+    #[arg(long, default_value = "sup", value_parser = ["sup", "srt", "bdn"])]
+    pub format: String,
 
     // ── MODE ──
     /// Parse and validate only, don't convert (exit 0 if OK, 1 if errors).
     #[arg(long)]
     pub check: bool,
 
-    /// Dry run: parse and validate only, don't write output.
-    #[arg(long)]
-    pub dry_run: bool,
-
     /// Force conversion even if validation fails.
     #[arg(long)]
     pub force: bool,
 
     // ── LOGGING ──
-    /// Enable verbose logging.
-    #[arg(short, long)]
-    pub verbose: bool,
-
-    /// Enable trace-level debug output for pipeline diagnosis.
-    #[arg(long)]
-    pub debug: bool,
+    /// Log level (error/warn/info/debug/trace).
+    #[arg(long, default_value = "info", value_parser = ["error", "warn", "info", "debug", "trace"])]
+    pub log_level: String,
 
     /// Suppress progress bar.
     #[arg(long)]
@@ -194,6 +168,30 @@ fn parse_fps(s: &str) -> Result<f64, String> {
         ));
     }
     Ok(value)
+}
+
+/// Validate a `--backend` value.
+///
+/// When both rendering backends are compiled in, only `native` and `libass`
+/// are valid; anything else is rejected at parse time (clap-style error).
+///
+/// In single-backend builds the flag is a no-op — the compiled backend is
+/// always used — so any value is accepted to preserve the historical
+/// behaviour.
+fn parse_backend(s: &str) -> Result<String, String> {
+    #[cfg(all(feature = "native-backend", feature = "libass-backend"))]
+    {
+        match s {
+            "native" | "libass" => Ok(s.to_string()),
+            other => Err(format!(
+                "invalid backend '{other}': expected 'native' or 'libass'"
+            )),
+        }
+    }
+    #[cfg(not(all(feature = "native-backend", feature = "libass-backend")))]
+    {
+        Ok(s.to_string())
+    }
 }
 
 #[cfg(test)]

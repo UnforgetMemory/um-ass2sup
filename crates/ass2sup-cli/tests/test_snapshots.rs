@@ -71,24 +71,24 @@ fn snapshot_validate_clean() {
 }
 
 #[test]
-fn snapshot_dry_run_no_output() {
+fn snapshot_check_no_output() {
     let tmp = tempfile::TempDir::new().unwrap();
     let output_path = tmp.path().join("out.sup");
     let output = Command::cargo_bin("ass2sup")
         .unwrap()
         .arg(simple_fixture())
-        .arg("--dry-run")
+        .arg("--check")
         .arg("-o")
         .arg(&output_path)
         .arg("--quiet")
         .output()
-        .expect("run --dry-run");
-    assert!(!output_path.exists(), "dry-run must not create output file");
+        .expect("run --check");
+    assert!(!output_path.exists(), "--check must not create output file");
     let combined = format!(
         "exit={}\nstdout=\n{}\nstderr=\n{}",
         output.status.code().unwrap_or(-1),
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    insta::assert_snapshot!("dry_run_no_output", combined);
+    insta::assert_snapshot!("check_no_output", combined);
 }

@@ -60,15 +60,11 @@ pub struct OutputConfig {
     pub output: Option<std::path::PathBuf>,
     /// Output directory (batch or BDN mode).
     pub output_dir: Option<std::path::PathBuf>,
-    /// Dry-run mode: parse only, no output written.
-    pub dry_run: bool,
 }
 
 /// Parallelism settings.
 #[derive(Debug, Clone, Default)]
 pub struct ParallelConfig {
-    /// Enable parallel frame rendering (single-file mode).
-    pub frames: bool,
     /// Enable parallel file processing (batch mode).
     pub files: bool,
 }
@@ -101,10 +97,8 @@ impl Config {
             output: OutputConfig {
                 output: args.output.clone(),
                 output_dir: args.output_dir.clone(),
-                dry_run: args.dry_run,
             },
             parallel: ParallelConfig {
-                frames: false,
                 files: args.parallel,
             },
         }
