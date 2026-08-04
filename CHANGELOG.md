@@ -57,6 +57,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ass2sup-cli`: Unified render summary** — both backends emit an identical `Render complete: N unique frames in Xs (avg Y ms/frame, rendered Z) · empty E, duplicate D` line via the shared `RenderSummary::summary_line()`.
 - **`ass2sup-cli`: Batch progress** — sequential batch hosts the batch bar and per-file bars on a `MultiProgress` (separate lines); `--parallel` batch gains an aggregate bar; per-file reporter bars are suppressed in parallel batch.
 
+### Changed (CLI UX wave)
+
+- **`ass2sup-cli`: Progress visible without a TTY** — the throttled plain-text `Rendered X/Y (P%) elapsed Es, ETA ~Es` line was logged at `debug!` (invisible at the default WARN stderr filter), so piped/redirected/Windows-PowerShell runs showed zero progress between the start line and the final summary. The reporter now checks `stderr.is_terminal()`: on a non-TTY the text line is emitted at `info!` (visible on the default stdout layer); on a TTY the bar remains primary and the text stays `debug!` (only with `-v`).
+- **`ass2sup-cli`: `--parallel-frames` removed** — the flag was a deprecated no-op since v0.6.0 (frame-driven pipeline). Deleted from `Args`, the lib.rs deprecation warning, and the dead `ParallelConfig.frames` field; help snapshots updated.
+- **`ass2sup-cli`: `--quantizer` removed** — it was a single-value boolean in disguise (`args.quantizer == "median-cut"`); median-cut is the only quantiser, so temporal palette reuse is now always on. Deleted the arg and the conditional at `convert.rs`.
+- **`ass2sup-cli`: Enum value validation** — `--overlap-mode`, `--dither`, `--color-space`, `--tonemap`, and `--backend` (dual-backend builds) now have `value_parser` enums; unknown values fail at parse time instead of silently falling back. `--backend` validation is feature-gated (single-backend builds keep the no-op behaviour).
+- **`ass2sup-cli`: native-only args annotated** — `--font-size`, `--font-map`, `--no-check-fonts`, `--color-space`, `--tonemap`, `--compat-vsfilter` help text now marks "(native backend only)" since the libass backend ignores them.
+- **`ass2sup-cli`: output format unified as `--format`** — `--to-srt` / `--to-bdn` replaced by a single validated enum `--format <sup|srt|bdn>` (default `sup`); dispatch moved to one `match` in `run()`.
+- **`ass2sup-cli`: `--dry-run` merged into `--check`** — both were parse-and-validate-only modes; the redundant flag and its dead `OutputConfig.dry_run` branch were removed.
+- **`ass2sup-cli`: overlap flags unified as `--overlap`** — `--overlap-warn` + `--overlap-mode` replaced by a single validated enum `--overlap <off|strict|lenient>` (default `off`); passing `strict`/`lenient` both enables detection and selects the mode.
+- **`ass2sup-cli`: log level unified as `--log-level`** — `-v/--verbose` + `--debug` replaced by a validated enum `--log-level <error|warn|info|debug|trace>` (default `info`), mapped 1:1 to the tracing stderr filter; `--quiet` remains for progress-bar suppression.
+- **`ass2sup-cli`: arg count reduced** — 35 flags → 26; the deprecated/no-op, single-value, and overlapping flags are gone; every enumerated option now fails fast at parse time instead of silently falling back.
+- **`ass2sup-cli`: sweep-line tracker extracted & tested** (code review) — the libass render loop's active-event tracker is now an `ActiveEventTracker` struct with 6 unit tests locking the half-open `[start, end)` semantics against the original O(n×m) scan (boundary, zero-duration, overlap, unsorted, empty cases).
+
+### Performance (Battleship.Island 1080p fixture, Linux, release)
+
+- **`subtitle-renderer`: glyph cache recency tracking O(1)** — `GlyphCache::get()`/`insert()` refreshed recency via a linear `VecDeque::position()` scan plus O(n) remove on every hit, a hidden quadratic over ~thousands of glyphs × frames. Replaced with a monotonic epoch counter stored per entry (map value becomes `(Arc, u64)`); eviction (only when over the 64 MiB byte budget) scans once for the oldest epoch. `get`/`insert` are now O(1). Output byte-identical; native render wall time 176.5s → 155.1s (−12%).
+- **`subtitle-renderer-libass`: bbox-local composition** — `compose_frame` allocated a full 1920×1080 RGBA buffer (8.3 MB) every frame regardless of subtitle size, then `crop_to_tight_bbox` scanned the whole frame. New `compose_frame_bbox` computes the images' union bounding box and composes only into a bbox-sized buffer; the CLI crops that small region and shifts offsets back to full-frame coordinates. Output byte-identical; libass render wall time 140.4s → 112.6s (−20%).
+- **`ass2sup-cli`: libass loop sweep-line** — the libass render loop scanned `events.iter().any(...)` per timestamp (O(n×m), ~15.5M comparisons for a 2h movie). Now sorts events by start once and walks the timeline with a min-heap of active end times (O(n log n + m log n)), matching the crate-internal pipeline.
+
 ### Fixed
 
 - **`ass2sup-cli`: Absolute-path bypass in embedded-font traversal check** (security audit) — `Path::join` replaced the input directory base when an embedded font filename was absolute (e.g. `fontname: /etc/passwd`), slipping past the `ParentDir` component check and allowing an arbitrary file read. Now rejects absolute filenames before joining.

@@ -142,7 +142,7 @@ cargo build --release --no-default-features -F native-backend,libass-backend
 - ASS v4+, SSA v4, SubRip (`.srt`) auto-detection via `SubtitleFormat::detect`
 - Hand-written parser, zero external parsing dependencies
 - Full AST preserving Style/Dialogue/Font information
-- SRT self-check: `ass2sup in.srt --to-srt -o out.srt && diff in.srt out.srt`
+- SRT self-check: `ass2sup in.srt --format srt -o out.srt && diff in.srt out.srt`
 
 ### Rendering
 - **native-backend**: swash-based shaping, 8-level font fallback, full ASS effects support
@@ -172,7 +172,7 @@ cargo build --release --no-default-features -F native-backend,libass-backend
 ass2sup input.ass -o output.sup
 
 # With validation
-ass2sup input.ass -o output.sup --validate --overlap-warn
+ass2sup input.ass -o output.sup --validate --overlap strict
 
 # Batch
 ass2sup s01/*.ass -d ./sup_output/ --parallel
@@ -300,18 +300,18 @@ ass2sup --glob "subs/**/*.ass" --recursive --parallel -d ./out/
 ```bash
 # Validate only (CI-friendly, exit 0/1)
 ass2sup input.ass --check
-# Validate with overlap warnings
-ass2sup input.ass --check --validate --overlap-warn --overlap-mode strict
+# Validate with overlap detection (strict mode)
+ass2sup input.ass --check --validate --overlap strict
 # ASS → SRT downgrade
-ass2sup input.ass --to-srt -o output.srt
+ass2sup input.ass --format srt -o output.srt
 # SRT self-check
-ass2sup input.srt --to-srt -o out.srt && diff input.srt out.srt
+ass2sup input.srt --format srt -o out.srt && diff input.srt out.srt
 ```
 
 ### BDN XML mastering
 
 ```bash
-ass2sup input.ass --to-bdn -d ./bdn_out/
+ass2sup input.ass --format bdn -d ./bdn_out/
 ```
 
 Output:
@@ -333,8 +333,6 @@ bdn_out/
 ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 ```
 
-> `--parallel-frames` is **deprecated**: since v2.7.4 the render pipeline is a frame-driven serial pipeline; per-file parallel quantization is gone. The flag remains only for backward compatibility — it prints a deprecation warning (visible with `-v`) and is ignored.
-
 ---
 
 ## 📖 CLI Reference
@@ -345,28 +343,23 @@ ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 | `-d, --output-dir <DIR>` | Output directory (batch) | — |
 | `-r, --resolution <WxH>` | Display resolution | `1920x1080` |
 | `-f, --fps <FLOAT>` | Framerate | `23.976` |
-| `--backend <BACKEND>` | Render backend (dual-backend build) `native` / `libass` | `native` |
+| `--backend <BACKEND>` | Render backend (dual-backend build) `native` / `libass` (validated enum) | `native` |
 | `--validate` | Run validation before conversion | off |
-| `--overlap-warn` | Event overlap detection | off |
-| `--overlap-mode <MODE>` | Overlap mode `strict` / `lenient` | `lenient` |
-| `--quantizer <ALGO>` | Quantizer algorithm | `median-cut` |
+| `--overlap <MODE>` | Overlap detection `off` / `strict` / `lenient` (validated enum) | `off` |
 | `--max-colors <1-255>` | Max palette colors | `255` |
-| `--dither <METHOD>` | Dithering method | `floyd-steinberg` |
+| `--dither <METHOD>` | Dithering method `none` / `floyd-steinberg` / `ordered` (validated enum) | `floyd-steinberg` |
+| `--format <FMT>` | Output format `sup` / `srt` / `bdn` (validated enum) | `sup` |
 | `--check` | Validate only, no write (exit 0/1) | off |
-| `--to-srt` | Output SRT | off |
-| `--to-bdn` | Output BDN XML + PNG | off |
-| `--parallel-frames` | ~~Per-file parallel quantization~~ (deprecated, no-op since v2.7.4) | off |
 | `--parallel` | Multi-file parallel | off |
-| `--dry-run` | Validate only, no write | off |
 | `--force` | Convert despite validation failure | off |
 | `--font <NAME>` | Default font for SRT input | `Arial` |
-| `--font-size <PT>` | Default font size for SRT input | `48.0` |
+| `--font-size <PT>` | Default font size for SRT input (native backend only) | `48.0` |
 | `--glob <PATTERN>` | Glob pattern for input files | — |
 | `--recursive` | Recursive with `--glob` | off |
 | `--max-files <N>` | Max files in glob mode | unlimited |
 | `--quiet` | Suppress progress bar | off |
+| `--log-level <LEVEL>` | Log level `error` / `warn` / `info` / `debug` / `trace` (validated enum) | `info` |
 | `--color <MODE>` | Color output `auto` / `always` / `never` | `auto` |
-| `-v, --verbose` | Verbose logging | off |
 | `-h, --help` | Print help | — |
 | `-V, --version` | Print version | — |
 

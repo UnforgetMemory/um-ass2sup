@@ -147,7 +147,7 @@ cargo build --release --no-default-features -F native-backend,libass-backend
 - ASS v4+、SSA v4、SubRip（`.srt`）自动识别（`SubtitleFormat::detect`）
 - 手写解析器，零外部解析依赖
 - 完整 AST，保留 Style/Dialogue/Font 全部信息
-- SRT 自检：`ass2sup in.srt --to-srt -o out.srt && diff in.srt out.srt`
+- SRT 自检：`ass2sup in.srt --format srt -o out.srt && diff in.srt out.srt`
 
 ### 渲染
 
@@ -180,7 +180,7 @@ cargo build --release --no-default-features -F native-backend,libass-backend
 ass2sup input.ass -o output.sup
 
 # 转换时校验
-ass2sup input.ass -o output.sup --validate --overlap-warn
+ass2sup input.ass -o output.sup --validate --overlap strict
 
 # 批量转换整季
 ass2sup s01/*.ass -d ./sup_output/ --parallel
@@ -308,18 +308,18 @@ ass2sup --glob "subs/**/*.ass" --recursive --parallel -d ./out/
 ```bash
 # 仅校验（CI 友好，退出码 0/1）
 ass2sup input.ass --check
-# 校验 + 重叠警告
-ass2sup input.ass --check --validate --overlap-warn --overlap-mode strict
+# 校验 + 重叠检测（strict 模式）
+ass2sup input.ass --check --validate --overlap strict
 # ASS → SRT
-ass2sup input.ass --to-srt -o output.srt
+ass2sup input.ass --format srt -o output.srt
 # SRT 自检
-ass2sup input.srt --to-srt -o out.srt && diff input.srt out.srt
+ass2sup input.srt --format srt -o out.srt && diff input.srt out.srt
 ```
 
 ### 蓝光母版（BDN XML）
 
 ```bash
-ass2sup input.ass --to-bdn -d ./bdn_out/
+ass2sup input.ass --format bdn -d ./bdn_out/
 ```
 
 产出：
@@ -340,8 +340,6 @@ bdn_out/
 ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 ```
 
-> `--parallel-frames` 已弃用：自 v2.7.4 起渲染管线改为 frame-driven 串行流水线，单文件内部不再需要/支持并行量化。该标志保留仅为向后兼容，传入时会打印弃用警告并忽略（可用 `-v` 查看）。
-
 ---
 
 ## 📝 CLI 参考
@@ -352,28 +350,23 @@ ass2sup --glob "subs/**/*.ass" --parallel -d ./out/
 | `-d, --output-dir <DIR>` | 输出目录（批量） | — |
 | `-r, --resolution <WxH>` | 显示分辨率 | `1920x1080` |
 | `-f, --fps <FLOAT>` | 帧率 | `23.976` |
-| `--backend <BACKEND>` | 渲染后端 `native` / `libass`（双后端构建时） | `native` |
+| `--backend <BACKEND>` | 渲染后端 `native` / `libass`（双后端构建时，枚举校验） | `native` |
 | `--validate` | 转换前校验 | off |
-| `--overlap-warn` | 事件重叠检测 | off |
-| `--overlap-mode <MODE>` | 重叠模式 `strict` / `lenient` | `lenient` |
-| `--quantizer <ALGO>` | 量化算法 | `median-cut` |
+| `--overlap <MODE>` | 重叠检测 `off` / `strict` / `lenient`（枚举校验） | `off` |
 | `--max-colors <1-255>` | 调色板最大颜色数 | `255` |
-| `--dither <METHOD>` | 抖动算法 | `floyd-steinberg` |
+| `--dither <METHOD>` | 抖动算法 `none` / `floyd-steinberg` / `ordered`（枚举校验） | `floyd-steinberg` |
+| `--format <FMT>` | 输出格式 `sup` / `srt` / `bdn`（枚举校验） | `sup` |
 | `--check` | 仅校验，不写文件（退出码 0/1） | off |
-| `--to-srt` | 输出 SRT | off |
-| `--to-bdn` | 输出 BDN XML + PNG | off |
-| `--parallel-frames` | ~~单文件并行量化~~（已弃用，v2.7.4 起为 no-op） | off |
 | `--parallel` | 批量文件并行 | off |
-| `--dry-run` | 仅校验，不写入 | off |
 | `--force` | 校验失败仍继续转换 | off |
 | `--font <NAME>` | SRT 输入默认字体 | `Arial` |
-| `--font-size <PT>` | SRT 输入默认字号 | `48.0` |
+| `--font-size <PT>` | SRT 输入默认字号（native 后端） | `48.0` |
 | `--glob <PATTERN>` | 输入通配符模式 | — |
 | `--recursive` | `--glob` 模式下递归搜索 | off |
 | `--max-files <N>` | glob 模式最大文件数 | 不限 |
 | `--quiet` | 禁用进度条 | off |
+| `--log-level <LEVEL>` | 日志级别 `error` / `warn` / `info` / `debug` / `trace`（枚举校验） | `info` |
 | `--color <MODE>` | 颜色输出 `auto` / `always` / `never` | `auto` |
-| `-v, --verbose` | 详细日志输出 | off |
 | `-h, --help` | 显示帮助信息 | — |
 | `-V, --version` | 显示版本号 | — |
 
