@@ -64,6 +64,8 @@ coverage.xml
 *.sup
 # ...but keep reference SUPs used by test fixtures
 !tests/fixtures/*.sup
+# Verification checksums (generated alongside .sup baselines)
+*.sha256
 
 # ── Agent / planning docs (ephemeral) / 规划文档 ─────────────────
 phase*-plan.md

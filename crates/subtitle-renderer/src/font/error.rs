@@ -15,15 +15,11 @@ pub enum FontError {
     NotFound(FontNotFound),
     /// A font file was found but could not be loaded.
     Corrupted { path: PathBuf, reason: String },
-    /// No system fonts are available at all.
-    NoSystemFonts,
     /// An I/O error occurred while accessing a font file.
     Io {
         path: PathBuf,
         source: std::io::Error,
     },
-    /// A font file had unparseable content (e.g. bad metadata).
-    Parse { path: PathBuf, detail: String },
 }
 
 /// Detailed font-not-found error with candidates for caller decision.
@@ -70,14 +66,8 @@ impl fmt::Display for FontError {
             FontError::Corrupted { path, reason } => {
                 write!(f, "Font at '{}' is corrupted: {reason}", path.display())
             }
-            FontError::NoSystemFonts => {
-                write!(f, "No system fonts available")
-            }
             FontError::Io { path, source } => {
                 write!(f, "I/O error accessing '{}': {source}", path.display())
-            }
-            FontError::Parse { path, detail } => {
-                write!(f, "Failed to parse font '{}': {detail}", path.display())
             }
         }
     }
@@ -117,7 +107,6 @@ mod tests {
             path: None,
             is_system: true,
             cjk: false,
-            corrupt: false,
         }
     }
 
@@ -189,12 +178,6 @@ mod tests {
     }
 
     #[test]
-    fn font_error_no_system_fonts_display() {
-        let err = FontError::NoSystemFonts;
-        assert_eq!(err.to_string(), "No system fonts available");
-    }
-
-    #[test]
     fn font_error_io_display() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let err = FontError::Io {
@@ -216,17 +199,6 @@ mod tests {
         let inner = std::error::Error::source(&err);
         assert!(inner.is_some());
         assert!(inner.unwrap().to_string().contains("denied"));
-    }
-
-    #[test]
-    fn font_error_parse_display() {
-        let err = FontError::Parse {
-            path: PathBuf::from("/fonts/garbage.ttf"),
-            detail: "unknown table tag 'Xxxx'".into(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("garbage.ttf"));
-        assert!(msg.contains("Xxxx"));
     }
 
     #[test]

@@ -202,6 +202,8 @@ fn parse_event_data(event_type: EventType, data: &str) -> Result<Event, ParseErr
         if v == 0 { None } else { Some(v) }
     };
 
+    let (override_tags, karaoke) = parse_tags(parts[9]);
+
     Ok(Event {
         source_line: 0,
         event_type,
@@ -215,8 +217,8 @@ fn parse_event_data(event_type: EventType, data: &str) -> Result<Event, ParseErr
         margin_v: margin(7),
         effect: crate::effect::parse_effect(parts[8]),
         text_raw: parts[9].to_string(),
-        override_tags: parse_tags(parts[9]).0,
-        karaoke: parse_tags(parts[9]).1,
+        override_tags,
+        karaoke,
     })
 }
 
@@ -338,6 +340,23 @@ mod tests {
         let fonts = parse_fonts(&lines);
         assert_eq!(fonts.len(), 1);
         assert_eq!(fonts[0].font_name, "Arial");
+    }
+
+    #[test]
+    fn dialogue_event_override_and_karaoke() {
+        // Parity lock: both override_tags and karaoke parsed from the same
+        // text field (single parse_tags call must produce identical AST).
+        let lines = vec![make_line(Token::EventData {
+            type_name: "Dialogue".into(),
+            data: "0,0:00:01.00,0:00:05.00,Default,,0,0,0,,{\\b1}Hi {\\k20}yo".into(),
+        })];
+        let (events, errors) = parse_events(&lines);
+        assert_eq!(errors.len(), 0);
+        assert_eq!(events[0].text_raw, "{\\b1}Hi {\\k20}yo");
+        assert!(!events[0].override_tags.is_empty(), "override tags missing");
+        assert_eq!(events[0].karaoke.len(), 1);
+        assert_eq!(events[0].karaoke[0].duration_ms, 200);
+        assert_eq!(events[0].karaoke[0].text, "yo");
     }
 
     #[test]

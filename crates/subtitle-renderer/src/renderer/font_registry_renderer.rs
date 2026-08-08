@@ -73,6 +73,37 @@ impl Default for FontRegistryRenderResources {
     }
 }
 
+/// Read-or-resolve font bytes through the persistent `font_data_cache`.
+///
+/// The cache key is `family:bold:style:bold_upgrade` — the bold-upgrade flag
+/// is part of the key because layout resolves fonts with
+/// `use_bold_upgrade=true` while rendering uses `false`; sharing a key between
+/// the two phases would let one phase poison the other. The expensive fallback
+/// chain (`miss`) runs only when the key is absent; hits return a cheap `Arc`
+/// clone. Lock order: `registry` (held by the caller) → `font_data_cache`.
+pub(crate) fn resolve_font_data_cached(
+    resources: &FontRegistryRenderResources,
+    family: &str,
+    bold: bool,
+    style_name: &str,
+    use_bold_upgrade: bool,
+    miss: impl FnOnce() -> std::sync::Arc<[u8]>,
+) -> std::sync::Arc<[u8]> {
+    let cache_key = format!(
+        "{}:{}:{}:{}",
+        family.to_lowercase(),
+        bold,
+        style_name,
+        use_bold_upgrade
+    );
+    resources
+        .font_data_cache
+        .lock()
+        .entry(cache_key)
+        .or_insert_with(miss)
+        .clone()
+}
+
 #[allow(clippy::too_many_arguments)]
 /// Render a single ASS event into a RGBA Pixmap bitmap using the font registry.
 #[tracing::instrument(skip_all, fields(event_start = event.start_ms, event_end = event.end_ms))]
@@ -154,7 +185,6 @@ pub fn render_event_font_registry(
     // `resources.font_data_cache` (keyed by font name + bold + style), so the
     // expensive fallback chain runs once per distinct font, not per event.
 
-    let registry = resources.registry.lock();
     let available_width = config.width as f32 - ctx.margin_l - ctx.margin_r;
     let available_height = config.height as f32 - ctx.margin_v * 2.0;
     let line_height = ctx.font_size * 1.2;
@@ -166,11 +196,15 @@ pub fn render_event_font_registry(
         "shaping text"
     );
 
+    // The shape functions lock the registry themselves (registry →
+    // font_data_cache) and resolve font data through the shared persistent
+    // cache, so the layout phase no longer runs the expensive fallback chain
+    // per event per frame.
     let shaped_lines = if ctx.writing_mode == 2 || ctx.writing_mode == 3 {
         shape_vertical(
             &plain_text,
             ctx,
-            &registry,
+            resources,
             available_width,
             available_height,
             line_height,
@@ -182,14 +216,13 @@ pub fn render_event_font_registry(
             &plain_text,
             ctx,
             config,
-            &registry,
+            resources,
             available_width,
             line_height,
             &resources.font_map,
             event.style.as_str(),
         )
     };
-    drop(registry);
     if shaped_lines.is_empty() {
         return;
     }
@@ -261,36 +294,31 @@ pub fn render_event_font_registry(
 
     let registry = resources.registry.lock();
     tracing::debug!(shaped_lines = shaped_lines.len(), "rendering shaped lines");
-    // Resolve the event's font data once: the (font, bold, style) key is
-    // constant across every glyph in this event, so computing the key and
-    // running the (expensive) fallback chain inside the glyph loop would
-    // format + lowercase + lock + clone per glyph. Hoisted out of the loop.
-    let font_data = {
-        let cache_key = format!(
-            "{}:{}:{}",
-            ctx.font_name.to_lowercase(),
-            ctx.bold,
-            event.style
-        );
-        resources
-            .font_data_cache
-            .lock()
-            .entry(cache_key)
-            .or_insert_with(|| {
-                resolve_glyph_font_data(
-                    &registry,
-                    ctx,
-                    shaped_lines
-                        .first()
-                        .and_then(|sl| sl.glyphs.first())
-                        .map(|g| g.glyph_id)
-                        .unwrap_or(0),
-                    &resources.font_map,
-                    event.style.as_str(),
-                )
-            })
-            .clone()
-    };
+    // Resolve the event's font data once through the shared persistent cache:
+    // the (family, bold, style, bold_upgrade) key is constant across every
+    // glyph in this event, so computing the key and running the (expensive)
+    // fallback chain inside the glyph loop would format + lowercase + lock +
+    // resolve per glyph. Hoisted out of the loop.
+    let font_data = resolve_font_data_cached(
+        resources,
+        &ctx.font_name,
+        ctx.bold,
+        event.style.as_str(),
+        false, // rendering: bold upgrade is handled by parse_font_name fallback
+        || {
+            resolve_glyph_font_data(
+                &registry,
+                ctx,
+                shaped_lines
+                    .first()
+                    .and_then(|sl| sl.glyphs.first())
+                    .map(|g| g.glyph_id)
+                    .unwrap_or(0),
+                &resources.font_map,
+                event.style.as_str(),
+            )
+        },
+    );
     for sl in &shaped_lines {
         let mut cx = sl.x_start - oxf;
         tracing::debug!(
@@ -324,23 +352,31 @@ pub fn render_event_font_registry(
                 glyph: g.glyph_id,
                 size: ctx.font_size.to_bits(),
             };
-            let rasterized = {
+            // Rasterize cache misses OUTSIDE the lock: the mutex guards only
+            // the map access, so a slow swash rasterization never holds the
+            // glyph-cache lock. A concurrent frame may insert the same key
+            // while we rasterize; re-inserting is harmless (identical bytes —
+            // `insert` replaces the entry and keeps the byte budget stable).
+            let hit = {
                 let mut gc = resources.glyph_cache.lock();
-                if let Some(hit) = gc.get(&gkey) {
-                    hit
-                } else {
-                    match GlyphRasterizer::rasterize(&font_data, g.glyph_id, ctx.font_size) {
-                        Ok(r) => gc.insert(gkey, r),
-                        Err(e) => {
-                            tracing::warn!(
-                                glyph_id = g.glyph_id,
-                                error = %e,
-                                "failed to rasterize glyph"
-                            );
-                            continue;
-                        }
+                gc.get(&gkey)
+            };
+            let rasterized = match hit {
+                Some(hit) => hit,
+                None => match GlyphRasterizer::rasterize(&font_data, g.glyph_id, ctx.font_size) {
+                    Ok(r) => {
+                        let mut gc = resources.glyph_cache.lock();
+                        gc.insert(gkey, r)
                     }
-                }
+                    Err(e) => {
+                        tracing::warn!(
+                            glyph_id = g.glyph_id,
+                            error = %e,
+                            "failed to rasterize glyph"
+                        );
+                        continue;
+                    }
+                },
             };
             composite_glyph(
                 &mut layer,

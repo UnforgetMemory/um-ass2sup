@@ -100,10 +100,9 @@ pub fn lex(input: &str) -> Vec<Line> {
         if let Some((key, value)) = trimmed.split_once(':') {
             let key = key.trim();
             let value = value.trim();
-            let upper_key = key.to_uppercase();
 
             // Style: lines
-            if upper_key == "STYLE" && !value.is_empty() {
+            if key.eq_ignore_ascii_case("style") && !value.is_empty() {
                 lines.push(Line {
                     token: Token::StyleData(value.to_string()),
                     span,
@@ -113,8 +112,13 @@ pub fn lex(input: &str) -> Vec<Line> {
 
             // Event lines (Dialogue, Comment, Picture, Sound, Movie, Command)
             if matches!(
-                upper_key.as_str(),
-                "DIALOGUE" | "COMMENT" | "PICTURE" | "SOUND" | "MOVIE" | "COMMAND"
+                key,
+                k if k.eq_ignore_ascii_case("dialogue")
+                    || k.eq_ignore_ascii_case("comment")
+                    || k.eq_ignore_ascii_case("picture")
+                    || k.eq_ignore_ascii_case("sound")
+                    || k.eq_ignore_ascii_case("movie")
+                    || k.eq_ignore_ascii_case("command")
             ) {
                 lines.push(Line {
                     token: Token::EventData {
@@ -127,7 +131,13 @@ pub fn lex(input: &str) -> Vec<Line> {
             }
 
             // Font lines (fontname:, filename:)
-            if upper_key.starts_with("FONTNAME") || upper_key.starts_with("FILENAME") {
+            if key
+                .get(..8)
+                .is_some_and(|p| p.eq_ignore_ascii_case("fontname"))
+                || key
+                    .get(..8)
+                    .is_some_and(|p| p.eq_ignore_ascii_case("filename"))
+            {
                 lines.push(Line {
                     token: Token::FontLine(trimmed.to_string()),
                     span,
@@ -300,6 +310,18 @@ mod tests {
             let lines = lex(&input);
             assert!(matches!(&lines[0].token, Token::EventData { .. }));
         }
+    }
+
+    #[test]
+    fn case_insensitive_keywords_mixed_case() {
+        // Parity lock: mixed-case keys classify identically to the
+        // to_uppercase()-based comparison.
+        let input = "StYlE: Default,Arial,20\nDiAlOgUe: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,test\nFoNtNaMe: Arial";
+        let lines = lex(input);
+        assert_eq!(lines.len(), 3);
+        assert!(matches!(&lines[0].token, Token::StyleData(_)));
+        assert!(matches!(&lines[1].token, Token::EventData { .. }));
+        assert!(matches!(&lines[2].token, Token::FontLine(_)));
     }
 
     #[test]

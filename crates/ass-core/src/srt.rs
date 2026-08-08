@@ -60,7 +60,6 @@ pub fn parse_srt(content: &str) -> Result<SubtitleDocument, ParseError> {
 
         let text_start = timecode_idx + 1;
         let text: String = lines[text_start..].join("\n");
-        let _converted = convert_srt_tags(&text);
 
         match parse_srt_timecodes(lines[timecode_idx]) {
             Ok((start, end)) => {
@@ -113,38 +112,6 @@ fn parse_srt_timecodes(line: &str) -> Result<(Timestamp, Timestamp), ParseError>
     let start = Timestamp::from_srt_timecode(parts[0].trim())?;
     let end = Timestamp::from_srt_timecode(parts[1].trim())?;
     Ok((start, end))
-}
-
-fn convert_srt_tags(text: &str) -> String {
-    let mut result = String::new();
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '<' {
-            let mut tag = String::new();
-            while let Some(&next) = chars.peek() {
-                if next == '>' {
-                    chars.next();
-                    break;
-                }
-                tag.push(next);
-                chars.next();
-            }
-            match tag.to_lowercase().as_str() {
-                "b" => result.push_str("{\\b1}"),
-                "/b" => result.push_str("{\\b0}"),
-                "i" => result.push_str("{\\i1}"),
-                "/i" => result.push_str("{\\i0}"),
-                "u" => result.push_str("{\\u1}"),
-                "/u" => result.push_str("{\\u0}"),
-                "s" => result.push_str("{\\s1}"),
-                "/s" => result.push_str("{\\s0}"),
-                _ => {}
-            }
-        } else {
-            result.push(c);
-        }
-    }
-    result
 }
 
 fn srt_default_style() -> Style {

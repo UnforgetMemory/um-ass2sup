@@ -217,4 +217,25 @@ mod tests {
         assert_eq!(c.len(), 1);
         assert!(c.get(&key(0x10, 1, 48.0)).is_some());
     }
+
+    #[test]
+    fn reinsert_same_key_replaces_and_keeps_budget_stable() {
+        // The renderer rasterizes glyph-cache misses *outside* the lock and
+        // double-checks on re-insert, so concurrent frames may insert the same
+        // key twice. Replacing an existing entry must not grow the byte budget
+        // or the entry count (seq/eviction logic stays well-defined).
+        let mut c = GlyphCache::new(1024 * 1024);
+        let k = key(0x10, 5, 48.0);
+        c.insert(k, glyph(32, 32));
+        let before = c.bytes_used();
+        let second = c.insert(k, glyph(32, 32));
+        assert_eq!(
+            c.bytes_used(),
+            before,
+            "budget must not grow on replacement"
+        );
+        assert_eq!(c.len(), 1);
+        assert!(c.get(&k).is_some());
+        assert_eq!(second.data.len(), 32 * 32);
+    }
 }

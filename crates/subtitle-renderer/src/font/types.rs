@@ -92,7 +92,6 @@ pub struct FontFace {
     pub path: Option<String>,
     pub is_system: bool,
     pub cjk: bool,
-    pub corrupt: bool,
 }
 
 /// A font query — what the caller is looking for.

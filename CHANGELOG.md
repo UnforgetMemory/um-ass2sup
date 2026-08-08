@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`subtitle-renderer`: Stack-buffered char shaping** — vertical-layout per-char `to_string()` replaced with a stack `encode_utf8` buffer; `wrap_text_lines_simple` uses `String::with_capacity` + `push_str` instead of O(n²) `format!`.
 - **Tracing spans at pipeline boundaries** — `#[instrument]`/spans added to ass-core parse, validator, color-quantizer `quantize`, pgs-encoder encode decision, bdn-xml `generate_xml`/`generate_png`; batch failures logged at `error!` (was `info!`); embedded-font read/load failures, glob/WalkDir entry errors, and font-cache write failures now warn.
 - **`pgs-encoder`: single-source time conversion** — `frame_accurate_pts` consolidated into `domain::timing` (was byte-identical copies in CLI + libass adapter); dead `ms_to_90khz` free fn and `timing::ms_to_90khz` removed; `color_space_for_height` is the single HD/BT.709 heuristic.
+- **`ass-core`: Real-world parser benchmarks** — `parser_bench.rs` now includes two real-world ASS fixtures (Battleship Island 2015 lines / Island of Lost People 1136 lines) via `include_str!`, measuring actual parse throughput (1.67 ms / 931 µs).
+- **`subtitle-renderer`: Font subsystem benchmarks** — criterion benchmarks for `FontRegistry::query` (hit 32 ns, miss 70 ns), `SimpleShaper::shape` (Latin 1.66 µs, CJK 562 ns), `GlyphRasterizer::rasterize` (2.71 µs), and full 8-level fallback chain resolution (2.11 µs).
+- **`subtitle-renderer`: Render pipeline benchmarks** — `render_simple_1920x1080` (3.21 ms) and `composite_over` (64x32 7.98 µs / 320x180 222 µs) restored from the pre-v2.7.0 benchmark suite (recovered from git history).
 - **Dead code removed** — orphaned `dither/adaptive.rs` (never compiled), unused `color/delta_e.rs`, dead `frame/owned.rs::palette_to_rgba`, unused CLI `parse_color_space`/`parse_tonemap` helpers (now used by `config/mod.rs`), unused `png` dependency in `pgs-encoder`.
 - **Large-file split** — `karaoke.rs` 536→199 lines and `encoder.rs` 552→237 lines (inline tests moved to `tests/`); `encoding/display_set.rs` 568 lines split into `display_set/{mod,basic,window,epoch_split}.rs` with API-compatible re-exports.
 - **Production unwrap/expect eliminated** — `parse_font_name`, `parse` error path, k-d cache, octree insert/merge, EMA sampling now use `let-else`/`?`/`unreachable!` instead of unwrap; palette-index `as u8` narrowed via `u8::try_from`.
@@ -56,6 +59,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ass2sup-cli`: Wall-clock diagnostics** — stderr diag timer switched from uptime (`0.000506400s WARN ...`) to wall-clock `fmt::time()`; the `--parallel-frames` deprecation message now renders professionally.
 - **`ass2sup-cli`: Unified render summary** — both backends emit an identical `Render complete: N unique frames in Xs (avg Y ms/frame, rendered Z) · empty E, duplicate D` line via the shared `RenderSummary::summary_line()`.
 - **`ass2sup-cli`: Batch progress** — sequential batch hosts the batch bar and per-file bars on a `MultiProgress` (separate lines); `--parallel` batch gains an aggregate bar; per-file reporter bars are suppressed in parallel batch.
+
+- **`subtitle-renderer`: TTC/OTC multi-face registration** — `parse_font_metadata` now returns `Vec<FontFace>` and registers every face in a TrueType Collection (was: silently dropped faces after the first). Face count read from the TTC header (big-endian u32 at offset 8) via swash's checked `FontDataRef` reader, so malformed collections surface as `Corrupted` instead of panicking. Font bytes shared across faces via `Arc`.
+- **`subtitle-renderer`: WOFF/WOFF2 rejected at file-discovery** — `is_font_file` no longer accepts `.woff`/`.woff2` (was: accepted, then swash failed to parse and silently skipped). Only `ttf`/`otf`/`ttc`/`otc` are recognized.
+- **`subtitle-renderer`: FontTelemetry wired to corrupted-font skips** — `FontDatabase` gains a private `telemetry` field and a public `telemetry()` accessor; `load_fonts_dir` now records `FontEvent::Corrupted` when a font file fails to parse, making previously silent drops observable.
+- **`subtitle-renderer`: Dead code removed** — `FontFace.corrupt` field (always `false`, never assigned) and `FontError::NoSystemFonts`/`FontError::Parse` variants (never constructed) deleted.
+
+- **`.gitignore`: `*.sha256` added** — verification checksum files generated alongside `.sup` baselines are now ignored.
 
 ### Changed (CLI UX wave)
 
@@ -76,6 +86,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`subtitle-renderer`: glyph cache recency tracking O(1)** — `GlyphCache::get()`/`insert()` refreshed recency via a linear `VecDeque::position()` scan plus O(n) remove on every hit, a hidden quadratic over ~thousands of glyphs × frames. Replaced with a monotonic epoch counter stored per entry (map value becomes `(Arc, u64)`); eviction (only when over the 64 MiB byte budget) scans once for the oldest epoch. `get`/`insert` are now O(1). Output byte-identical; native render wall time 176.5s → 155.1s (−12%).
 - **`subtitle-renderer-libass`: bbox-local composition** — `compose_frame` allocated a full 1920×1080 RGBA buffer (8.3 MB) every frame regardless of subtitle size, then `crop_to_tight_bbox` scanned the whole frame. New `compose_frame_bbox` computes the images' union bounding box and composes only into a bbox-sized buffer; the CLI crops that small region and shifts offsets back to full-frame coordinates. Output byte-identical; libass render wall time 140.4s → 112.6s (−20%).
 - **`ass2sup-cli`: libass loop sweep-line** — the libass render loop scanned `events.iter().any(...)` per timestamp (O(n×m), ~15.5M comparisons for a 2h movie). Now sorts events by start once and walks the timeline with a min-heap of active end times (O(n log n + m log n)), matching the crate-internal pipeline.
+
+- **`ass-core`: `parse_tags` called once per event** — was called twice on the same text (`.0` for override tags, `.1` for karaoke), performing a full char-by-char scan + `split_tags` each time. Now destructures the single return value. Output byte-identical (parity test locks AST).
+- **`ass-core`: Lexer uses `eq_ignore_ascii_case`** — was `key.to_uppercase()` allocating a per-line String for 7 keyword comparisons. Now compares the original slice directly. Output byte-identical.
+- **`ass-core`: Dead `convert_srt_tags` removed** — SRT parser called `convert_srt_tags(&text)` and discarded the result (`let _converted = ...`). Full char-by-char scan + String allocation wasted every event. Function and all call sites removed (-33 lines).
+
+- **`subtitle-renderer`: Layout phase uses shared font data cache** — `shape_horizontal`/`shape_vertical` now resolve font data through the persistent `font_data_cache` (keyed by `family:bold:style:bold_upgrade`), eliminating redundant per-event-per-frame 8-level fallback chain traversals (~22% query latency reduction). Output byte-identical.
+- **`subtitle-renderer`: query_exact/query_family return `&[FontId]`** — was `Vec<FontId>` with per-query `.cloned()`. FontId is u32 Copy; callers now borrow the index slice directly. Output byte-identical.
+- **`subtitle-renderer`: Glyph cache rasterization outside mutex** — the double-check pattern: lock get, miss -> unlock, rasterize outside lock, lock insert. Reduces lock hold time during cache misses (~33% rasterize latency reduction). Output byte-identical.
 
 ### Fixed
 
@@ -98,6 +116,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`build_context`: Division by zero** — when `script_width`/`script_height` is 0 (malformed ASS missing PlayRes), `scale_x`/`scale_y` = inf caused invisible rendering. Now guarded with `.max(1)`.
 - **`create_native_renderer`: Empty PlayRes crash** — previously passed raw 0 values to `RenderConfig`, causing downstream division by zero. Now falls back to output resolution with an info log.
 - **`clip::parse_inverse` removed**: Function was merged into `clip::parse` (both `\clip` and `\iclip` handled in one function), but `parse.rs` still referenced the removed symbol. Removed dead call.
+
+- **`ass-core`: `from_srt_timecode` byte-slice panic on multi-byte fraction** (security audit) — `frac[..3]` byte-sliced the fractional part of SRT timecodes; a multi-byte UTF-8 fraction (e.g. `00:00:01,ee`) caused a `byte index 3 is not a char boundary` panic. Now truncates via `frac.chars().take(3).collect::<String>()`, safe for any UTF-8. No functional change for valid ASCII-digit fractions.
+- **`ass-core`: `from_ass_time` non-saturating overflow** (security audit) — the expression `h * 3_600_000 + m * 60_000 + sec * 1000` used wrapping arithmetic for hours > 5e12, causing a debug-mode panic or silent release-mode wraparound. Now uses `saturating_mul`/`saturating_add` throughout, matching the documented `Saturating arithmetic for overflow safety` contract. Output byte-identical for all realistic inputs.
 - **`color-quantizer`: Weighted k-d pruning on alpha splits broke linear parity** — the weighted nearest query pruned far-side regions using axis weight 2 for the alpha axis even though the weighted metric excludes alpha; palettes containing the transparent entry (alpha range dominates) could return a different index than the linear scan, flipping palette-reuse decisions (3 frames diverged on the Battleship.Island fixture). Alpha splits now have weight 0 and tie-level plane distances are searched, restoring byte-identical output.
 
 ---

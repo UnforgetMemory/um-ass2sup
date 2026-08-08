@@ -81,19 +81,27 @@ impl FontIndex {
     /// Returns all font identifiers that match the given family name,
     /// weight, and style exactly. The family name lookup is case-insensitive.
     ///
-    /// **Complexity:** O(1) hashtable lookup.
-    pub fn query_exact(&self, family: &str, weight: FontWeight, style: FontStyle) -> Vec<FontId> {
+    /// **Complexity:** O(1) hashtable lookup. Returns a borrowed slice — no
+    /// per-query allocation (`FontId` is `Copy`).
+    pub fn query_exact(&self, family: &str, weight: FontWeight, style: FontStyle) -> &[FontId] {
         let hash = family_hash(family);
         let key = (hash, weight.as_u16(), style);
-        self.exact.get(&key).cloned().unwrap_or_default()
+        match self.exact.get(&key) {
+            Some(ids) => ids,
+            None => &[],
+        }
     }
 
     /// Family-wide query: all fonts in a family regardless of weight or style.
     ///
     /// **Complexity:** O(k) where k is the number of faces in the family.
-    pub fn query_family(&self, family: &str) -> Vec<FontId> {
+    /// Returns a borrowed slice — no per-query allocation.
+    pub fn query_family(&self, family: &str) -> &[FontId] {
         let hash = family_hash(family);
-        self.families.get(&hash).cloned().unwrap_or_default()
+        match self.families.get(&hash) {
+            Some(ids) => ids,
+            None => &[],
+        }
     }
 
     /// Get [`FontFace`] metadata by identifier.
@@ -155,7 +163,6 @@ mod tests {
             path: None,
             is_system: false,
             cjk: false,
-            corrupt: false,
         }
     }
 
@@ -165,8 +172,10 @@ mod tests {
         let face = make_face(1, "Arial", FontWeight::Normal, FontStyle::Normal);
         idx.insert(face);
 
-        let results = idx.query_exact("Arial", FontWeight::Normal, FontStyle::Normal);
-        assert_eq!(results, vec![FontId(1)]);
+        assert_eq!(
+            idx.query_exact("Arial", FontWeight::Normal, FontStyle::Normal),
+            &[FontId(1)]
+        );
     }
 
     #[test]
@@ -194,9 +203,11 @@ mod tests {
         idx.insert(make_face(2, "Arial", FontWeight::Bold, FontStyle::Normal));
         idx.insert(make_face(3, "Arial", FontWeight::Normal, FontStyle::Italic));
 
-        let mut results = idx.query_family("Arial");
-        results.sort();
-        assert_eq!(results, vec![FontId(1), FontId(2), FontId(3)]);
+        // Insertion order is preserved in the family bucket.
+        assert_eq!(
+            idx.query_family("Arial"),
+            &[FontId(1), FontId(2), FontId(3)]
+        );
     }
 
     #[test]
@@ -306,11 +317,11 @@ mod tests {
 
         assert_eq!(
             idx.query_exact("arial", FontWeight::Normal, FontStyle::Normal),
-            vec![FontId(1)]
+            &[FontId(1)]
         );
         assert_eq!(
             idx.query_exact("ARIAL", FontWeight::Normal, FontStyle::Normal),
-            vec![FontId(1)]
+            &[FontId(1)]
         );
     }
 
@@ -321,8 +332,9 @@ mod tests {
         idx.insert(make_face(1, "Arial", FontWeight::Normal, FontStyle::Normal));
         idx.insert(make_face(2, "Arial", FontWeight::Normal, FontStyle::Normal));
 
-        let mut results = idx.query_exact("Arial", FontWeight::Normal, FontStyle::Normal);
-        results.sort();
-        assert_eq!(results, vec![FontId(1), FontId(2)]);
+        assert_eq!(
+            idx.query_exact("Arial", FontWeight::Normal, FontStyle::Normal),
+            &[FontId(1), FontId(2)]
+        );
     }
 }

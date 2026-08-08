@@ -4,6 +4,7 @@ use crate::context::{RenderConfig, RenderContext};
 use crate::font::registry::FontRegistry;
 use crate::font::shaper::SimpleShaper;
 use crate::font::types::ShapedGlyph;
+use crate::renderer::font_registry_renderer::FontRegistryRenderResources;
 use crate::renderer::text_layout::{remap_alignment_vertical, wrap_text_vertical};
 
 pub(crate) struct ShapedLine {
@@ -17,13 +18,22 @@ pub(crate) fn shape_horizontal(
     text: &str,
     ctx: &RenderContext,
     config: &RenderConfig,
-    registry: &FontRegistry,
+    resources: &FontRegistryRenderResources,
     aw: f32,
     lh: f32,
     font_map: &std::collections::HashMap<String, Vec<String>>,
     style_name: &str,
 ) -> Vec<ShapedLine> {
-    let font_data = resolve_font_data(registry, &ctx.font_name, ctx.bold, font_map, style_name);
+    let registry = resources.registry.lock();
+    let font_data = resolve_font_data(
+        resources,
+        &registry,
+        &ctx.font_name,
+        ctx.bold,
+        font_map,
+        style_name,
+    );
+    drop(registry);
     tracing::debug!(
         font = %ctx.font_name,
         font_data_len = font_data.len(),
@@ -94,7 +104,7 @@ pub(crate) fn shape_horizontal(
 pub(crate) fn shape_vertical(
     text: &str,
     ctx: &RenderContext,
-    registry: &FontRegistry,
+    resources: &FontRegistryRenderResources,
     aw: f32,
     ah: f32,
     lh: f32,
@@ -105,7 +115,16 @@ pub(crate) fn shape_vertical(
     if cols.is_empty() {
         return vec![];
     }
-    let font_data = resolve_font_data(registry, &ctx.font_name, ctx.bold, font_map, style_name);
+    let registry = resources.registry.lock();
+    let font_data = resolve_font_data(
+        resources,
+        &registry,
+        &ctx.font_name,
+        ctx.bold,
+        font_map,
+        style_name,
+    );
+    drop(registry);
     let rm = remap_alignment_vertical(ctx.alignment, ctx.writing_mode);
     let ac = rm % 3;
     let tw = cols.len() as f32 * lh;
@@ -186,19 +205,34 @@ fn wrap_text_lines_simple(text: &str, font_data: &[u8], fz: f32, sp: f32, mw: f3
     lines
 }
 
+/// Resolve layout font bytes through the shared persistent cache.
+///
+/// Layout uses `use_bold_upgrade=true` (unlike rendering, which uses `false`),
+/// so the bold-upgrade flag is part of the cache key — see
+/// [`resolve_font_data_cached`](crate::renderer::font_registry_renderer::resolve_font_data_cached).
 fn resolve_font_data(
+    resources: &FontRegistryRenderResources,
     registry: &FontRegistry,
     family: &str,
     bold: bool,
     font_map: &std::collections::HashMap<String, Vec<String>>,
     style_name: &str,
 ) -> std::sync::Arc<[u8]> {
-    super::font_registry_renderer::resolve_font_data_inner(
-        registry,
+    super::font_registry_renderer::resolve_font_data_cached(
+        resources,
         family,
         bold,
-        Some(font_map),
         style_name,
         true,
+        || {
+            super::font_registry_renderer::resolve_font_data_inner(
+                registry,
+                family,
+                bold,
+                Some(font_map),
+                style_name,
+                true,
+            )
+        },
     )
 }

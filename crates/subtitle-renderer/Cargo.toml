@@ -19,3 +19,11 @@ swash.workspace = true
 criterion.workspace = true
 tempfile.workspace = true
 
+[[bench]]
+name = "font_subsystem"
+harness = false
+
+[[bench]]
+name = "renderer"
+harness = false
+

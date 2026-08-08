@@ -39,8 +39,7 @@ impl FontRegistry {
     /// 3. Suggestion: closest weight among candidates.
     pub fn query(&self, q: &FontQuery) -> QueryResult {
         // Step 1: exact match
-        let exact = self.index.query_exact(&q.family, q.weight, q.style);
-        if let Some(&id) = exact.first() {
+        if let Some(&id) = self.index.query_exact(&q.family, q.weight, q.style).first() {
             return QueryResult {
                 found: Some(id),
                 candidates: Vec::new(),

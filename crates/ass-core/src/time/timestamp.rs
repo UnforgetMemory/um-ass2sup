@@ -62,7 +62,10 @@ impl Timestamp {
             .parse()
             .map_err(|_| super::super::ParseError::invalid_timestamp(s))?;
         Ok(Self::from_ms(
-            h * 3_600_000 + m * 60_000 + sec * 1000 + cs.saturating_mul(10),
+            h.saturating_mul(3_600_000)
+                .saturating_add(m.saturating_mul(60_000))
+                .saturating_add(sec.saturating_mul(1_000))
+                .saturating_add(cs.saturating_mul(10)),
         ))
     }
 
@@ -86,7 +89,13 @@ impl Timestamp {
             2 => frac.parse::<u64>().unwrap_or(0) * 10,  // "05" -> 50
             3 => frac.parse::<u64>().unwrap_or(0),       // "500" -> 500
             _ => {
-                let val: u64 = frac[..3].parse().unwrap_or(0);
+                // Safe char-based truncation: never byte-slices mid-codepoint
+                let val: u64 = frac
+                    .chars()
+                    .take(3)
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(0);
                 val
             }
         };
@@ -218,6 +227,39 @@ mod tests {
     fn from_srt_timecode_two_digits() {
         let ts = Timestamp::from_srt_timecode("00:00:01,05").unwrap();
         assert_eq!(ts.as_ms(), 1050);
+    }
+
+    #[test]
+    fn from_srt_timecode_multibyte_fraction_no_panic() {
+        // Multi-byte UTF-8 fraction (e.g. accented chars) must not panic
+        // on byte slicing; non-numeric fraction parses to 0 ms.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            Timestamp::from_srt_timecode("00:00:01,\u{e9}\u{e9}")
+        }));
+        let ts = result
+            .expect("from_srt_timecode must not panic on multibyte fraction")
+            .unwrap();
+        assert_eq!(ts.as_ms(), 1000);
+    }
+
+    #[test]
+    fn from_srt_timecode_long_fraction_truncates_to_3_chars() {
+        // 4-digit ASCII fraction: first 3 chars used ("123" -> 123 ms)
+        let ts = Timestamp::from_srt_timecode("00:00:01,1234").unwrap();
+        assert_eq!(ts.as_ms(), 1123);
+    }
+
+    #[test]
+    fn from_ass_time_huge_hours_saturates() {
+        // Huge hour field must not panic (debug overflow) or wrap (release);
+        // saturates to u64::MAX like from_srt_timecode.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            Timestamp::from_ass_time("999999999999999:99:99.99")
+        }));
+        let ts = result
+            .expect("from_ass_time must not panic on huge hours")
+            .unwrap();
+        assert_eq!(ts.as_ms(), u64::MAX);
     }
 
     #[test]
